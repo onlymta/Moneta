@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android's automatic key/value backup is disabled for the raw database.
+    Moneta implements its own explicit local/cloud backup (see ARCHITECTURE.md,
+    Section 12) so financial data is only ever backed up when the user asks.
+-->
+<full-backup-content>
+    <exclude domain="database" path="." />
+</full-backup-content>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Simplified vector rendering of the Moneta mark described in
+    ARCHITECTURE.md Section 3: an upward-stepped bar merged with a checkmark,
+    drawn as one continuous off-white line on the teal adaptive-icon background.
+    A real production icon should be finished by a designer in a vector tool;
+    this establishes the correct proportions and stroke language.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M30,66 L42,78 L78,34"
+        android:strokeColor="#FBFBF9"
+        android:strokeWidth="8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M30,70 L30,58 L44,58 L44,50 L58,50 L58,40 L72,40"
+        android:strokeColor="#FBFBF9"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:fillAlpha="0" />
+</vector>

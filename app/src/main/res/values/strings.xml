@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Moneta</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_transactions">Records</string>
+    <string name="nav_budgets">Budgets</string>
+    <string name="nav_reports">Reports</string>
+    <string name="nav_more">More</string>
+    <string name="nav_add">Add</string>
+
+    <!-- Quick add -->
+    <string name="quick_add_expense">Expense</string>
+    <string name="quick_add_income">Income</string>
+    <string name="quick_add_transfer">Transfer</string>
+
+    <!-- Empty states -->
+    <string name="empty_transactions_title">No transactions yet</string>
+    <string name="empty_transactions_body">Start tracking your money by recording your first expense or income.</string>
+</resources>

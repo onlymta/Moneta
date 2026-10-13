@@ -1,0 +1,76 @@
+name: Build APKs
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # Optional real release-signing secrets. If these aren't configured in the
+      # repo (Settings -> Secrets and variables -> Actions), the release build
+      # below automatically falls back to signing with the debug keystore, so
+      # the workflow always succeeds and always produces an installable release
+      # APK - just add these secrets later to switch to a properly signed one:
+      #   RELEASE_KEYSTORE_BASE64  - `base64 -w0 your.keystore` output
+      #   RELEASE_STORE_PASSWORD
+      #   RELEASE_KEY_ALIAS
+      #   RELEASE_KEY_PASSWORD
+      RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+      RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+      RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+      RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+      RELEASE_STORE_FILE: ${{ github.workspace }}/app/release.keystore
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Accept Android SDK licenses and install platform
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME" -name "sdkmanager" -type f | head -n 1)
+          echo "Using sdkmanager at: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Regenerate Gradle wrapper
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y unzip wget
+          wget -q https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          unzip -q gradle-8.7-bin.zip
+          ./gradle-8.7/bin/gradle wrapper --gradle-version 8.7 --distribution-type bin
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Decode release keystore (optional)
+        if: env.RELEASE_KEYSTORE_BASE64 != ''
+        run: echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > app/release.keystore
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: moneta-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+
+      - name: Build release APK (manual runs only)
+        if: github.event_name == 'workflow_dispatch'
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Upload release APK
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: moneta-release-apk
+          path: app/build/outputs/apk/release/*.apk
