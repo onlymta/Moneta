@@ -11,7 +11,7 @@ package com.moneta.app.data.csvimport
 object CsvTable {
 
     /** Parses [text] into rows of raw string cells. Blank trailing lines are dropped. */
-    fun parse(text: String): List<List<String>> {
+    fun parse(text: String, delimiter: Char = ','): List<List<String>> {
         val rows = mutableListOf<List<String>>()
         var field = StringBuilder()
         var row = mutableListOf<String>()
@@ -44,7 +44,7 @@ object CsvTable {
             } else {
                 when (ch) {
                     '"' -> inQuotes = true
-                    ',' -> endField()
+                    delimiter -> endField()
                     '\n' -> endRow()
                     '\r' -> if (i + 1 >= n || text[i + 1] != '\n') endRow()
                     else -> field.append(ch)
@@ -55,6 +55,14 @@ object CsvTable {
         if (field.isNotEmpty() || row.isNotEmpty()) endRow()
 
         return rows.filterNot { r -> r.isEmpty() || (r.size == 1 && r[0].isBlank()) }
+    }
+
+    /** Picks the separator Excel used (comma, semicolon or tab) by looking at the header line. */
+    fun detectDelimiter(text: String): Char {
+        val firstLine = text.lineSequence().firstOrNull().orEmpty()
+        val candidates = listOf(',', ';', '\t')
+        return candidates.maxByOrNull { c -> firstLine.count { it == c } }
+            ?.takeIf { c -> firstLine.contains(c) } ?: ','
     }
 
     /** Quotes a field only if needed, doubling any embedded quotes (RFC 4180) - shared with the CSV exporter's own escaping rule. */

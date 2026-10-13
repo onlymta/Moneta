@@ -5,16 +5,20 @@ import com.moneta.app.data.local.entity.CategoryType
 import com.moneta.app.data.local.entity.TransactionType
 import com.moneta.app.data.repository.Account
 import com.moneta.app.data.repository.Category
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.LocalDate
-import java.time.LocalTime
-import java.time.format.DateTimeParseException
+
+private const val DEFAULT_TIME_MINUTES = 720 // noon, for rows with no usable time
+private const val UNCATEGORIZED = "Uncategorized"
 
 /**
- * Turns raw CSV text into an [ImportPreview] - a pure, read-only pass (no
- * database writes, no injected dependencies) so the whole file can be
- * validated and shown to the user as "N ready, M with problems" before they
- * commit to anything (Section 22/31: never surprise the user with a
- * partially-applied bulk change).
+ * Turns a spreadsheet (already split into rows of text cells) into an
+ * [ImportPreview] - a pure, read-only pass. It is deliberately forgiving:
+ * messy dates, times and amounts are repaired, unknown accounts and categories
+ * are planned for automatic creation, and only a row that truly cannot be
+ * understood (no usable date or amount, or a transfer with no destination) is
+ * skipped. Nothing is written until the user confirms the preview.
  */
 object TransactionImportParser {
 
@@ -24,24 +28,189 @@ object TransactionImportParser {
         existingCategories: List<Category>,
         defaultCurrencyCode: String
     ): ImportPreview {
-        val table = CsvTable.parse(csvText)
+        val clean = csvText.removePrefix("﻿")
+        val table = CsvTable.parse(clean, CsvTable.detectDelimiter(clean))
+        return parseTable(table, existingAccounts, existingCategories, defaultCurrencyCode)
+    }
+
+    // ---- column matching -------------------------------------------------------------
+
+    private val ALIASES: Map<String, List<String>> = mapOf(
+        TransactionCsvTemplate.COL_DATE to listOf("date", "transactiondate", "txndate", "datetime", "day", "when"),
+        TransactionCsvTemplate.COL_TYPE to listOf("type", "transactiontype", "txntype", "kind"),
+        TransactionCsvTemplate.COL_AMOUNT to listOf("amount", "amt", "value", "sum", "total"),
+        TransactionCsvTemplate.COL_ACCOUNT to listOf("account", "accountname", "wallet", "fromaccount", "from", "source"),
+        TransactionCsvTemplate.COL_TO_ACCOUNT to listOf("toaccount", "to", "transferto", "destination", "destinationaccount"),
+        TransactionCsvTemplate.COL_CATEGORY to listOf("category", "categoryname", "cat", "head", "group"),
+        TransactionCsvTemplate.COL_SUBCATEGORY to listOf("subcategory", "subcat", "sub"),
+        TransactionCsvTemplate.COL_PAYEE to listOf("payee", "merchant", "party", "vendor", "shop"),
+        TransactionCsvTemplate.COL_NOTES to listOf("notes", "note", "memo", "remarks", "description", "details"),
+        TransactionCsvTemplate.COL_PAYMENT_METHOD to listOf("paymentmethod", "method", "mode", "paymentmode"),
+        TransactionCsvTemplate.COL_TAGS to listOf("tags", "tag", "labels"),
+        TransactionCsvTemplate.COL_TIME to listOf("time", "timeofday")
+    )
+
+    private fun headerKey(raw: String): String =
+        raw.removePrefix("﻿").lowercase().filter { it.isLetterOrDigit() }
+
+    // ---- date / time / amount repair ------------------------------------------------
+
+    private val MONTHS = listOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+    private val RE_YMD = Regex("""^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})""")
+    private val RE_DMY = Regex("""^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})""")
+    private val RE_D_MON_Y = Regex("""^(\d{1,2})[\s-]+([A-Za-z]{3,9})[\s,.-]+(\d{2,4})""")
+    private val RE_MON_D_Y = Regex("""^([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})""")
+    private val RE_SERIAL = Regex("""^(\d{5})(\.\d+)?$""")
+    private val RE_TIME = Regex("""^(\d{1,2})[:.](\d{2})(?:[:.]\d{1,2})?\s*([AaPp])?\.?[Mm]?\.?$""")
+
+    private class ParsedDate(val date: LocalDate, val rest: String)
+
+    private fun safeDate(y: Int, m: Int, d: Int): LocalDate? =
+        try {
+            LocalDate.of(y, m, d)
+        } catch (e: Exception) {
+            null
+        }
+
+    private fun fullYear(y: Int): Int = if (y < 100) 2000 + y else y
+
+    private fun monthNumber(name: String): Int? {
+        val idx = MONTHS.indexOf(name.lowercase().take(3))
+        return if (idx >= 0) idx + 1 else null
+    }
+
+    private fun parseDateCell(raw: String, dayFirst: Boolean): ParsedDate? {
+        val s = raw.trim()
+        if (s.isEmpty()) return null
+        RE_YMD.find(s)?.let { m ->
+            val date = safeDate(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt())
+            if (date != null) return ParsedDate(date, s.substring(m.range.last + 1).trim().trimStart('T', ' '))
+        }
+        RE_DMY.find(s)?.let { m ->
+            val a = m.groupValues[1].toInt()
+            val b = m.groupValues[2].toInt()
+            val y = fullYear(m.groupValues[3].toInt())
+            val date = if (dayFirst) safeDate(y, b, a) ?: safeDate(y, a, b) else safeDate(y, a, b) ?: safeDate(y, b, a)
+            if (date != null) return ParsedDate(date, s.substring(m.range.last + 1).trim().trimStart('T', ' '))
+        }
+        RE_D_MON_Y.find(s)?.let { m ->
+            val month = monthNumber(m.groupValues[2])
+            if (month != null) {
+                val date = safeDate(fullYear(m.groupValues[3].toInt()), month, m.groupValues[1].toInt())
+                if (date != null) return ParsedDate(date, s.substring(m.range.last + 1).trim())
+            }
+        }
+        RE_MON_D_Y.find(s)?.let { m ->
+            val month = monthNumber(m.groupValues[1])
+            if (month != null) {
+                val date = safeDate(m.groupValues[3].toInt(), month, m.groupValues[2].toInt())
+                if (date != null) return ParsedDate(date, s.substring(m.range.last + 1).trim())
+            }
+        }
+        RE_SERIAL.find(s)?.let { m ->
+            val serial = m.groupValues[1].toInt()
+            if (serial in 20000..80000) {
+                val date = LocalDate.of(1899, 12, 30).plusDays(serial.toLong())
+                val fraction = m.groupValues[2]
+                return ParsedDate(date, if (fraction.isEmpty()) "" else "0$fraction")
+            }
+        }
+        return null
+    }
+
+    /** Returns minutes since midnight, or null when the text isn't a recognisable time. */
+    private fun parseTimeText(raw: String): Int? {
+        val s = raw.trim()
+        if (s.isEmpty()) return null
+        val looksLikeDayFraction = s.startsWith("0.") && s.all { it.isDigit() || it == '.' }
+        if (!looksLikeDayFraction) RE_TIME.find(s)?.let { m ->
+            var hour = m.groupValues[1].toInt()
+            val minute = m.groupValues[2].toInt()
+            val marker = m.groupValues[3].lowercase()
+            if (marker == "p" && hour < 12) hour += 12
+            if (marker == "a" && hour == 12) hour = 0
+            if (hour in 0..23 && minute in 0..59) return hour * 60 + minute
+            return null
+        }
+        val fraction = s.toDoubleOrNull()
+        if (fraction != null && fraction >= 0.0 && fraction < 1.0) {
+            return Math.round(fraction * 1440.0).toInt().coerceIn(0, 1439)
+        }
+        return null
+    }
+
+    private class ParsedAmount(val money: Money, val negative: Boolean)
+
+    private val RE_PLAIN_NUMBER = Regex("""^-?\d+(\.\d+)?([eE][+-]?\d+)?$""")
+
+    private fun parseAmountCell(raw: String, currencyCode: String): ParsedAmount? {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return null
+        val negative = trimmed.contains('-') || trimmed.contains('(')
+        val decimal: BigDecimal = try {
+            if (RE_PLAIN_NUMBER.matches(trimmed)) {
+                BigDecimal(trimmed)
+            } else {
+                var s = trimmed.filter { it.isDigit() || it == '.' || it == ',' }.trim('.', ',')
+                if (s.contains(',') && s.contains('.')) {
+                    s = s.replace(",", "")
+                } else if (s.contains(',')) {
+                    s = if (Regex(""",\d{1,2}$""").containsMatchIn(s) && s.count { it == ',' } == 1) {
+                        s.replace(',', '.')
+                    } else {
+                        s.replace(",", "")
+                    }
+                }
+                if (s.isEmpty()) return null
+                BigDecimal(s)
+            }
+        } catch (e: NumberFormatException) {
+            return null
+        }
+        val money = Money.fromDecimalInput(
+            decimal.abs().setScale(2, RoundingMode.HALF_UP).toPlainString(),
+            currencyCode
+        ) ?: return null
+        if (money.isZero) return null
+        return ParsedAmount(money, negative)
+    }
+
+    private fun parseTypeCell(raw: String): TransactionType? = when (raw.trim().lowercase()) {
+        "income", "credit", "cr", "deposit", "in", "salary", "received", "+" -> TransactionType.INCOME
+        "expense", "debit", "dr", "withdrawal", "out", "spend", "spent", "payment", "paid", "-" -> TransactionType.EXPENSE
+        "transfer", "xfer", "move", "internal transfer" -> TransactionType.TRANSFER
+        else -> null
+    }
+
+    // ---- main ------------------------------------------------------------------------
+
+    fun parseTable(
+        table: List<List<String>>,
+        existingAccounts: List<Account>,
+        existingCategories: List<Category>,
+        defaultCurrencyCode: String
+    ): ImportPreview {
         if (table.isEmpty()) {
             return ImportPreview(0, emptyList(), listOf(ImportIssue(1, "The file is empty.")), emptyList(), emptySet())
         }
 
-        val headerIndex = table.first()
-            .mapIndexed { index, name -> name.trim().lowercase() to index }
-            .toMap()
+        val headerIndex = HashMap<String, Int>()
+        table.first().forEachIndexed { index, name ->
+            val key = headerKey(name)
+            if (key.isNotEmpty() && !headerIndex.containsKey(key)) headerIndex[key] = index
+        }
 
-        fun columnIndex(name: String): Int? = headerIndex[name.lowercase()]
+        fun columnIndex(name: String): Int? {
+            for (alias in ALIASES[name].orEmpty()) {
+                headerIndex[alias]?.let { return it }
+            }
+            return null
+        }
 
-        val requiredColumns = listOf(
-            TransactionCsvTemplate.COL_DATE, TransactionCsvTemplate.COL_TYPE,
-            TransactionCsvTemplate.COL_AMOUNT, TransactionCsvTemplate.COL_ACCOUNT
-        )
-        val missingColumns = requiredColumns.filter { columnIndex(it) == null }
+        val missingColumns = listOf(TransactionCsvTemplate.COL_DATE, TransactionCsvTemplate.COL_AMOUNT)
+            .filter { columnIndex(it) == null }
         if (missingColumns.isNotEmpty()) {
-            val message = "Missing required column(s): ${missingColumns.joinToString(", ")}. " +
+            val message = "Couldn't find the ${missingColumns.joinToString(" and ")} column in the first row. " +
                 "Download the template to see the expected headers."
             return ImportPreview(0, emptyList(), listOf(ImportIssue(1, message)), emptyList(), emptySet())
         }
@@ -49,141 +218,171 @@ object TransactionImportParser {
         fun cell(row: List<String>, name: String): String =
             columnIndex(name)?.let { row.getOrNull(it) }?.trim().orEmpty()
 
-        val accountsByName = existingAccounts.associateBy { it.name.trim().lowercase() }
-        val topLevelByKey = existingCategories.filter { it.parentCategoryId == null }
-            .associateBy { it.type to it.name.trim().lowercase() }
-        val subByKey = existingCategories.filter { it.parentCategoryId != null }
-            .associateBy { Triple(it.type, it.parentCategoryId, it.name.trim().lowercase()) }
-        // For a sub-category name check we only need to know the parent's id, which
-        // may itself be a category this same file is about to create - resolved by
-        // name below rather than requiring the parent to already exist in the DB.
-        val topLevelIdByKey = topLevelByKey.mapValues { it.value.id }
-
         val dataRows = table.drop(1)
+
+        // Decide once per file whether 05/06/2026 means 5 June (day first) or May 6.
+        var dayFirstEvidence = false
+        var monthFirstEvidence = false
+        var ambiguousCount = 0
+        dataRows.forEach { row ->
+            RE_DMY.find(cell(row, TransactionCsvTemplate.COL_DATE))?.let { m ->
+                if (!RE_YMD.containsMatchIn(m.value)) {
+                    val a = m.groupValues[1].toInt()
+                    val b = m.groupValues[2].toInt()
+                    if (a > 12) dayFirstEvidence = true
+                    if (b > 12) monthFirstEvidence = true
+                    if (a <= 12 && b <= 12 && a != b) ambiguousCount++
+                }
+            }
+        }
+        val dayFirst = !(monthFirstEvidence && !dayFirstEvidence)
+
+        val accountNames = HashMap<String, String>() // normalized -> display
+        existingAccounts.forEach { accountNames[normalizeImportName(it.name)] = it.name }
+        val newAccounts = LinkedHashMap<String, NewAccountPlan>()
+        val defaultAccountName = existingAccounts.firstOrNull()?.name ?: "Cash"
+
+        fun registerAccount(rawName: String): String {
+            val key = normalizeImportName(rawName)
+            accountNames[key]?.let { return it }
+            val display = rawName.trim().replace(Regex("\\s+"), " ")
+            accountNames[key] = display
+            newAccounts[key] = NewAccountPlan(display, guessAccountType(display))
+            return display
+        }
+
+        val topLevelIdByKey = existingCategories.filter { it.parentCategoryId == null }
+            .associate { (it.type to normalizeImportName(it.name)) to it.id }
+        val subKeys = existingCategories.filter { it.parentCategoryId != null }
+            .map { Triple(it.type, it.parentCategoryId, normalizeImportName(it.name)) }
+            .toSet()
+
         val pending = mutableListOf<PendingImportRow>()
         val errors = mutableListOf<ImportIssue>()
         val warnings = mutableListOf<ImportIssue>()
-        val newCategoryLabels = mutableSetOf<String>()
+        val newCategoryLabels = linkedSetOf<String>()
+        var guessedTypeCount = 0
 
         dataRows.forEachIndexed { dataIndex, row ->
-            val rowNumber = dataIndex + 2 // +1 for the header row, +1 to become 1-indexed
+            val rowNumber = dataIndex + 2
             if (row.all { it.isBlank() }) return@forEachIndexed
 
             val rowErrors = mutableListOf<String>()
+            val rowWarnings = mutableListOf<String>()
 
-            val dateStr = cell(row, TransactionCsvTemplate.COL_DATE)
-            val date = try {
-                LocalDate.parse(dateStr)
-            } catch (e: DateTimeParseException) {
-                rowErrors += "Invalid or missing date (use YYYY-MM-DD): '$dateStr'"
-                null
+            // Date (and a time that may be riding along in the same cell)
+            val dateRaw = cell(row, TransactionCsvTemplate.COL_DATE)
+            val parsedDate = parseDateCell(dateRaw, dayFirst)
+            if (parsedDate == null) {
+                rowErrors += if (dateRaw.isBlank()) "No date." else "Couldn't understand the date '$dateRaw'."
             }
 
-            val typeStr = cell(row, TransactionCsvTemplate.COL_TYPE)
-            val type = when (typeStr.trim().lowercase()) {
-                "income" -> TransactionType.INCOME
-                "expense" -> TransactionType.EXPENSE
-                "transfer" -> TransactionType.TRANSFER
-                else -> {
-                    rowErrors += "Type must be Income, Expense, or Transfer (got '$typeStr')"
-                    null
-                }
+            // Amount
+            val amountRaw = cell(row, TransactionCsvTemplate.COL_AMOUNT)
+            val parsedAmount = parseAmountCell(amountRaw, defaultCurrencyCode)
+            if (parsedAmount == null) {
+                rowErrors += if (amountRaw.isBlank()) "No amount." else "Couldn't understand the amount '$amountRaw'."
             }
 
-            val amountStr = cell(row, TransactionCsvTemplate.COL_AMOUNT)
-            // The sign is taken from the Type column, not the amount, so a bank-style
-            // "-450" for an expense is accepted the same as a plain "450".
-            val amount = Money.fromDecimalInput(amountStr.removePrefix("-"), defaultCurrencyCode)
-            if (amount == null || amount.isZero) {
-                rowErrors += "Invalid or missing amount: '$amountStr'"
+            // Type - repaired from the amount's sign when missing or unrecognised.
+            val typeRaw = cell(row, TransactionCsvTemplate.COL_TYPE)
+            var type = parseTypeCell(typeRaw)
+            if (type == null && parsedAmount != null) {
+                type = if (parsedAmount.negative) TransactionType.EXPENSE else TransactionType.INCOME
+                guessedTypeCount++
             }
 
-            val accountStr = cell(row, TransactionCsvTemplate.COL_ACCOUNT)
-            val account = accountsByName[accountStr.lowercase()]
-            if (account == null) {
-                rowErrors += "Account '$accountStr' doesn't exist yet - add it under More > Accounts, then re-import."
+            // Accounts
+            val accountRaw = cell(row, TransactionCsvTemplate.COL_ACCOUNT)
+            val accountName = if (accountRaw.isBlank()) {
+                rowWarnings += "No account - used '$defaultAccountName'."
+                registerAccount(defaultAccountName)
+            } else {
+                registerAccount(accountRaw)
             }
 
-            var toAccountId: Long? = null
+            var toAccountName: String? = null
             var categoryTop: String? = null
             var categorySub: String? = null
-
-            val toAccountStr = cell(row, TransactionCsvTemplate.COL_TO_ACCOUNT)
-            val categoryStr = cell(row, TransactionCsvTemplate.COL_CATEGORY)
-            val subcategoryStr = cell(row, TransactionCsvTemplate.COL_SUBCATEGORY)
+            val toAccountRaw = cell(row, TransactionCsvTemplate.COL_TO_ACCOUNT)
+            val categoryRaw = cell(row, TransactionCsvTemplate.COL_CATEGORY)
+            val subcategoryRaw = cell(row, TransactionCsvTemplate.COL_SUBCATEGORY)
 
             if (type == TransactionType.TRANSFER) {
-                if (toAccountStr.isBlank()) {
-                    rowErrors += "Transfer rows need a 'To Account'."
+                if (toAccountRaw.isBlank()) {
+                    rowErrors += "Transfer has no 'To Account'."
                 } else {
-                    val toAccount = accountsByName[toAccountStr.lowercase()]
-                    if (toAccount == null) {
-                        rowErrors += "To Account '$toAccountStr' doesn't exist yet - add it under More > Accounts, then re-import."
-                    } else if (account != null && toAccount.id == account.id) {
-                        rowErrors += "Account and To Account must be different for a transfer."
+                    val toName = registerAccount(toAccountRaw)
+                    if (normalizeImportName(toName) == normalizeImportName(accountName)) {
+                        rowErrors += "Transfer from and to the same account ('$toName')."
                     } else {
-                        toAccountId = toAccount.id
+                        toAccountName = toName
                     }
                 }
-                if (categoryStr.isNotBlank() || subcategoryStr.isNotBlank()) {
-                    warnings += ImportIssue(rowNumber, "Category/Subcategory ignored - transfers don't have a category.")
+                if (categoryRaw.isNotBlank() || subcategoryRaw.isNotBlank()) {
+                    rowWarnings += "Category ignored (transfers don't have one)."
                 }
-            } else {
-                if (toAccountStr.isNotBlank()) {
-                    warnings += ImportIssue(rowNumber, "'To Account' ignored - it only applies to transfers.")
+            } else if (type != null) {
+                if (toAccountRaw.isNotBlank()) rowWarnings += "'To Account' ignored (only for transfers)."
+                var top = categoryRaw.trim()
+                var sub = subcategoryRaw.trim()
+                if (sub.isEmpty() && (top.contains(">") || top.contains(":"))) {
+                    val parts = top.split(">", ":").map { it.trim() }.filter { it.isNotEmpty() }
+                    if (parts.size >= 2) {
+                        top = parts[0]
+                        sub = parts[1]
+                    }
                 }
-                if (categoryStr.isBlank()) {
-                    rowErrors += "Category is required for Income/Expense rows."
-                } else {
-                    categoryTop = categoryStr
-                    categorySub = subcategoryStr.ifBlank { null }
+                if (top.isEmpty()) {
+                    top = UNCATEGORIZED
+                    sub = ""
+                    rowWarnings += "No category - filed under '$UNCATEGORIZED'."
                 }
+                categoryTop = top
+                categorySub = sub.ifBlank { null }
             }
 
-            val timeStr = cell(row, TransactionCsvTemplate.COL_TIME)
-            val timeMinutes = if (timeStr.isBlank()) {
-                720 // noon - a neutral default for historical rows with no recorded time of day.
-            } else {
-                try {
-                    LocalTime.parse(timeStr).let { it.hour * 60 + it.minute }
-                } catch (e: DateTimeParseException) {
-                    warnings += ImportIssue(rowNumber, "Invalid time '$timeStr' (use HH:mm) - defaulted to 12:00.")
-                    720
+            // Time: its own column wins, otherwise whatever came with the date, otherwise noon.
+            val timeRaw = cell(row, TransactionCsvTemplate.COL_TIME)
+            val timeMinutes: Int = run {
+                val fromColumn = if (timeRaw.isBlank()) null else parseTimeText(timeRaw)
+                if (fromColumn != null) return@run fromColumn
+                if (timeRaw.isNotBlank()) {
+                    rowWarnings += "Time '$timeRaw' not understood - used 12:00."
+                    return@run DEFAULT_TIME_MINUTES
                 }
+                val fromDate = parsedDate?.rest?.let { parseTimeText(it) }
+                fromDate ?: DEFAULT_TIME_MINUTES
             }
 
-            if (rowErrors.isNotEmpty()) {
+            if (rowErrors.isNotEmpty() || parsedDate == null || parsedAmount == null || type == null) {
                 rowErrors.forEach { errors += ImportIssue(rowNumber, it) }
                 return@forEachIndexed
             }
+            rowWarnings.forEach { warnings += ImportIssue(rowNumber, it) }
 
-            val categoryType = if (type == TransactionType.INCOME) CategoryType.INCOME else CategoryType.EXPENSE
             if (categoryTop != null) {
+                val categoryType = if (type == TransactionType.INCOME) CategoryType.INCOME else CategoryType.EXPENSE
                 val typeLabel = if (categoryType == CategoryType.INCOME) "Income" else "Expense"
-                val topKey = categoryType to categoryTop.trim().lowercase()
-                val topExists = topLevelIdByKey.containsKey(topKey)
-                if (!topExists) {
-                    newCategoryLabels += "$typeLabel: ${categoryTop.trim()}"
-                }
+                val topKey = categoryType to normalizeImportName(categoryTop)
+                val parentId = topLevelIdByKey[topKey]
+                if (parentId == null) newCategoryLabels += "$typeLabel: $categoryTop"
                 if (categorySub != null) {
-                    val parentId = topLevelIdByKey[topKey]
                     val subExists = parentId != null &&
-                        subByKey.containsKey(Triple(categoryType, parentId, categorySub.trim().lowercase()))
-                    if (!subExists) {
-                        newCategoryLabels += "$typeLabel: ${categoryTop.trim()} > ${categorySub.trim()}"
-                    }
+                        subKeys.contains(Triple(categoryType, parentId, normalizeImportName(categorySub)))
+                    if (!subExists) newCategoryLabels += "$typeLabel: $categoryTop > $categorySub"
                 }
             }
 
             pending += PendingImportRow(
                 rowNumber = rowNumber,
-                type = requireNotNull(type),
-                amount = requireNotNull(amount),
-                accountId = requireNotNull(account).id,
-                toAccountId = toAccountId,
+                type = type,
+                amount = parsedAmount.money,
+                accountName = accountName,
+                toAccountName = toAccountName,
                 categoryTopLevelName = categoryTop,
                 categorySubName = categorySub,
-                date = requireNotNull(date),
+                date = parsedDate.date,
                 timeMinutesSinceMidnight = timeMinutes,
                 payee = cell(row, TransactionCsvTemplate.COL_PAYEE).ifBlank { null },
                 notes = cell(row, TransactionCsvTemplate.COL_NOTES).ifBlank { null },
@@ -196,12 +395,45 @@ object TransactionImportParser {
             )
         }
 
+        // Only accounts actually used by a surviving row are really "new".
+        val usedAccountKeys = HashSet<String>()
+        pending.forEach { r ->
+            usedAccountKeys += normalizeImportName(r.accountName)
+            r.toAccountName?.let { usedAccountKeys += normalizeImportName(it) }
+        }
+        val plannedAccounts = newAccounts.filter { (key, _) -> key in usedAccountKeys }.values.toList()
+
+        val notes = mutableListOf<String>()
+        if (guessedTypeCount > 0) {
+            notes += "$guessedTypeCount row(s) had no clear Type, so it was guessed from the amount " +
+                "(negative = expense, positive = income). Check the sample rows below."
+        }
+        if (ambiguousCount > 0) {
+            notes += if (dayFirst) {
+                "Dates like 05/06/2026 were read as day/month/year (5 June)."
+            } else {
+                "Dates like 05/06/2026 were read as month/day/year (May 6)."
+            }
+        }
+        if (plannedAccounts.isNotEmpty()) {
+            notes += "New accounts start with a balance of 0; the imported transactions then build up their balance. " +
+                "You can rename them or set their type later under More > Accounts."
+        }
+
         return ImportPreview(
             dataRowCount = dataRows.count { row -> !row.all { it.isBlank() } },
             rows = pending,
             errors = errors,
             warnings = warnings,
-            newCategoryLabels = newCategoryLabels
+            newCategoryLabels = newCategoryLabels,
+            newAccounts = plannedAccounts,
+            notes = notes,
+            incomeMinor = pending.filter { it.type == TransactionType.INCOME }.sumOf { it.amount.minorUnits },
+            expenseMinor = pending.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount.minorUnits },
+            transferCount = pending.count { it.type == TransactionType.TRANSFER },
+            currencyCode = defaultCurrencyCode,
+            firstDate = pending.minOfOrNull { it.date },
+            lastDate = pending.maxOfOrNull { it.date }
         )
     }
 }

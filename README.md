@@ -92,3 +92,13 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Future dates become one-time scheduled items (shown under More -> Recurring). They turn into real transactions, and change balances, the next time the app starts on or after that date. The time of day is not kept for scheduled items.
 - First-run welcome flow (name, accounts, expense categories, then record a transaction or import). "Do this later" leaves a reminder on Home.
 - CI: Gradle caching; the release APK is built only on manual "Run workflow" runs.
+
+## v0.14.0 - smart import
+
+- Accepts Excel (.xlsx) and CSV (comma, semicolon or tab separated). Old .xls must be re-saved as .xlsx or CSV.
+- Only Date and Amount are required. Column names are matched loosely (e.g. "Description" = Notes).
+- Auto-repaired: many date formats (2026-01-15, 15/01/2026, 15 Jan 2026, Excel date numbers), times (9:30 PM, 21:30, Excel times), amounts (Rs. 1,250.50, (450), -450), type words (debit/credit...), missing Type guessed from the amount's sign.
+- Accounts and categories named in the file but not in Moneta are created automatically (new accounts start at balance 0). A blank category goes to "Uncategorized"; a blank account uses your first account.
+- Nothing is saved until you review the summary (new accounts/categories, auto-fixes, skipped rows, totals, sample rows) and confirm.
+- Rows are skipped only if the date or amount is unusable, or a transfer has no/same destination account.
+- Not done: duplicate detection against existing records (importing the same file twice adds it twice).

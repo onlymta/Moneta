@@ -4,11 +4,13 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.moneta.app.data.csvimport.CsvTable
 import com.moneta.app.data.csvimport.ImportOutcome
 import com.moneta.app.data.csvimport.ImportPreview
 import com.moneta.app.data.csvimport.TransactionCsvTemplate
 import com.moneta.app.data.csvimport.TransactionImportCommitter
 import com.moneta.app.data.csvimport.TransactionImportParser
+import com.moneta.app.data.csvimport.XlsxReader
 import com.moneta.app.data.repository.AccountRepository
 import com.moneta.app.data.repository.CategoryRepository
 import com.moneta.app.data.settings.SettingsRepository
@@ -75,16 +77,26 @@ class ImportViewModel @Inject constructor(
             _uiState.update { it.copy(isBusy = true, errorMessage = null, preview = null, outcome = null, fileName = displayName) }
             val uri = Uri.parse(uriString)
             val result = runCatching {
-                val text = appContext.contentResolver.openInputStream(uri)
-                    ?.bufferedReader(Charsets.UTF_8)
-                    ?.use { it.readText() }
+                val bytes = appContext.contentResolver.openInputStream(uri)
+                    ?.use { it.readBytes() }
                     ?: error("Could not open the chosen file for reading.")
 
                 val accounts = accountRepository.observeActiveAccounts().first()
                 val categories = categoryRepository.observeAll().first()
                 val currencyCode = settingsRepository.preferences.first().currencyCode
 
-                TransactionImportParser.parse(text, accounts, categories, currencyCode)
+                val isZip = bytes.size > 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()
+                val isOldXls = bytes.size > 4 && bytes[0] == 0xD0.toByte() && bytes[1] == 0xCF.toByte()
+                if (isOldXls) {
+                    error("This is an old Excel (.xls) file. In Excel use Save As and choose .xlsx or CSV, then pick that file.")
+                }
+                val table = if (isZip) {
+                    XlsxReader.read(bytes)
+                } else {
+                    val text = String(bytes, Charsets.UTF_8).removePrefix("\uFEFF")
+                    CsvTable.parse(text, CsvTable.detectDelimiter(text))
+                }
+                TransactionImportParser.parseTable(table, accounts, categories, currencyCode)
             }
             _uiState.update {
                 it.copy(
