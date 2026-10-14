@@ -29,6 +29,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.moneta.app.data.repository.Goal
 import com.moneta.app.ui.theme.IncomeGreen
@@ -59,7 +60,7 @@ fun GoalsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
-                contentPadding = PaddingValues(MonetaSpacing.screenHorizontal),
+                contentPadding = PaddingValues(start = MonetaSpacing.screenHorizontal, end = MonetaSpacing.screenHorizontal, top = MonetaSpacing.screenHorizontal, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
             ) {
                 items(state.goals, key = { it.id }) { goal ->

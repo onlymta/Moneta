@@ -1,8 +1,8 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-
 package com.moneta.app.ui.reports
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,9 +12,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
+import androidx.compose.material3.Divider
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
@@ -24,86 +30,133 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.moneta.app.ui.common.CategoryDonutChart
-import com.moneta.app.ui.common.CategoryLegendList
-import com.moneta.app.ui.common.ComingSoonPlaceholder
-import com.moneta.app.ui.common.IncomeExpenseBarChart
-import com.moneta.app.ui.common.SimpleLineChart
+import com.moneta.app.core.money.Money
+import com.moneta.app.domain.usecase.CategorySlice
+import com.moneta.app.ui.common.CategoryPieChart
+import com.moneta.app.ui.common.IconBadge
+import com.moneta.app.ui.common.PeriodBar
+import com.moneta.app.ui.common.TrendBarChart
+import com.moneta.app.ui.common.parseColorOrGray
 import com.moneta.app.ui.theme.ExpenseRed
 import com.moneta.app.ui.theme.IncomeGreen
 import com.moneta.app.ui.theme.MoneyText
 import com.moneta.app.ui.theme.MonetaSpacing
-import java.time.format.DateTimeFormatter
 
-private val MONTH_LABEL_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM")
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
+        PeriodBar(
+            selection = state.period,
+            onChange = viewModel::onPeriodChange,
+            modifier = Modifier.padding(horizontal = MonetaSpacing.screenHorizontal)
+        )
         val tabs = ReportTab.entries
-        val selectedIndex = tabs.indexOf(state.selectedTab)
-        ScrollableTabRow(selectedTabIndex = selectedIndex) {
+        ScrollableTabRow(selectedTabIndex = tabs.indexOf(state.tab), edgePadding = 8.dp) {
             tabs.forEach { tab ->
                 Tab(
-                    selected = tab == state.selectedTab,
+                    selected = tab == state.tab,
                     onClick = { viewModel.onTabSelected(tab) },
-                    text = { Text(tabLabel(tab)) }
+                    text = { Text(tab.label) }
                 )
             }
         }
 
-        when (state.selectedTab) {
+        when (state.tab) {
             ReportTab.OVERVIEW -> OverviewTab(state)
-            ReportTab.SPENDING -> BreakdownTab(state.spendingBreakdown, "spending")
-            ReportTab.INCOME -> BreakdownTab(state.incomeBreakdown, "income")
-            ReportTab.CASH_FLOW -> CashFlowTab(state)
-            ReportTab.NET_WORTH -> NetWorthTab(state)
+            ReportTab.SPENDING -> BreakdownTab(state.spendingSlices, "spending", state.period.label())
+            ReportTab.INCOME -> BreakdownTab(state.incomeSlices, "income", state.period.label())
+            ReportTab.TRENDS -> TrendsTab(state, viewModel::onBucketChoice)
+            ReportTab.ACCOUNTS -> AccountsTab(state)
         }
     }
 }
 
-private fun tabLabel(tab: ReportTab): String = when (tab) {
-    ReportTab.OVERVIEW -> "Overview"
-    ReportTab.SPENDING -> "Spending"
-    ReportTab.INCOME -> "Income"
-    ReportTab.CASH_FLOW -> "Cash flow"
-    ReportTab.NET_WORTH -> "Net worth"
-}
+private val reportPadding = PaddingValues(
+    start = MonetaSpacing.screenHorizontal,
+    end = MonetaSpacing.screenHorizontal,
+    top = MonetaSpacing.md,
+    bottom = MonetaSpacing.xxxl * 2
+)
 
 @Composable
 private fun OverviewTab(state: ReportsUiState) {
-    LazyColumn(
-        contentPadding = PaddingValues(MonetaSpacing.screenHorizontal),
-        verticalArrangement = Arrangement.spacedBy(MonetaSpacing.lg)
-    ) {
+    LazyColumn(contentPadding = reportPadding, verticalArrangement = Arrangement.spacedBy(MonetaSpacing.lg)) {
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
-                SummaryCard("Income (this month)", state.currentMonthIncome, IncomeGreen, Modifier.weight(1f))
-                SummaryCard("Expenses (this month)", state.currentMonthExpense, ExpenseRed, Modifier.weight(1f))
+                StatCard("Income", state.income, IncomeGreen, Modifier.weight(1f))
+                StatCard("Expenses", state.expense, ExpenseRed, Modifier.weight(1f))
             }
         }
-        if (state.monthlyCashFlow.isNotEmpty()) {
-            item { Text("Last 6 months", style = MaterialTheme.typography.titleLarge) }
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    IncomeExpenseBarChart(
-                        labels = state.monthlyCashFlow.map { it.monthStart.format(MONTH_LABEL_FORMAT) },
-                        incomeValues = state.monthlyCashFlow.map { it.income },
-                        expenseValues = state.monthlyCashFlow.map { it.expense },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(MonetaSpacing.cardPadding)
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+                    state.openingBalance?.let { opening ->
+                        Line("Opening balance", opening, Color.Unspecified)
+                    }
+                    Line(
+                        "Net change (income - expenses)",
+                        state.net,
+                        if (state.net.isNegative) ExpenseRed else IncomeGreen
+                    )
+                    state.openingBalance?.let { opening ->
+                        Divider(modifier = Modifier.padding(vertical = MonetaSpacing.xs))
+                        Line("Closing balance", opening + state.net, Color.Unspecified, bold = true)
+                    }
+                    Text(
+                        "${state.transactionCount} transaction(s) in ${state.period.label()}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = MonetaSpacing.xs)
                     )
                 }
             }
-        } else if (!state.isHistoryLoading) {
+        }
+        if (state.spendingSlices.isNotEmpty()) {
+            item { Text("Where the money went", style = MaterialTheme.typography.titleMedium) }
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(MonetaSpacing.cardPadding),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CategoryPieChart(state.spendingSlices, modifier = Modifier.size(150.dp))
+                        Spacer(Modifier.height(MonetaSpacing.md))
+                        state.spendingSlices.take(5).forEach { SliceRow(it, showBar = false) }
+                    }
+                }
+            }
+        }
+        if (state.buckets.isNotEmpty() && (!state.income.isZero || !state.expense.isZero)) {
+            item { Text("Income vs expenses", style = MaterialTheme.typography.titleMedium) }
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+                        ChartLegend()
+                        Spacer(Modifier.height(MonetaSpacing.sm))
+                        TrendBarChart(
+                            labels = state.buckets.map { it.shortLabel },
+                            incomeMinor = state.buckets.map { it.incomeMinor },
+                            expenseMinor = state.buckets.map { it.expenseMinor },
+                            currencyCode = state.currencyCode,
+                            labelEvery = state.labelEvery
+                        )
+                    }
+                }
+            }
+        }
+        if (state.transactionCount == 0) {
             item {
                 Text(
-                    "Add a few months of transactions to see your income/expense history here.",
+                    "Nothing recorded in ${state.period.label()}. Pick another period above.",
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
@@ -112,12 +165,7 @@ private fun OverviewTab(state: ReportsUiState) {
 }
 
 @Composable
-private fun SummaryCard(
-    title: String,
-    amount: com.moneta.app.core.money.Money,
-    color: androidx.compose.ui.graphics.Color,
-    modifier: Modifier = Modifier
-) {
+private fun StatCard(title: String, amount: Money, color: Color, modifier: Modifier = Modifier) {
     Card(modifier = modifier) {
         Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
             Text(title, style = MaterialTheme.typography.labelMedium)
@@ -128,58 +176,153 @@ private fun SummaryCard(
 }
 
 @Composable
-private fun BreakdownTab(slices: List<com.moneta.app.domain.usecase.CategorySlice>, kind: String) {
-    if (slices.isEmpty()) {
-        ComingSoonPlaceholder(
-            title = "No $kind data yet",
-            body = "Once you record some $kind transactions this month, the breakdown will show up here."
-        )
-        return
-    }
-    LazyColumn(
-        contentPadding = PaddingValues(MonetaSpacing.screenHorizontal),
-        verticalArrangement = Arrangement.spacedBy(MonetaSpacing.lg)
+private fun Line(label: String, amount: Money, color: Color, bold: Boolean = false) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        item {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                CategoryDonutChart(slices, modifier = Modifier.size(160.dp))
-            }
-        }
-        item { CategoryLegendList(slices) }
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.weight(1f)
+        )
+        MoneyText(amount, color = color)
     }
 }
 
 @Composable
-private fun CashFlowTab(state: ReportsUiState) {
-    if (state.monthlyCashFlow.isEmpty()) {
-        ComingSoonPlaceholder(
-            title = "Not enough history yet",
-            body = "Cash flow compares income and expenses over time - add a few months of transactions to see it."
-        )
+private fun ChartLegend() {
+    Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.lg), verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier
+            .size(10.dp)
+            .background(IncomeGreen, CircleShape))
+        Text("Income", style = MaterialTheme.typography.labelMedium)
+        Box(modifier = Modifier
+            .size(10.dp)
+            .background(ExpenseRed, CircleShape))
+        Text("Expenses", style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+private fun SliceRow(slice: CategorySlice, showBar: Boolean) {
+    val color = parseColorOrGray(slice.colorHex)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier
+                .size(10.dp)
+                .background(color, CircleShape))
+            Spacer(Modifier.width(MonetaSpacing.sm))
+            Text(slice.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1)
+            MoneyText(slice.amount)
+            Spacer(Modifier.width(MonetaSpacing.sm))
+            Text(
+                "%.0f%%".format(slice.percentOfTotal),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (showBar) {
+            Spacer(Modifier.height(4.dp))
+            LinearProgressIndicator(
+                progress = { (slice.percentOfTotal / 100.0).toFloat().coerceIn(0f, 1f) },
+                color = color,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+private fun BreakdownTab(slices: List<CategorySlice>, kind: String, periodLabel: String) {
+    if (slices.isEmpty()) {
+        Column(modifier = Modifier
+            .fillMaxSize()
+            .padding(MonetaSpacing.xl), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("No $kind in $periodLabel", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(MonetaSpacing.xs))
+            Text(
+                "Record some $kind or pick another period to see the breakdown.",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
         return
     }
-    LazyColumn(
-        contentPadding = PaddingValues(MonetaSpacing.screenHorizontal),
-        verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
-    ) {
-        items(state.monthlyCashFlow.size) { index ->
-            val month = state.monthlyCashFlow[index]
+    LazyColumn(contentPadding = reportPadding, verticalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
+        item {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                CategoryPieChart(slices, modifier = Modifier.size(200.dp))
+            }
+        }
+        items(slices, key = { "slice-${it.categoryId}-${it.name}" }) { slice ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(horizontal = MonetaSpacing.md, vertical = MonetaSpacing.sm)) {
+                    SliceRow(slice, showBar = true)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrendsTab(state: ReportsUiState, onBucketChoice: (BucketChoice) -> Unit) {
+    LazyColumn(contentPadding = reportPadding, verticalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm), verticalAlignment = Alignment.CenterVertically) {
+                Text("Group by", style = MaterialTheme.typography.labelLarge)
+                BucketChoice.entries.forEach { choice ->
+                    FilterChip(
+                        selected = state.bucketChoice == choice,
+                        onClick = { onBucketChoice(choice) },
+                        label = { Text(choice.label) }
+                    )
+                }
+            }
+        }
+        item {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
-                    Text(month.monthStart.format(DateTimeFormatter.ofPattern("MMMM yyyy")), style = MaterialTheme.typography.bodyLarge)
+                    ChartLegend()
+                    Spacer(Modifier.height(MonetaSpacing.sm))
+                    TrendBarChart(
+                        labels = state.buckets.map { it.shortLabel },
+                        incomeMinor = state.buckets.map { it.incomeMinor },
+                        expenseMinor = state.buckets.map { it.expenseMinor },
+                        currencyCode = state.currencyCode,
+                        labelEvery = state.labelEvery
+                    )
+                }
+            }
+        }
+        items(state.buckets.reversed(), key = { "bucket-${it.label}" }) { bucket ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+                    Text(bucket.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(MonetaSpacing.xs))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Column {
                             Text("Income", style = MaterialTheme.typography.labelMedium)
-                            MoneyText(month.income, color = IncomeGreen)
+                            MoneyText(Money(bucket.incomeMinor, state.currencyCode), color = IncomeGreen)
                         }
-                        Column {
-                            Text("Expense", style = MaterialTheme.typography.labelMedium)
-                            MoneyText(month.expense, color = ExpenseRed)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Expenses", style = MaterialTheme.typography.labelMedium)
+                            MoneyText(Money(bucket.expenseMinor, state.currencyCode), color = ExpenseRed)
                         }
-                        Column {
+                        Column(horizontalAlignment = Alignment.End) {
                             Text("Net", style = MaterialTheme.typography.labelMedium)
-                            MoneyText(month.net, color = if (month.net.isNegative) ExpenseRed else IncomeGreen)
+                            MoneyText(
+                                Money(bucket.netMinor, state.currencyCode),
+                                color = if (bucket.netMinor < 0) ExpenseRed else IncomeGreen
+                            )
                         }
                     }
                 }
@@ -189,36 +332,61 @@ private fun CashFlowTab(state: ReportsUiState) {
 }
 
 @Composable
-private fun NetWorthTab(state: ReportsUiState) {
-    if (state.netWorthTrend.size < 2) {
-        ComingSoonPlaceholder(
-            title = "Not enough history yet",
-            body = "Net worth needs at least a couple of months of account history to plot a trend."
-        )
-        return
-    }
-    LazyColumn(
-        contentPadding = PaddingValues(MonetaSpacing.screenHorizontal),
-        verticalArrangement = Arrangement.spacedBy(MonetaSpacing.lg)
-    ) {
+private fun AccountsTab(state: ReportsUiState) {
+    LazyColumn(contentPadding = reportPadding, verticalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
         item {
-            val latest = state.netWorthTrend.last()
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
                     Text("Net worth today", style = MaterialTheme.typography.labelMedium)
-                    MoneyText(latest.netWorth)
+                    Text(
+                        state.netWorth.formatted(),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "The total of all your accounts that are counted in your net worth.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
-        item {
+        items(state.accounts, key = { it.id }) { account ->
             Card(modifier = Modifier.fillMaxWidth()) {
-                SimpleLineChart(
-                    values = state.netWorthTrend.map { it.netWorth.minorUnits.toFloat() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(140.dp)
-                        .padding(MonetaSpacing.cardPadding)
-                )
+                Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconBadge(iconName = account.icon, colorHex = account.colorHex)
+                        Spacer(Modifier.width(MonetaSpacing.md))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(account.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                account.type.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        MoneyText(
+                            account.currentBalance,
+                            color = if (account.currentBalance.isNegative) ExpenseRed else Color.Unspecified
+                        )
+                    }
+                    val share = if (state.netWorth.isPositive && account.currentBalance.isPositive) {
+                        account.currentBalance.percentOf(state.netWorth) ?: 0.0
+                    } else 0.0
+                    if (share > 0.0) {
+                        Spacer(Modifier.height(MonetaSpacing.sm))
+                        LinearProgressIndicator(
+                            progress = { (share / 100.0).toFloat().coerceIn(0f, 1f) },
+                            color = parseColorOrGray(account.colorHex),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            "%.0f%% of your total".format(share),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
     }

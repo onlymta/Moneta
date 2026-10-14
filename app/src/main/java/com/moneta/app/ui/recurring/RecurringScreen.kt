@@ -30,6 +30,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.moneta.app.data.local.entity.RecurrenceFrequency
 import com.moneta.app.data.local.entity.TransactionType
@@ -48,7 +49,7 @@ fun RecurringScreen(
     val state by viewModel.uiState.collectAsState()
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Recurring transactions") }) },
+        topBar = { TopAppBar(title = { Text("Scheduled & recurring") }) },
         floatingActionButton = {
             FloatingActionButton(onClick = onAdd) {
                 Icon(Icons.Filled.Add, contentDescription = "Add recurring transaction")
@@ -62,7 +63,7 @@ fun RecurringScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
-                contentPadding = PaddingValues(MonetaSpacing.screenHorizontal),
+                contentPadding = PaddingValues(start = MonetaSpacing.screenHorizontal, end = MonetaSpacing.screenHorizontal, top = MonetaSpacing.screenHorizontal, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
             ) {
                 items(state.items, key = { it.id }) { item ->

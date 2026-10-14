@@ -34,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.moneta.app.data.repository.BillUrgency
 import com.moneta.app.ui.theme.ExpenseRed
@@ -78,7 +79,7 @@ fun BillsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
-                contentPadding = PaddingValues(MonetaSpacing.screenHorizontal),
+                contentPadding = PaddingValues(start = MonetaSpacing.screenHorizontal, end = MonetaSpacing.screenHorizontal, top = MonetaSpacing.screenHorizontal, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
             ) {
                 items(state.bills, key = { it.bill.id }) { row ->

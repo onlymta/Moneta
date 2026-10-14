@@ -2,6 +2,7 @@ package com.moneta.app.domain.usecase
 
 import com.moneta.app.core.money.Money
 import com.moneta.app.data.local.dao.CategoryTotal
+import com.moneta.app.data.repository.Category
 import com.moneta.app.data.repository.CategoryRepository
 import javax.inject.Inject
 
@@ -41,4 +42,18 @@ class CategoryBreakdownUseCase @Inject constructor(
             }
             .sortedByDescending { it.amount.minorUnits }
     }
+}
+
+/**
+ * Adds each subcategory's total into its parent so a breakdown shows one slice per
+ * top-level category (Food, not Food > Groceries + Food > Dining separately).
+ */
+fun rollUpToTopLevel(totals: List<CategoryTotal>, categories: List<Category>): List<CategoryTotal> {
+    val parentOf = categories.associate { it.id to (it.parentCategoryId ?: it.id) }
+    val sums = LinkedHashMap<Long?, Long>()
+    totals.forEach { row ->
+        val key = row.categoryId?.let { parentOf[it] ?: it }
+        sums[key] = (sums[key] ?: 0L) + row.totalMinor
+    }
+    return sums.map { (id, minor) -> CategoryTotal(id, minor) }.sortedByDescending { it.totalMinor }
 }

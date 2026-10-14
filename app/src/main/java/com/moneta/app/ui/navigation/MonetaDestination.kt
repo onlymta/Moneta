@@ -1,6 +1,7 @@
 package com.moneta.app.ui.navigation
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Home
@@ -10,15 +11,17 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.moneta.app.R
 
 /**
- * The five bottom-navigation destinations from ARCHITECTURE.md Section 4.
- * Everything else (Accounts, Categories, Bills, Recurring, Goals, Backup,
- * Import/Export, Settings) nests under [More] rather than crowding the bar.
+ * The main-tab destinations. Home, Records, Budgets and Reports are always in the
+ * bottom bar; Accounts appears there only when switched on under
+ * Settings > Advanced settings > Customization. Everything else lives in the
+ * side drawer. [More] is no longer in the bar (its route still exists).
  */
 sealed class MonetaDestination(val route: String, val icon: ImageVector, val labelRes: Int) {
     data object Home : MonetaDestination("home", Icons.Outlined.Home, R.string.nav_home)
     data object Transactions : MonetaDestination("transactions", Icons.Outlined.SwapHoriz, R.string.nav_transactions)
     data object Budgets : MonetaDestination("budgets", Icons.Outlined.AccountBalanceWallet, R.string.nav_budgets)
     data object Reports : MonetaDestination("reports", Icons.Outlined.BarChart, R.string.nav_reports)
+    data object Accounts : MonetaDestination("accounts", Icons.Outlined.AccountBalance, R.string.nav_accounts)
     data object More : MonetaDestination("more", Icons.Outlined.MoreHoriz, R.string.nav_more)
 
     companion object {
@@ -30,7 +33,7 @@ sealed class MonetaDestination(val route: String, val icon: ImageVector, val lab
         // the first time it drew (every launch). A getter builds the list on demand,
         // after all five objects fully exist.
         val bottomBarItems: List<MonetaDestination>
-            get() = listOf(Home, Transactions, Budgets, Reports, More)
+            get() = listOf(Home, Transactions, Budgets, Reports, Accounts)
     }
 }
 
@@ -44,6 +47,8 @@ const val TRANSACTION_DETAIL_ROUTE_PATTERN = "transaction_detail/{$TRANSACTION_I
 fun transactionDetailRoute(transactionId: Long) = "transaction_detail/$transactionId"
 
 const val ACCOUNTS_ROUTE = "accounts"
+const val SEARCH_ROUTE = "search"
+const val NOTIFICATIONS_ROUTE = "notifications"
 private const val ACCOUNT_ID_ARG = "accountId"
 const val ACCOUNT_FORM_ROUTE_PATTERN = "account_form?$ACCOUNT_ID_ARG={$ACCOUNT_ID_ARG}"
 const val ACCOUNT_FORM_ADD_ROUTE = "account_form"
@@ -62,7 +67,6 @@ fun categoryEditRoute(type: com.moneta.app.data.local.entity.CategoryType, categ
 fun categoryAddSubcategoryRoute(type: com.moneta.app.data.local.entity.CategoryType, parentId: Long) =
     "category_form/${type.name}?$CATEGORY_PARENT_ID_ARG=$parentId"
 
-const val ADD_BUDGET_ROUTE = "add_budget"
 
 const val GOALS_ROUTE = "goals"
 const val ADD_GOAL_ROUTE = "add_goal"

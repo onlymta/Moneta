@@ -91,23 +91,19 @@ fun AddEditAccountScreen(
             }
         }
 
-        if (!state.isEditing) {
-            OutlinedTextField(
-                value = state.openingBalanceInput,
-                onValueChange = viewModel::onOpeningBalanceChange,
-                label = { Text("Opening balance") },
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                isError = state.amountError != null,
-                supportingText = (state.amountError ?: "Leave blank to start at zero.").let { { Text(it) } },
-                modifier = Modifier.fillMaxWidth()
-            )
-        } else {
-            Text(
-                "Opening balance can't be changed after an account is created \u2014 adjust the balance with a transaction instead.",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        OutlinedTextField(
+            value = state.openingBalanceInput,
+            onValueChange = viewModel::onOpeningBalanceChange,
+            label = { Text("Opening balance") },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            isError = state.amountError != null,
+            supportingText = (
+                state.amountError
+                    ?: if (state.isEditing) "Changing this shifts the current balance by the same amount; your transactions are kept."
+                    else "Leave blank to start at zero."
+                ).let { { Text(it) } },
+            modifier = Modifier.fillMaxWidth()
+        )
 
         Row(
             modifier = Modifier.fillMaxWidth(),

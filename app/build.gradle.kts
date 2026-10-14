@@ -14,8 +14,8 @@ android {
         applicationId = "com.moneta.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "0.14.0-smart-import"
+        versionCode = 17
+        versionName = "0.15.0-overhaul"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

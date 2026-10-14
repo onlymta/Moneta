@@ -2,112 +2,214 @@ package com.moneta.app.ui.reports
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.moneta.app.core.date.DateRange
 import com.moneta.app.core.money.Money
+import com.moneta.app.data.local.dao.CategoryTotal
 import com.moneta.app.data.local.entity.TransactionType
+import com.moneta.app.data.repository.Account
+import com.moneta.app.data.repository.AccountRepository
+import com.moneta.app.data.repository.CategoryRepository
+import com.moneta.app.data.repository.Transaction
 import com.moneta.app.data.repository.TransactionRepository
+import com.moneta.app.data.settings.SettingsRepository
 import com.moneta.app.domain.usecase.CategoryBreakdownUseCase
 import com.moneta.app.domain.usecase.CategorySlice
-import com.moneta.app.domain.usecase.MonthlyCashFlow
-import com.moneta.app.domain.usecase.MonthlyCashFlowUseCase
-import com.moneta.app.domain.usecase.NetWorthPoint
 import com.moneta.app.domain.usecase.NetWorthTrendUseCase
+import com.moneta.app.domain.usecase.rollUpToTopLevel
+import com.moneta.app.ui.common.PeriodMode
+import com.moneta.app.ui.common.PeriodSelection
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+import java.time.temporal.TemporalAdjusters
 import javax.inject.Inject
 
-private const val DEFAULT_CURRENCY = "PKR"
-private const val MONTHS_OF_HISTORY = 6
+enum class ReportTab(val label: String) {
+    OVERVIEW("Overview"),
+    SPENDING("Spending"),
+    INCOME("Income"),
+    TRENDS("Trends"),
+    ACCOUNTS("Accounts")
+}
 
-enum class ReportTab { OVERVIEW, SPENDING, INCOME, CASH_FLOW, NET_WORTH }
+enum class BucketChoice(val label: String) { AUTO("Auto"), DAY("Day"), WEEK("Week"), MONTH("Month") }
+
+data class TrendBucket(val label: String, val shortLabel: String, val incomeMinor: Long, val expenseMinor: Long) {
+    val netMinor: Long get() = incomeMinor - expenseMinor
+}
 
 data class ReportsUiState(
     val isLoading: Boolean = true,
-    val selectedTab: ReportTab = ReportTab.OVERVIEW,
-    val currentMonthIncome: Money = Money.zero(DEFAULT_CURRENCY),
-    val currentMonthExpense: Money = Money.zero(DEFAULT_CURRENCY),
-    val spendingBreakdown: List<CategorySlice> = emptyList(),
-    val incomeBreakdown: List<CategorySlice> = emptyList(),
-    val monthlyCashFlow: List<MonthlyCashFlow> = emptyList(),
-    val netWorthTrend: List<NetWorthPoint> = emptyList(),
-    val isHistoryLoading: Boolean = true
-)
+    val period: PeriodSelection = PeriodSelection(mode = PeriodMode.MONTH),
+    val tab: ReportTab = ReportTab.OVERVIEW,
+    val bucketChoice: BucketChoice = BucketChoice.AUTO,
+    val bucketUsed: BucketChoice = BucketChoice.DAY,
+    val currencyCode: String = "PKR",
+    val income: Money = Money.zero("PKR"),
+    val expense: Money = Money.zero("PKR"),
+    val transactionCount: Int = 0,
+    val spendingSlices: List<CategorySlice> = emptyList(),
+    val incomeSlices: List<CategorySlice> = emptyList(),
+    val buckets: List<TrendBucket> = emptyList(),
+    val labelEvery: Int = 1,
+    val openingBalance: Money? = null,
+    val accounts: List<Account> = emptyList(),
+    val netWorth: Money = Money.zero("PKR")
+) {
+    val net: Money get() = income - expense
+}
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ReportsViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
+    accountRepository: AccountRepository,
+    categoryRepository: CategoryRepository,
+    settingsRepository: SettingsRepository,
     private val categoryBreakdownUseCase: CategoryBreakdownUseCase,
-    private val monthlyCashFlowUseCase: MonthlyCashFlowUseCase,
     private val netWorthTrendUseCase: NetWorthTrendUseCase
 ) : ViewModel() {
 
-    private val currentMonth = DateRange.currentMonth()
-    private val selectedTabFlow = MutableStateFlow(ReportTab.OVERVIEW)
+    private val period = MutableStateFlow(PeriodSelection(mode = PeriodMode.MONTH))
+    private val tab = MutableStateFlow(ReportTab.OVERVIEW)
+    private val bucketChoice = MutableStateFlow(BucketChoice.AUTO)
+    private val accountsFlow = accountRepository.observeActiveAccounts()
+    private val categoriesFlow = categoryRepository.observeAll()
+    private val prefsFlow = settingsRepository.preferences
 
-    // Historical data (cash flow, net worth) needs one-shot suspend calls per month rather
-    // than a live Flow per month, so it's loaded once into its own state and refreshed
-    // whenever a transaction changes via the lightweight signal below - simpler than wiring
-    // N month-range Flows, at the cost of not being instantly live like the rest of the app.
-    private val historyState = MutableStateFlow(
-        Triple(emptyList<MonthlyCashFlow>(), emptyList<NetWorthPoint>(), true)
-    )
+    private data class Controls(val period: PeriodSelection, val tab: ReportTab, val bucket: BucketChoice)
 
-    private val incomeFlow =
-        transactionRepository.observeTotalForTypeInRange(TransactionType.INCOME, currentMonth, DEFAULT_CURRENCY)
-    private val expenseFlow =
-        transactionRepository.observeTotalForTypeInRange(TransactionType.EXPENSE, currentMonth, DEFAULT_CURRENCY)
-    private val expenseTotalsFlow =
-        transactionRepository.observeTotalsByCategory(TransactionType.EXPENSE, currentMonth)
-    private val incomeTotalsFlow =
-        transactionRepository.observeTotalsByCategory(TransactionType.INCOME, currentMonth)
+    private val controls = combine(period, tab, bucketChoice) { p, t, b -> Controls(p, t, b) }
 
-    val uiState: StateFlow<ReportsUiState> = combine(
-        selectedTabFlow, incomeFlow, expenseFlow, expenseTotalsFlow, incomeTotalsFlow, historyState
-    ) { values ->
-        @Suppress("UNCHECKED_CAST")
-        val tab = values[0] as ReportTab
-        val income = values[1] as Money
-        val expense = values[2] as Money
-        val expenseTotals = values[3] as List<com.moneta.app.data.local.dao.CategoryTotal>
-        val incomeTotals = values[4] as List<com.moneta.app.data.local.dao.CategoryTotal>
-        val (cashFlow, netWorth, historyLoading) = values[5] as Triple<List<MonthlyCashFlow>, List<NetWorthPoint>, Boolean>
-
-        ReportsUiState(
-            isLoading = false,
-            selectedTab = tab,
-            currentMonthIncome = income,
-            currentMonthExpense = expense,
-            spendingBreakdown = categoryBreakdownUseCase(expenseTotals, expense),
-            incomeBreakdown = categoryBreakdownUseCase(incomeTotals, income),
-            monthlyCashFlow = cashFlow,
-            netWorthTrend = netWorth,
-            isHistoryLoading = historyLoading
-        )
+    val uiState: StateFlow<ReportsUiState> = controls.flatMapLatest { c ->
+        combine(
+            transactionRepository.observeFiltered(range = c.period.range()),
+            accountsFlow,
+            categoriesFlow,
+            prefsFlow
+        ) { transactions, accounts, categories, prefs ->
+            build(c, transactions, accounts, categories, prefs)
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReportsUiState())
 
-    init {
-        loadHistory()
+    fun onPeriodChange(selection: PeriodSelection) {
+        period.value = selection
     }
 
-    fun onTabSelected(tab: ReportTab) {
-        selectedTabFlow.value = tab
+    fun onTabSelected(selected: ReportTab) {
+        tab.value = selected
     }
 
-    /** Call after any transaction change (e.g. returning to this screen) to refresh the one-shot history data. */
-    fun loadHistory() {
-        viewModelScope.launch {
-            val monthEnds = (0 until MONTHS_OF_HISTORY).map { offset ->
-                val reference = DateRange.todayDate().minusMonths((MONTHS_OF_HISTORY - 1 - offset).toLong())
-                DateRange.currentMonth(referenceDate = reference).endExclusive.minusDays(1)
-            }
-            val cashFlow = monthlyCashFlowUseCase(MONTHS_OF_HISTORY, DEFAULT_CURRENCY)
-            val netWorth = netWorthTrendUseCase(monthEnds, DEFAULT_CURRENCY)
-            historyState.value = Triple(cashFlow, netWorth, false)
+    fun onBucketChoice(choice: BucketChoice) {
+        bucketChoice.value = choice
+    }
+
+    private suspend fun build(
+        c: Controls,
+        transactions: List<Transaction>,
+        accounts: List<Account>,
+        categories: List<com.moneta.app.data.repository.Category>,
+        prefs: com.moneta.app.data.settings.AppPreferences
+    ): ReportsUiState {
+        val currency = prefs.currencyCode
+        val range = c.period.range()
+        val incomeTx = transactions.filter { it.type == TransactionType.INCOME }
+        val expenseTx = transactions.filter { it.type == TransactionType.EXPENSE }
+        val income = Money(incomeTx.sumOf { it.amount.minorUnits }, currency)
+        val expense = Money(expenseTx.sumOf { it.amount.minorUnits }, currency)
+
+        fun totalsOf(list: List<Transaction>): List<CategoryTotal> =
+            list.groupBy { it.categoryId }.map { (id, rows) -> CategoryTotal(id, rows.sumOf { it.amount.minorUnits }) }
+
+        val spendingSlices = categoryBreakdownUseCase(rollUpToTopLevel(totalsOf(expenseTx), categories), expense)
+        val incomeSlices = categoryBreakdownUseCase(rollUpToTopLevel(totalsOf(incomeTx), categories), income)
+
+        // --- time buckets for the Trends view ---
+        val firstDate = transactions.minOfOrNull { it.date }
+        val lastDate = transactions.maxOfOrNull { it.date }
+        val effStart: LocalDate = if (c.period.mode == PeriodMode.ALL) (firstDate ?: LocalDate.now()) else range.start
+        val effEnd: LocalDate = if (c.period.mode == PeriodMode.ALL) (lastDate ?: LocalDate.now()) else range.endExclusive.minusDays(1)
+        val days = ChronoUnit.DAYS.between(effStart, effEnd).toInt() + 1
+
+        var used = when (c.bucket) {
+            BucketChoice.AUTO -> if (days <= 31) BucketChoice.DAY else if (days <= 120) BucketChoice.WEEK else BucketChoice.MONTH
+            else -> c.bucket
         }
+        if (used == BucketChoice.DAY && days > 92) used = BucketChoice.WEEK
+        if (used == BucketChoice.WEEK && days > 900) used = BucketChoice.MONTH
+
+        fun bucketStart(d: LocalDate): LocalDate = when (used) {
+            BucketChoice.WEEK -> d.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+            BucketChoice.MONTH -> d.withDayOfMonth(1)
+            else -> d
+        }
+
+        val incomeBy = HashMap<LocalDate, Long>()
+        val expenseBy = HashMap<LocalDate, Long>()
+        transactions.forEach { t ->
+            val key = bucketStart(t.date)
+            if (t.type == TransactionType.INCOME) incomeBy[key] = (incomeBy[key] ?: 0L) + t.amount.minorUnits
+            if (t.type == TransactionType.EXPENSE) expenseBy[key] = (expenseBy[key] ?: 0L) + t.amount.minorUnits
+        }
+
+        val buckets = ArrayList<TrendBucket>()
+        var cursor = bucketStart(effStart)
+        val lastBucket = bucketStart(effEnd)
+        var guard = 0
+        while (!cursor.isAfter(lastBucket) && guard < 400) {
+            val next = when (used) {
+                BucketChoice.WEEK -> cursor.plusWeeks(1)
+                BucketChoice.MONTH -> cursor.plusMonths(1)
+                else -> cursor.plusDays(1)
+            }
+            val label = when (used) {
+                BucketChoice.WEEK -> cursor.format(DateTimeFormatter.ofPattern("d MMM")) + " - " +
+                    next.minusDays(1).format(DateTimeFormatter.ofPattern("d MMM"))
+                BucketChoice.MONTH -> cursor.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
+                else -> cursor.format(DateTimeFormatter.ofPattern("EEE d MMM"))
+            }
+            val shortLabel = when (used) {
+                BucketChoice.WEEK -> cursor.format(DateTimeFormatter.ofPattern("d MMM"))
+                BucketChoice.MONTH -> cursor.format(DateTimeFormatter.ofPattern("MMM"))
+                else -> cursor.format(DateTimeFormatter.ofPattern("d"))
+            }
+            buckets += TrendBucket(label, shortLabel, incomeBy[cursor] ?: 0L, expenseBy[cursor] ?: 0L)
+            cursor = next
+            guard++
+        }
+        val labelEvery = if (buckets.size <= 8) 1 else (buckets.size + 7) / 8
+
+        val opening: Money? = if (prefs.carryForwardBalance && c.period.mode != PeriodMode.ALL) {
+            netWorthTrendUseCase(listOf(range.start.minusDays(1)), currency).firstOrNull()?.netWorth
+        } else {
+            null
+        }
+
+        return ReportsUiState(
+            isLoading = false,
+            period = c.period,
+            tab = c.tab,
+            bucketChoice = c.bucket,
+            bucketUsed = used,
+            currencyCode = currency,
+            income = income,
+            expense = expense,
+            transactionCount = transactions.size,
+            spendingSlices = spendingSlices,
+            incomeSlices = incomeSlices,
+            buckets = buckets,
+            labelEvery = labelEvery,
+            openingBalance = opening,
+            accounts = accounts,
+            netWorth = Money(accounts.filter { it.includeInNetWorth }.sumOf { it.currentBalance.minorUnits }, currency)
+        )
     }
 }

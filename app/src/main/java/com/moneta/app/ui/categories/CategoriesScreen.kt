@@ -81,7 +81,7 @@ fun CategoriesScreen(
                 CategoriesEmptyState()
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(MonetaSpacing.screenHorizontal),
+                    contentPadding = PaddingValues(start = MonetaSpacing.screenHorizontal, end = MonetaSpacing.screenHorizontal, top = MonetaSpacing.screenHorizontal, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
                 ) {
                     items(state.topLevelCategories, key = { it.id }) { category ->

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -15,9 +16,28 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Receipt
+import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Badge
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.DrawerState
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Surface
@@ -34,6 +54,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -51,7 +76,6 @@ import com.moneta.app.data.local.entity.CategoryType
 import com.moneta.app.ui.accounts.AccountsScreen
 import com.moneta.app.ui.accounts.AddEditAccountScreen
 import com.moneta.app.ui.backup.BackupScreen
-import com.moneta.app.ui.budgets.AddEditBudgetScreen
 import com.moneta.app.ui.budgets.BudgetsScreen
 import com.moneta.app.ui.categories.AddEditCategoryScreen
 import com.moneta.app.ui.categories.CategoriesScreen
@@ -66,6 +90,9 @@ import com.moneta.app.ui.importexport.ImportScreen
 import com.moneta.app.ui.insights.InsightsScreen
 import com.moneta.app.data.settings.OnboardingStatus
 import com.moneta.app.ui.more.MoreScreen
+import com.moneta.app.ui.notifications.NotificationsScreen
+import com.moneta.app.ui.notifications.NotificationsViewModel
+import com.moneta.app.ui.search.SearchScreen
 import com.moneta.app.ui.onboarding.OnboardingExit
 import com.moneta.app.ui.onboarding.OnboardingScreen
 import com.moneta.app.ui.recurring.AddRecurringScreen
@@ -102,7 +129,8 @@ fun MonetaApp(startupViewModel: StartupViewModel = hiltViewModel()) {
 @Composable
 private fun MonetaAppContent(
     startRoute: String,
-    settingsViewModel: SettingsViewModel = hiltViewModel()
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    notificationsViewModel: NotificationsViewModel = hiltViewModel()
 ) {
     val navController = rememberNavController()
     val prefs by settingsViewModel.preferences.collectAsState()
@@ -110,18 +138,52 @@ private fun MonetaAppContent(
     val currentRoute = currentBackStackEntry?.destination?.route
     // The header only appears on the five main tabs; every other screen already has
     // its own title bar (or is a full-screen form).
-    val isMainTab = MonetaDestination.bottomBarItems.any { it.route == currentRoute }
+    val isMainTab = MonetaDestination.bottomBarItems.any { it.route == currentRoute } ||
+        currentRoute == MonetaDestination.More.route
+    val alertCount by notificationsViewModel.alerts.collectAsState()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val drawerScope = rememberCoroutineScope()
     // Welcome flow and Quick Add are focused full-screen pages: no bottom bar, and they
     // handle the system-bar insets themselves.
     val fullScreen = currentRoute == null ||
         currentRoute == ONBOARDING_ROUTE ||
+        currentRoute == SEARCH_ROUTE ||
         currentRoute.startsWith(QUICK_ADD_ROUTE)
 
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = isMainTab,
+        drawerContent = {
+            MonetaDrawerContent(
+                goalsEnabled = prefs.goalsEnabled,
+                billsEnabled = prefs.billsEnabled,
+                alertCount = alertCount.size,
+                onItem = { route ->
+                    drawerScope.launch { drawerState.close() }
+                    navController.openRoute(route)
+                }
+            )
+        }
+    ) {
     Scaffold(
         contentWindowInsets = if (fullScreen) WindowInsets(0.dp, 0.dp, 0.dp, 0.dp) else ScaffoldDefaults.contentWindowInsets,
-        topBar = { if (isMainTab) MonetaTopBar(navController, currentRoute) },
+        topBar = {
+            if (isMainTab) {
+                MonetaTopBar(
+                    navController = navController,
+                    alertCount = alertCount.size,
+                    onMenu = { drawerScope.launch { drawerState.open() } }
+                )
+            }
+        },
         bottomBar = {
-            if (!fullScreen) MonetaBottomBar(navController, budgetsEnabled = prefs.budgetsEnabled)
+            if (!fullScreen) {
+                MonetaBottomBar(
+                    navController,
+                    budgetsEnabled = prefs.budgetsEnabled,
+                    accountsInBar = prefs.showAccountsInBottomBar
+                )
+            }
         },
         floatingActionButton = {
             // Only shown on the 3 bottom-nav tabs that have no "add" action of their
@@ -177,12 +239,20 @@ private fun MonetaAppContent(
             }
 
             composable(MonetaDestination.Budgets.route) {
-                BudgetsScreen(onAddBudget = { navController.navigate(ADD_BUDGET_ROUTE) })
-            }
-            composable(ADD_BUDGET_ROUTE) {
-                AddEditBudgetScreen(onDone = { navController.popBackStack() })
+                BudgetsScreen()
             }
             composable(MonetaDestination.Reports.route) { ReportsScreen() }
+
+            composable(SEARCH_ROUTE) {
+                SearchScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpen = { route -> navController.openRoute(route) },
+                    onOpenTransaction = { id -> navController.navigate(transactionDetailRoute(id)) }
+                )
+            }
+            composable(NOTIFICATIONS_ROUTE) {
+                NotificationsScreen(onOpen = { route -> navController.openRoute(route) })
+            }
 
             composable(MonetaDestination.More.route) {
                 MoreScreen(
@@ -348,6 +418,7 @@ private fun MonetaAppContent(
         }
       }
     }
+    }
 }
 
 /** Shown on Home after "Do this later" so the welcome setup isn't forgotten. */
@@ -373,12 +444,16 @@ private fun SetupReminderBanner(onFinish: () -> Unit, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun MonetaBottomBar(navController: NavHostController, budgetsEnabled: Boolean) {
+private fun MonetaBottomBar(navController: NavHostController, budgetsEnabled: Boolean, accountsInBar: Boolean) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
 
     val items = MonetaDestination.bottomBarItems.filter { destination ->
-        destination != MonetaDestination.Budgets || budgetsEnabled
+        when (destination) {
+            MonetaDestination.Budgets -> budgetsEnabled
+            MonetaDestination.Accounts -> accountsInBar
+            else -> true
+        }
     }
 
     NavigationBar {
@@ -414,19 +489,23 @@ private fun NavHostController.navigateToTab(route: String) {
 }
 
 /**
- * The header shown on the five main tabs: logo + app name on the left, quick
- * actions on the right. Search jumps to Records (which has the search box);
- * Settings opens the settings screen. Sub-screens keep their own title bars.
+ * The header shown on the main tabs: menu button, logo + app name, then search
+ * (whole app), notifications (with a count badge) and settings.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MonetaTopBar(navController: NavHostController, currentRoute: String?) {
+private fun MonetaTopBar(navController: NavHostController, alertCount: Int, onMenu: () -> Unit) {
     TopAppBar(
+        navigationIcon = {
+            IconButton(onClick = onMenu) {
+                Icon(Icons.Outlined.Menu, contentDescription = "Open menu")
+            }
+        },
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(28.dp)
                         .background(MaterialTheme.colorScheme.primary, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
@@ -434,10 +513,10 @@ private fun MonetaTopBar(navController: NavHostController, currentRoute: String?
                         imageVector = Icons.Filled.AccountBalanceWallet,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(8.dp))
                 Text(
                     text = stringResource(com.moneta.app.R.string.app_name),
                     style = MaterialTheme.typography.titleLarge
@@ -445,9 +524,18 @@ private fun MonetaTopBar(navController: NavHostController, currentRoute: String?
             }
         },
         actions = {
-            if (currentRoute != MonetaDestination.Transactions.route) {
-                IconButton(onClick = { navController.navigateToTab(MonetaDestination.Transactions.route) }) {
-                    Icon(Icons.Outlined.Search, contentDescription = "Search transactions")
+            IconButton(onClick = { navController.navigate(SEARCH_ROUTE) }) {
+                Icon(Icons.Outlined.Search, contentDescription = "Search the whole app")
+            }
+            IconButton(onClick = { navController.navigate(NOTIFICATIONS_ROUTE) }) {
+                BadgedBox(
+                    badge = {
+                        if (alertCount > 0) {
+                            Badge { Text(if (alertCount > 9) "9+" else alertCount.toString()) }
+                        }
+                    }
+                ) {
+                    Icon(Icons.Outlined.Notifications, contentDescription = "Notifications")
                 }
             }
             IconButton(onClick = { navController.navigate(SETTINGS_ROUTE) }) {
@@ -455,6 +543,61 @@ private fun MonetaTopBar(navController: NavHostController, currentRoute: String?
             }
         }
     )
+}
+
+/** Opens a route from the drawer, search or a notification: tabs switch tab, everything else stacks on top. */
+private fun NavHostController.openRoute(route: String) {
+    val isTab = MonetaDestination.bottomBarItems.any { it.route == route }
+    if (isTab) navigateToTab(route) else navigate(route)
+}
+
+private class DrawerEntry(val label: String, val icon: ImageVector, val route: String)
+
+@Composable
+private fun MonetaDrawerContent(
+    goalsEnabled: Boolean,
+    billsEnabled: Boolean,
+    alertCount: Int,
+    onItem: (String) -> Unit
+) {
+    val entries = buildList {
+        add(DrawerEntry("Accounts", Icons.Outlined.AccountBalance, ACCOUNTS_ROUTE))
+        add(DrawerEntry("Categories", Icons.Outlined.Category, CATEGORIES_ROUTE))
+        if (billsEnabled) add(DrawerEntry("Bills", Icons.Outlined.Receipt, BILLS_ROUTE))
+        add(DrawerEntry("Scheduled & recurring", Icons.Outlined.Repeat, RECURRING_ROUTE))
+        if (goalsEnabled) add(DrawerEntry("Goals", Icons.Outlined.Flag, GOALS_ROUTE))
+        add(DrawerEntry("Insights", Icons.Outlined.Lightbulb, INSIGHTS_ROUTE))
+        add(
+            DrawerEntry(
+                if (alertCount > 0) "Notifications ($alertCount)" else "Notifications",
+                Icons.Outlined.Notifications,
+                NOTIFICATIONS_ROUTE
+            )
+        )
+        add(DrawerEntry("Import", Icons.Outlined.FileUpload, IMPORT_ROUTE))
+        add(DrawerEntry("Export", Icons.Outlined.FileDownload, EXPORT_ROUTE))
+        add(DrawerEntry("Backup & restore", Icons.Outlined.Backup, BACKUP_ROUTE))
+        add(DrawerEntry("Settings", Icons.Outlined.Settings, SETTINGS_ROUTE))
+    }
+    ModalDrawerSheet {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+            Text(
+                stringResource(com.moneta.app.R.string.app_name),
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp)
+            )
+            entries.forEach { entry ->
+                NavigationDrawerItem(
+                    label = { Text(entry.label) },
+                    icon = { Icon(entry.icon, contentDescription = null) },
+                    selected = false,
+                    onClick = { onItem(entry.route) },
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                )
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
 }
 
 @Composable

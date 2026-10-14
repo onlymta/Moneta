@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.moneta.app.data.settings.AppPreferences
 import com.moneta.app.data.settings.OnboardingStatus
+import com.moneta.app.data.settings.PickerStyle
 import com.moneta.app.data.settings.SettingsRepository
 import com.moneta.app.data.settings.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -40,4 +41,17 @@ class SettingsViewModel @Inject constructor(
     /** The Home "finish setting up" reminder's Dismiss button: stop reminding for good. */
     fun dismissOnboardingReminder() =
         viewModelScope.launch { settingsRepository.setOnboardingStatus(OnboardingStatus.COMPLETED) }
+
+    fun setUserName(name: String) = viewModelScope.launch { settingsRepository.setUserName(name) }
+
+    fun setCarryForwardBalance(enabled: Boolean) =
+        viewModelScope.launch { settingsRepository.setCarryForwardBalance(enabled) }
+
+    fun setRolloverBudgets(enabled: Boolean) =
+        viewModelScope.launch { settingsRepository.setRolloverBudgets(enabled) }
+
+    fun setShowAccountsInBottomBar(enabled: Boolean) =
+        viewModelScope.launch { settingsRepository.setShowAccountsInBottomBar(enabled) }
+
+    fun setPickerStyle(style: PickerStyle) = viewModelScope.launch { settingsRepository.setPickerStyle(style) }
 }

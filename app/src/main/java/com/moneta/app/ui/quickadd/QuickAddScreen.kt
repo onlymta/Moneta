@@ -5,7 +5,9 @@
 
 package com.moneta.app.ui.quickadd
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -19,12 +21,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -62,6 +67,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.moneta.app.data.local.entity.TransactionType
 import com.moneta.app.data.repository.Account
 import com.moneta.app.data.repository.Category
+import com.moneta.app.data.settings.PickerStyle
 import com.moneta.app.ui.common.IconMapper
 import com.moneta.app.ui.theme.ExpenseRed
 import com.moneta.app.ui.theme.IncomeGreen
@@ -158,43 +164,62 @@ fun QuickAddScreen(
                     Text(message, style = MaterialTheme.typography.bodyMedium, color = IncomeGreen)
                 }
 
-                // --- When ---
-                val today = LocalDate.now()
-                val yesterday = today.minusDays(1)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm),
-                    verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
+                val isTransfer = state.type == TransactionType.TRANSFER
+                val dropdown = state.pickerStyle == PickerStyle.DROPDOWN
+                val selectedSub = state.subcategoryOptions.firstOrNull { it.id == state.selectedCategoryId }
+                val topSelectedId = selectedSub?.parentCategoryId ?: state.selectedCategoryId
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FilterChip(
-                        selected = state.date == today,
-                        onClick = { viewModel.onDateChange(today) },
-                        label = { Text("Today") }
+                    SectionLabel(if (isTransfer) "Accounts" else "Account and category")
+                    TextButton(onClick = {
+                        viewModel.setPickerStyle(if (dropdown) PickerStyle.CHIPS else PickerStyle.DROPDOWN)
+                    }) {
+                        Text(if (dropdown) "Show as chips" else "Show as dropdown")
+                    }
+                }
+
+                if (isTransfer) {
+                    AccountPicker("From account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
+                    AccountPicker(
+                        "To account",
+                        state.accounts.filter { it.id != state.selectedAccountId },
+                        state.selectedToAccountId,
+                        dropdown,
+                        viewModel::onToAccountSelected
                     )
-                    FilterChip(
-                        selected = state.date == yesterday,
-                        onClick = { viewModel.onDateChange(yesterday) },
-                        label = { Text("Yesterday") }
-                    )
-                    val customDate = state.date != today && state.date != yesterday
-                    FilterChip(
-                        selected = customDate,
+                } else {
+                    AccountPicker("Account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
+                    CategoryPicker("Category", state.topLevelCategories, topSelectedId, dropdown, viewModel::onCategorySelected)
+                    if (state.subcategoryOptions.isNotEmpty()) {
+                        CategoryPicker(
+                            "Subcategory (optional)",
+                            state.subcategoryOptions,
+                            selectedSub?.id,
+                            dropdown,
+                            viewModel::onCategorySelected
+                        )
+                    }
+                }
+
+                // --- When: one tappable date and one tappable time, both showing "now" until changed ---
+                Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                    ClickableField(
+                        label = "Date",
+                        value = state.date.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy")),
+                        icon = Icons.Filled.Event,
                         onClick = { showDatePicker = true },
-                        label = {
-                            Text(
-                                if (customDate) state.date.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy"))
-                                else "Pick date"
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(Icons.Filled.Event, contentDescription = null, modifier = Modifier.size(18.dp))
-                        }
+                        modifier = Modifier.weight(1.5f)
                     )
-                    AssistChip(
+                    ClickableField(
+                        label = "Time",
+                        value = formatTime(state.timeMinutes),
+                        icon = Icons.Filled.Schedule,
                         onClick = { showTimePicker = true },
-                        label = { Text(formatTime(state.timeMinutes)) },
-                        leadingIcon = {
-                            Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.size(18.dp))
-                        }
+                        modifier = Modifier.weight(1f)
                     )
                 }
                 if (state.isFutureDate && !isEditing) {
@@ -206,31 +231,11 @@ fun QuickAddScreen(
                     )
                 }
 
-                if (state.type == TransactionType.TRANSFER) {
-                    SectionLabel("From account")
-                    AccountChips(state.accounts, state.selectedAccountId, viewModel::onAccountSelected)
-                    SectionLabel("To account")
-                    AccountChips(
-                        state.accounts.filter { it.id != state.selectedAccountId },
-                        state.selectedToAccountId,
-                        viewModel::onToAccountSelected
-                    )
-                } else {
-                    SectionLabel("Category")
-                    CategoryChips(state.topLevelCategories, state.selectedCategoryId, viewModel::onCategorySelected)
-                    if (state.subcategoryOptions.isNotEmpty()) {
-                        SectionLabel("Subcategory (optional)")
-                        CategoryChips(state.subcategoryOptions, state.selectedCategoryId, viewModel::onCategorySelected)
-                    }
-                    SectionLabel("Account")
-                    AccountChips(state.accounts, state.selectedAccountId, viewModel::onAccountSelected)
-                }
-
                 OutlinedTextField(
                     value = state.notes,
                     onValueChange = viewModel::onNotesChange,
-                    placeholder = { Text("Add a note (optional)") },
-                    singleLine = true,
+                    placeholder = { Text("Notes or description (optional)") },
+                    maxLines = 3,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -358,58 +363,174 @@ private fun TypeSelector(selected: TransactionType, onSelect: (TransactionType) 
 }
 
 @Composable
-private fun AccountChips(accounts: List<Account>, selectedId: Long?, onSelect: (Long) -> Unit) {
-    if (accounts.isEmpty()) {
-        Text(
-            "Add an account from More → Accounts to get started.",
-            style = MaterialTheme.typography.bodyMedium
+private fun ClickableField(
+    label: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text(label) },
+            leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
+            modifier = Modifier.fillMaxWidth()
         )
-        return
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clickable(onClick = onClick)
+        )
     }
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm),
-        verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
-    ) {
-        accounts.forEach { account ->
-            FilterChip(
-                selected = account.id == selectedId,
-                onClick = { onSelect(account.id) },
-                label = { Text(account.name) },
-                leadingIcon = {
-                    Icon(
-                        IconMapper.iconFor(account.icon),
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            )
+}
+
+@Composable
+private fun <T> DropdownPicker(
+    label: String,
+    selectedText: String,
+    selectedIcon: String?,
+    items: List<T>,
+    itemText: (T) -> String,
+    itemIcon: (T) -> String,
+    onSelect: (T) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = selectedText,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text(label) },
+            leadingIcon = {
+                Icon(
+                    IconMapper.iconFor(selectedIcon ?: "category"),
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+            },
+            trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clickable { expanded = true }
+        )
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            items.forEach { item ->
+                DropdownMenuItem(
+                    text = { Text(itemText(item)) },
+                    leadingIcon = {
+                        Icon(IconMapper.iconFor(itemIcon(item)), contentDescription = null, modifier = Modifier.size(20.dp))
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelect(item)
+                    }
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun CategoryChips(categories: List<Category>, selectedId: Long?, onSelect: (Long) -> Unit) {
-    if (categories.isEmpty()) {
-        Text("No categories yet. Add some from More → Categories.", style = MaterialTheme.typography.bodyMedium)
+private fun AccountPicker(
+    label: String,
+    accounts: List<Account>,
+    selectedId: Long?,
+    dropdown: Boolean,
+    onSelect: (Long) -> Unit
+) {
+    if (accounts.isEmpty()) {
+        Text(
+            "Add an account from the side menu (Accounts) to get started.",
+            style = MaterialTheme.typography.bodyMedium
+        )
         return
     }
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm),
-        verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
-    ) {
-        categories.forEach { category ->
-            FilterChip(
-                selected = category.id == selectedId,
-                onClick = { onSelect(category.id) },
-                label = { Text(category.name) },
-                leadingIcon = {
-                    Icon(
-                        IconMapper.iconFor(category.icon),
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            )
+    if (dropdown) {
+        val selected = accounts.firstOrNull { it.id == selectedId }
+        DropdownPicker(
+            label = label,
+            selectedText = selected?.name ?: "Select",
+            selectedIcon = selected?.icon,
+            items = accounts,
+            itemText = { it.name },
+            itemIcon = { it.icon },
+            onSelect = { onSelect(it.id) }
+        )
+    } else {
+        SectionLabel(label)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
+        ) {
+            accounts.forEach { account ->
+                FilterChip(
+                    selected = account.id == selectedId,
+                    onClick = { onSelect(account.id) },
+                    label = { Text(account.name) },
+                    leadingIcon = {
+                        Icon(
+                            IconMapper.iconFor(account.icon),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryPicker(
+    label: String,
+    categories: List<Category>,
+    selectedId: Long?,
+    dropdown: Boolean,
+    onSelect: (Long) -> Unit
+) {
+    if (categories.isEmpty()) {
+        Text("No categories yet. Add some from the side menu (Categories).", style = MaterialTheme.typography.bodyMedium)
+        return
+    }
+    if (dropdown) {
+        val selected = categories.firstOrNull { it.id == selectedId }
+        DropdownPicker(
+            label = label,
+            selectedText = selected?.name ?: "Select",
+            selectedIcon = selected?.icon,
+            items = categories,
+            itemText = { it.name },
+            itemIcon = { it.icon },
+            onSelect = { onSelect(it.id) }
+        )
+    } else {
+        SectionLabel(label)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
+        ) {
+            categories.forEach { category ->
+                FilterChip(
+                    selected = category.id == selectedId,
+                    onClick = { onSelect(category.id) },
+                    label = { Text(category.name) },
+                    leadingIcon = {
+                        Icon(
+                            IconMapper.iconFor(category.icon),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                )
+            }
         }
     }
 }

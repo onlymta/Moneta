@@ -64,11 +64,23 @@ class AccountRepository @Inject constructor(
         accountDao.update(
             existing.copy(
                 name = account.name,
+                type = account.type,
                 icon = account.icon,
                 colorHex = account.colorHex,
                 includeInNetWorth = account.includeInNetWorth
             )
         )
+    }
+
+    /**
+     * Changes the opening balance and shifts the current balance by the same
+     * difference, so all recorded transactions keep their effect.
+     */
+    suspend fun updateOpeningBalance(accountId: Long, newOpeningMinor: Long) {
+        val existing = accountDao.getById(accountId) ?: return
+        val delta = newOpeningMinor - existing.openingBalanceMinor
+        if (delta == 0L) return
+        accountDao.updateOpeningBalance(accountId, newOpeningMinor, delta)
     }
 
     /**

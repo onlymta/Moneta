@@ -13,6 +13,7 @@ import com.moneta.app.data.repository.CategoryRepository
 import com.moneta.app.data.repository.RecurringTransactionRepository
 import com.moneta.app.data.repository.TransactionDraft
 import com.moneta.app.data.repository.TransactionRepository
+import com.moneta.app.data.settings.PickerStyle
 import com.moneta.app.data.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -76,6 +77,7 @@ data class QuickAddUiState(
     val formError: String? = null,
     val savedMessage: String? = null,
     val addAnotherTick: Int = 0,
+    val pickerStyle: PickerStyle = PickerStyle.DROPDOWN,
     val isSaving: Boolean = false,
     val saved: Boolean = false
 )
@@ -157,6 +159,7 @@ class QuickAddViewModel @Inject constructor(
             formError = f.formError,
             savedMessage = f.savedMessage,
             addAnotherTick = f.addAnotherTick,
+            pickerStyle = prefs.pickerStyle,
             isSaving = f.isSaving,
             saved = f.saved
         )
@@ -194,6 +197,10 @@ class QuickAddViewModel @Inject constructor(
     fun onCategorySelected(categoryId: Long) = form.update { it.copy(selectedCategoryId = categoryId, formError = null) }
 
     fun onNotesChange(notes: String) = form.update { it.copy(notes = notes) }
+
+    fun setPickerStyle(style: PickerStyle) {
+        viewModelScope.launch { settingsRepository.setPickerStyle(style) }
+    }
 
     fun onDateChange(date: LocalDate) = form.update { it.copy(date = date, formError = null) }
 

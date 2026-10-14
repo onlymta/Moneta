@@ -9,15 +9,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.moneta.app.ui.theme.MonetaSpacing
@@ -36,25 +35,21 @@ fun ExportScreen(viewModel: ExportViewModel = hiltViewModel()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(androidx.compose.foundation.rememberScrollState())
             .padding(MonetaSpacing.screenHorizontal),
         verticalArrangement = Arrangement.spacedBy(MonetaSpacing.lg)
     ) {
         Text("Export", style = MaterialTheme.typography.titleLarge)
 
         Text("Period", style = MaterialTheme.typography.labelMedium)
-        Column(verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
-            ExportPeriod.entries.chunked(3).forEach { rowItems ->
-                androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
-                    rowItems.forEach { period ->
-                        FilterChip(
-                            selected = state.period == period,
-                            onClick = { viewModel.onPeriodChange(period) },
-                            label = { Text(periodLabel(period)) }
-                        )
-                    }
-                }
-            }
-        }
+        com.moneta.app.ui.common.PeriodBar(
+            selection = state.period,
+            onChange = viewModel::onPeriodChange
+        )
+        Text(
+            "Exporting: " + state.period.label(),
+            style = MaterialTheme.typography.bodyLarge
+        )
 
         Text(
             "CSV opens in Excel, Google Sheets, or Numbers. A dedicated .xlsx writer isn't built yet - CSV is the fully working option for spreadsheet import today.",
@@ -83,10 +78,4 @@ fun ExportScreen(viewModel: ExportViewModel = hiltViewModel()) {
             Text(it, style = MaterialTheme.typography.bodyLarge)
         }
     }
-}
-
-private fun periodLabel(period: ExportPeriod): String = when (period) {
-    ExportPeriod.THIS_MONTH -> "This month"
-    ExportPeriod.LAST_MONTH -> "Last month"
-    ExportPeriod.THIS_YEAR -> "This year"
 }

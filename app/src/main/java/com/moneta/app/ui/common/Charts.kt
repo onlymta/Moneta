@@ -159,3 +159,102 @@ fun SimpleLineChart(values: List<Float>, modifier: Modifier = Modifier, color: C
         drawPath(path, color = color, style = Stroke(width = strokeWidthPx))
     }
 }
+
+/** A real filled pie chart (no hole), one wedge per slice in the category's own color. */
+@Composable
+fun CategoryPieChart(slices: List<CategorySlice>, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        var startAngle = -90f
+        val diameter = size.minDimension
+        val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
+        val arcSize = Size(diameter, diameter)
+        slices.forEach { slice ->
+            val sweep = (slice.percentOfTotal / 100.0 * 360.0).toFloat()
+            drawArc(
+                color = parseColorOrGray(slice.colorHex),
+                startAngle = startAngle,
+                sweepAngle = sweep,
+                useCenter = true,
+                topLeft = topLeft,
+                size = arcSize
+            )
+            startAngle += sweep
+        }
+    }
+}
+
+/**
+ * Income-vs-expense bars over time, with the highest value printed on top and a
+ * label under each group. Values are minor units. [labelEvery] thins out the
+ * x-axis labels when there are many bars (for example one per day).
+ */
+@Composable
+fun TrendBarChart(
+    labels: List<String>,
+    incomeMinor: List<Long>,
+    expenseMinor: List<Long>,
+    currencyCode: String,
+    modifier: Modifier = Modifier,
+    labelEvery: Int = 1
+) {
+    val maxValue = (incomeMinor + expenseMinor).maxOrNull()?.coerceAtLeast(1L) ?: 1L
+    Column(modifier = modifier) {
+        Text(
+            "Highest bar: " + Money(maxValue, currencyCode).formatted(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(4.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(150.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            labels.indices.forEach { index ->
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(1.dp)
+                ) {
+                    val inc = incomeMinor[index]
+                    val exp = expenseMinor[index]
+                    if (inc > 0) {
+                        androidx.compose.foundation.layout.Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight((inc.toFloat() / maxValue.toFloat()).coerceIn(0.02f, 1f))
+                                .background(IncomeGreen)
+                        )
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                    if (exp > 0) {
+                        androidx.compose.foundation.layout.Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight((exp.toFloat() / maxValue.toFloat()).coerceIn(0.02f, 1f))
+                                .background(ExpenseRed)
+                        )
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            labels.forEachIndexed { index, label ->
+                Text(
+                    text = if (index % labelEvery.coerceAtLeast(1) == 0) label else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}

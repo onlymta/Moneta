@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Button
 import androidx.compose.material3.Divider
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -24,9 +26,13 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.moneta.app.data.settings.PickerStyle
 import com.moneta.app.data.settings.ThemeMode
 import com.moneta.app.ui.theme.MonetaSpacing
 
@@ -40,6 +46,25 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             contentPadding = PaddingValues(MonetaSpacing.screenHorizontal),
             verticalArrangement = Arrangement.spacedBy(MonetaSpacing.lg)
         ) {
+            item {
+                SettingsSection(title = "Profile") {
+                    var nameInput by remember(prefs.userName) { mutableStateOf(prefs.userName) }
+                    OutlinedTextField(
+                        value = nameInput,
+                        onValueChange = { nameInput = it.take(40) },
+                        label = { Text("Your name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(MonetaSpacing.sm))
+                    Button(
+                        onClick = { viewModel.setUserName(nameInput) },
+                        enabled = nameInput.trim() != prefs.userName,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Save name") }
+                }
+            }
+
             item {
                 SettingsSection(title = "Appearance") {
                     Text("Theme", style = MaterialTheme.typography.bodyLarge)
@@ -118,6 +143,51 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                         checked = prefs.compactTransactionRows,
                         onCheckedChange = viewModel::setCompactTransactionRows
                     )
+                }
+            }
+
+            item {
+                var advancedOpen by remember { mutableStateOf(false) }
+                SettingsSection(title = "Advanced settings") {
+                    TextButton(onClick = { advancedOpen = !advancedOpen }) {
+                        Text(if (advancedOpen) "Hide customization" else "Show customization")
+                    }
+                    if (advancedOpen) {
+                        Text("Customization", style = MaterialTheme.typography.bodyLarge)
+                        Spacer(Modifier.height(MonetaSpacing.xs))
+                        SettingsToggleRow(
+                            title = "Accounts in the bottom bar",
+                            subtitle = "Add Accounts next to Home, Records, Budgets and Reports. Everything else is always in the side menu.",
+                            checked = prefs.showAccountsInBottomBar,
+                            onCheckedChange = viewModel::setShowAccountsInBottomBar
+                        )
+                        SettingsToggleRow(
+                            title = "Carry forward balance",
+                            subtitle = "On: each month's opening balance includes what was left from earlier months. Off: every month starts from zero and only shows that month's own income and spending.",
+                            checked = prefs.carryForwardBalance,
+                            onCheckedChange = viewModel::setCarryForwardBalance
+                        )
+                        SettingsToggleRow(
+                            title = "Roll over unspent budget",
+                            subtitle = "Add whatever you didn't spend of a category budget last month to this month's budget.",
+                            checked = prefs.rolloverBudgets,
+                            onCheckedChange = viewModel::setRolloverBudgets
+                        )
+                        Spacer(Modifier.height(MonetaSpacing.sm))
+                        Text("Add transaction: account and category pickers", style = MaterialTheme.typography.bodyLarge)
+                        Spacer(Modifier.height(MonetaSpacing.sm))
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            PickerStyle.entries.forEachIndexed { index, style ->
+                                SegmentedButton(
+                                    selected = prefs.pickerStyle == style,
+                                    onClick = { viewModel.setPickerStyle(style) },
+                                    shape = SegmentedButtonDefaults.itemShape(index, PickerStyle.entries.size)
+                                ) {
+                                    Text(if (style == PickerStyle.CHIPS) "Chips" else "Dropdown")
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

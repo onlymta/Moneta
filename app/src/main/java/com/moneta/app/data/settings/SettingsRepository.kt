@@ -14,6 +14,9 @@ import javax.inject.Singleton
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
+/** How Quick Add shows its account/category pickers: all chips at once, or compact dropdown menus. */
+enum class PickerStyle { CHIPS, DROPDOWN }
+
 /**
  * Where the first-run welcome flow stands. NOT_STARTED shows the welcome flow on
  * launch; SKIPPED ("do this later") shows a reminder banner on Home until the
@@ -48,7 +51,13 @@ data class AppPreferences(
     val lastUsedExpenseCategoryId: Long? = null,
     val lastUsedIncomeCategoryId: Long? = null,
     val userName: String = "",
-    val onboardingStatus: OnboardingStatus = OnboardingStatus.NOT_STARTED
+    val onboardingStatus: OnboardingStatus = OnboardingStatus.NOT_STARTED,
+    /** When on, a month's opening balance includes everything left over from earlier months. */
+    val carryForwardBalance: Boolean = true,
+    /** When on, unspent budget from last month is added to this month's budget. */
+    val rolloverBudgets: Boolean = false,
+    val showAccountsInBottomBar: Boolean = false,
+    val pickerStyle: PickerStyle = PickerStyle.DROPDOWN
 )
 
 private val Context.dataStore by preferencesDataStore(name = "moneta_settings")
@@ -70,6 +79,10 @@ class SettingsRepository @Inject constructor(
         val LAST_USED_INCOME_CATEGORY_ID = longPreferencesKey("last_used_income_category_id")
         val USER_NAME = stringPreferencesKey("user_name")
         val ONBOARDING_STATUS = stringPreferencesKey("onboarding_status")
+        val CARRY_FORWARD = booleanPreferencesKey("carry_forward_balance")
+        val ROLLOVER_BUDGETS = booleanPreferencesKey("rollover_budgets")
+        val SHOW_ACCOUNTS_IN_BAR = booleanPreferencesKey("show_accounts_in_bar")
+        val PICKER_STYLE = stringPreferencesKey("picker_style")
     }
 
     val preferences: Flow<AppPreferences> = context.dataStore.data.map { prefs ->
@@ -88,7 +101,13 @@ class SettingsRepository @Inject constructor(
             userName = prefs[Keys.USER_NAME] ?: "",
             onboardingStatus = prefs[Keys.ONBOARDING_STATUS]
                 ?.let { runCatching { OnboardingStatus.valueOf(it) }.getOrNull() }
-                ?: OnboardingStatus.NOT_STARTED
+                ?: OnboardingStatus.NOT_STARTED,
+            carryForwardBalance = prefs[Keys.CARRY_FORWARD] ?: true,
+            rolloverBudgets = prefs[Keys.ROLLOVER_BUDGETS] ?: false,
+            showAccountsInBottomBar = prefs[Keys.SHOW_ACCOUNTS_IN_BAR] ?: false,
+            pickerStyle = prefs[Keys.PICKER_STYLE]
+                ?.let { runCatching { PickerStyle.valueOf(it) }.getOrNull() }
+                ?: PickerStyle.DROPDOWN
         )
     }
 
@@ -122,4 +141,13 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setOnboardingStatus(status: OnboardingStatus) =
         context.dataStore.edit { it[Keys.ONBOARDING_STATUS] = status.name }
+
+    suspend fun setCarryForwardBalance(enabled: Boolean) = context.dataStore.edit { it[Keys.CARRY_FORWARD] = enabled }
+
+    suspend fun setRolloverBudgets(enabled: Boolean) = context.dataStore.edit { it[Keys.ROLLOVER_BUDGETS] = enabled }
+
+    suspend fun setShowAccountsInBottomBar(enabled: Boolean) =
+        context.dataStore.edit { it[Keys.SHOW_ACCOUNTS_IN_BAR] = enabled }
+
+    suspend fun setPickerStyle(style: PickerStyle) = context.dataStore.edit { it[Keys.PICKER_STYLE] = style.name }
 }

@@ -102,3 +102,14 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Nothing is saved until you review the summary (new accounts/categories, auto-fixes, skipped rows, totals, sample rows) and confirm.
 - Rows are skipped only if the date or amount is unusable, or a transfer has no/same destination account.
 - Not done: duplicate detection against existing records (importing the same file twice adds it twice).
+
+## v0.15.0 - overhaul
+
+- Quick Add: type, amount, account/category (chips or dropdown, switchable), one tappable date and time, notes.
+- Budgets: every expense category listed automatically; tap to set, edit or delete a budget; totals for budget/spent/remaining.
+- Home: per-account balances, month income/expense with breakdown (savings removed).
+- Records: period navigation (daily/weekly/monthly/yearly/all/custom), totals, account filter, accounts shown per row.
+- Reports: period selection, pie charts, cash-flow trends, accounts/net worth tab.
+- Accounts: opening balance editable; optional bottom-bar tab (Settings > Advanced settings > Customization).
+- Side drawer replaces the More tab; whole-app search; in-app notifications (bell).
+- Export: any custom period. Settings: change your name, carry-forward and budget rollover options.

@@ -66,7 +66,7 @@ class AddEditAccountViewModel @Inject constructor(
                     type = account.type,
                     icon = account.icon,
                     colorHex = account.colorHex,
-                    openingBalanceInput = "", // opening balance is immutable after creation, shown read-only instead
+                    openingBalanceInput = account.openingBalance.toEditableDecimalString(),
                     includeInNetWorth = account.includeInNetWorth
                 )
             }
@@ -98,9 +98,19 @@ class AddEditAccountViewModel @Inject constructor(
             val existingId = editingAccountId
             if (existingId != null) {
                 val existing = accountRepository.getById(existingId) ?: return@launch
+                val newOpening = Money.fromDecimalInput(
+                    state.openingBalanceInput.ifBlank { "0" },
+                    existing.openingBalance.currencyCode
+                )
+                if (newOpening == null) {
+                    _uiState.update { it.copy(amountError = "Enter a valid opening balance.") }
+                    return@launch
+                }
+                accountRepository.updateOpeningBalance(existingId, newOpening.minorUnits)
                 accountRepository.updateAccountDetails(
                     existing.copy(
                         name = state.name.trim(),
+                        type = state.type,
                         icon = state.icon,
                         colorHex = state.colorHex,
                         includeInNetWorth = state.includeInNetWorth

@@ -35,6 +35,9 @@ interface AccountDao {
     @Update
     suspend fun update(account: AccountEntity)
 
+    @Query("UPDATE accounts SET opening_balance_minor = :opening, current_balance_minor = current_balance_minor + :delta WHERE id = :id")
+    suspend fun updateOpeningBalance(id: Long, opening: Long, delta: Long)
+
     @Query("UPDATE accounts SET is_archived = 1 WHERE id = :accountId")
     suspend fun archive(accountId: Long)
 

@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -31,7 +32,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -70,13 +70,13 @@ fun AccountsScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Accounts") }) },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddAccount) {
                 Icon(Icons.Filled.Add, contentDescription = "Add account")
             }
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
     ) { padding ->
         if (!state.isLoading && state.accounts.isEmpty()) {
             AccountsEmptyState(modifier = Modifier.padding(padding))
@@ -85,7 +85,7 @@ fun AccountsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
-                contentPadding = PaddingValues(MonetaSpacing.screenHorizontal),
+                contentPadding = PaddingValues(start = MonetaSpacing.screenHorizontal, end = MonetaSpacing.screenHorizontal, top = MonetaSpacing.sm, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
             ) {
                 items(state.accounts, key = { it.id }) { account ->
@@ -156,6 +156,14 @@ private fun AccountRow(account: Account, onClick: () -> Unit, onArchiveOrDelete:
                     Icon(Icons.Outlined.MoreVert, contentDescription = "More actions")
                 }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Edit (name, opening balance)") },
+                        leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            onClick()
+                        }
+                    )
                     DropdownMenuItem(
                         text = { Text("Archive or delete") },
                         leadingIcon = { Icon(Icons.Outlined.Archive, contentDescription = null) },

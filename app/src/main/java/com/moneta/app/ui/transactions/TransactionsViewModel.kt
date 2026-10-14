@@ -2,49 +2,153 @@ package com.moneta.app.ui.transactions
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.moneta.app.core.date.DateRange
-import com.moneta.app.data.repository.Transaction
+import com.moneta.app.core.money.Money
+import com.moneta.app.data.local.entity.TransactionType
+import com.moneta.app.data.repository.Account
+import com.moneta.app.data.repository.AccountRepository
+import com.moneta.app.data.repository.CategoryRepository
 import com.moneta.app.data.repository.TransactionRepository
+import com.moneta.app.data.settings.SettingsRepository
+import com.moneta.app.ui.common.PeriodMode
+import com.moneta.app.ui.common.PeriodSelection
+import com.moneta.app.ui.common.TransactionListItem
+import com.moneta.app.ui.common.buildTransactionItems
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import java.time.LocalDate
 import javax.inject.Inject
+
+enum class TypeFilter(val label: String) {
+    ALL("All"),
+    EXPENSE("Expenses"),
+    INCOME("Income"),
+    TRANSFER("Transfers")
+}
+
+data class DayGroup(val date: LocalDate, val items: List<TransactionListItem>, val net: Money)
 
 data class TransactionsUiState(
     val isLoading: Boolean = true,
+    val period: PeriodSelection = PeriodSelection(mode = PeriodMode.MONTH),
     val query: String = "",
-    val transactions: List<Transaction> = emptyList()
-)
+    val typeFilter: TypeFilter = TypeFilter.ALL,
+    val accountFilterId: Long? = null,
+    val accounts: List<Account> = emptyList(),
+    val groups: List<DayGroup> = emptyList(),
+    val currencyCode: String = "PKR",
+    val income: Money = Money.zero("PKR"),
+    val expense: Money = Money.zero("PKR"),
+    val transferCount: Int = 0,
+    val count: Int = 0
+) {
+    val net: Money get() = income - expense
+}
 
 /**
- * Phase 1 scope: shows the current month's transactions with a simple text
- * search. Full filter sheet (date range, account, category, amount range,
- * tags - Section 9 of the original brief) is a Phase 2/5 addition; this
- * screen is real and functional for what it currently supports, per Section
- * 47's "no fake features" rule - it doesn't show filter controls it can't
- * back yet.
+ * Records: every transaction for the chosen period (day, week, month, year, all
+ * time or a custom range), optionally narrowed by type, account and a text
+ * search that looks at payee, notes, category, account and amount. The totals
+ * always describe exactly the rows currently shown.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class TransactionsViewModel @Inject constructor(
-    private val transactionRepository: TransactionRepository
+    private val transactionRepository: TransactionRepository,
+    accountRepository: AccountRepository,
+    categoryRepository: CategoryRepository,
+    settingsRepository: SettingsRepository
 ) : ViewModel() {
 
+    private val period = MutableStateFlow(PeriodSelection(mode = PeriodMode.MONTH))
     private val queryFlow = MutableStateFlow("")
+    private val typeFlow = MutableStateFlow(TypeFilter.ALL)
+    private val accountFilterFlow = MutableStateFlow<Long?>(null)
+    private val accountsFlow = accountRepository.observeAllAccounts()
+    private val categoriesFlow = categoryRepository.observeAll()
+    private val prefsFlow = settingsRepository.preferences
 
-    val uiState: StateFlow<TransactionsUiState> = queryFlow
-        .flatMapLatest { query ->
-            transactionRepository.observeFiltered(range = DateRange.currentMonth(), query = query)
-                .combine(queryFlow) { transactions, currentQuery ->
-                    TransactionsUiState(isLoading = false, query = currentQuery, transactions = transactions)
-                }
+    private val filters = combine(period, queryFlow, typeFlow, accountFilterFlow) { p, q, t, a ->
+        Filters(p, q, t, a)
+    }
+
+    private data class Filters(
+        val period: PeriodSelection,
+        val query: String,
+        val type: TypeFilter,
+        val accountId: Long?
+    )
+
+    val uiState: StateFlow<TransactionsUiState> = filters.flatMapLatest { f ->
+        val typeArg: TransactionType? = when (f.type) {
+            TypeFilter.ALL -> null
+            TypeFilter.EXPENSE -> TransactionType.EXPENSE
+            TypeFilter.INCOME -> TransactionType.INCOME
+            TypeFilter.TRANSFER -> TransactionType.TRANSFER
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransactionsUiState())
+        combine(
+            transactionRepository.observeFiltered(accountId = f.accountId, type = typeArg, range = f.period.range()),
+            accountsFlow,
+            categoriesFlow,
+            prefsFlow
+        ) { transactions, accounts, categories, prefs ->
+            val currency = prefs.currencyCode
+            var items = buildTransactionItems(transactions, accounts, categories)
+            val needle = f.query.trim().lowercase()
+            if (needle.isNotEmpty()) {
+                items = items.filter { item ->
+                    val t = item.transaction
+                    item.title.lowercase().contains(needle) ||
+                        item.subtitle.lowercase().contains(needle) ||
+                        (t.payee?.lowercase()?.contains(needle) == true) ||
+                        (t.notes?.lowercase()?.contains(needle) == true) ||
+                        t.amount.toEditableDecimalString().contains(needle)
+                }
+            }
+            val incomeMinor = items.filter { it.transaction.type == TransactionType.INCOME }
+                .sumOf { it.transaction.amount.minorUnits }
+            val expenseMinor = items.filter { it.transaction.type == TransactionType.EXPENSE }
+                .sumOf { it.transaction.amount.minorUnits }
+            val groups = items.groupBy { it.transaction.date }.map { (date, list) ->
+                val inc = list.filter { it.transaction.type == TransactionType.INCOME }.sumOf { it.transaction.amount.minorUnits }
+                val exp = list.filter { it.transaction.type == TransactionType.EXPENSE }.sumOf { it.transaction.amount.minorUnits }
+                DayGroup(date, list, Money(inc - exp, currency))
+            }.sortedByDescending { it.date }
+            TransactionsUiState(
+                isLoading = false,
+                period = f.period,
+                query = f.query,
+                typeFilter = f.type,
+                accountFilterId = f.accountId,
+                accounts = accounts.filter { !it.isArchived },
+                groups = groups,
+                currencyCode = currency,
+                income = Money(incomeMinor, currency),
+                expense = Money(expenseMinor, currency),
+                transferCount = items.count { it.transaction.type == TransactionType.TRANSFER },
+                count = items.size
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransactionsUiState())
+
+    fun onPeriodChange(selection: PeriodSelection) {
+        period.value = selection
+    }
 
     fun onQueryChange(query: String) {
         queryFlow.value = query
+    }
+
+    fun onTypeFilterChange(filter: TypeFilter) {
+        typeFlow.value = filter
+    }
+
+    fun onAccountFilterChange(accountId: Long?) {
+        accountFilterFlow.value = accountId
     }
 }
