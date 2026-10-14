@@ -125,7 +125,7 @@ class BudgetsViewModel @Inject constructor(
                     .filter { it.parentCategoryId == null }
                     .map { category ->
                         val budget = categoryBudgets[category.id]
-                        val base = budget?.let { Money(it.amountMinor, currency) }
+                        val base = budget?.let { Money(it.amount.minorUnits, currency) }
                         val carried = if (prefs.rolloverBudgets && base != null) {
                             val left = base.minorUnits - (spentBefore[category.id] ?: 0L)
                             Money(if (left > 0) left else 0L, currency)
@@ -159,7 +159,7 @@ class BudgetsViewModel @Inject constructor(
                     currencyCode = currency,
                     lines = lines,
                     overall = overallBudget?.let {
-                        OverallBudgetLine(it.id, Money(it.amountMinor, currency), totalExpense)
+                        OverallBudgetLine(it.id, Money(it.amount.minorUnits, currency), totalExpense)
                     },
                     totalBudget = totalBudget,
                     totalSpentOnBudgeted = spentOnBudgeted,
