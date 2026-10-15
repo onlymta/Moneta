@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -19,7 +21,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -68,11 +71,20 @@ fun SearchScreen(
             IconButton(onClick = onBack) {
                 Icon(Icons.Outlined.ChevronLeft, contentDescription = "Back")
             }
-            OutlinedTextField(
+            TextField(
                 value = results.query,
                 onValueChange = viewModel::onQueryChange,
-                placeholder = { Text("Search accounts, categories, records, bills...") },
+                placeholder = { Text("Search Moneta") },
                 singleLine = true,
+                shape = RoundedCornerShape(28.dp),
+                colors = TextFieldDefaults.colors(
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                    errorIndicatorColor = Color.Transparent,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
                 trailingIcon = {
                     if (results.query.isNotEmpty()) {
                         IconButton(onClick = { viewModel.onQueryChange("") }) {
@@ -87,9 +99,9 @@ fun SearchScreen(
         }
 
         if (results.query.isBlank()) {
-            Hint("Type to search the whole app: screens, accounts, categories, budgets, bills, goals, scheduled items and every transaction.")
+            // Nothing to show until the user types.
         } else if (results.isEmpty) {
-            Hint("Nothing matches \"${results.query.trim()}\".")
+            Hint("No results")
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -110,10 +122,7 @@ fun SearchScreen(
                 if (results.transactions.isNotEmpty()) {
                     item(key = "h-tx") {
                         val extra = results.totalTransactionMatches - results.transactions.size
-                        SectionLabel(
-                            if (extra > 0) "Transactions (showing ${results.transactions.size} of ${results.totalTransactionMatches})"
-                            else "Transactions"
-                        )
+                        SectionLabel(if (extra > 0) "Transactions (${results.transactions.size} of ${results.totalTransactionMatches})" else "Transactions")
                     }
                     items(results.transactions.size, key = { "tx-" + results.transactions[it].transaction.id }) { index ->
                         val item = results.transactions[index]
@@ -143,14 +152,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.hitSection(
                 .fillMaxWidth()
                 .clickable { onOpen(hit.route) }
         ) {
-            Column(modifier = Modifier.padding(MonetaSpacing.md)) {
-                Text(hit.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                Text(
-                    hit.subtitle,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                hit.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(MonetaSpacing.md)
+            )
         }
     }
 }

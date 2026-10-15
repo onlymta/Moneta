@@ -54,4 +54,8 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setShowAccountsInBottomBar(enabled) }
 
     fun setPickerStyle(style: PickerStyle) = viewModelScope.launch { settingsRepository.setPickerStyle(style) }
+
+    fun setTabOrder(order: List<String>) = viewModelScope.launch { settingsRepository.setTabOrder(order) }
+
+    fun setHiddenTabs(hidden: Set<String>) = viewModelScope.launch { settingsRepository.setHiddenTabs(hidden) }
 }

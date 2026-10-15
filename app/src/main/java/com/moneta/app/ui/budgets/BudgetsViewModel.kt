@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.moneta.app.core.money.Money
 import com.moneta.app.data.local.dao.CategoryTotal
+import com.moneta.app.data.local.entity.BudgetPeriod
 import com.moneta.app.data.local.entity.BudgetScope
 import com.moneta.app.data.local.entity.CategoryType
 import com.moneta.app.data.local.entity.TransactionType
@@ -15,6 +16,8 @@ import com.moneta.app.data.repository.TransactionRepository
 import com.moneta.app.data.settings.SettingsRepository
 import com.moneta.app.ui.common.PeriodMode
 import com.moneta.app.ui.common.PeriodSelection
+import com.moneta.app.ui.transactions.RecordsLaunchFilter
+import com.moneta.app.ui.transactions.TypeFilter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +27,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 /** One expense category on the Budgets page, with or without a budget set for the chosen month. */
@@ -35,7 +40,9 @@ data class BudgetLine(
     val baseBudget: Money?,
     /** Unspent budget carried in from last month (zero unless roll-over is on). */
     val carriedOver: Money,
-    val spent: Money
+    val spent: Money,
+    /** This category plus its subcategories, used to open its transactions. */
+    val categoryIds: Set<Long> = emptySet()
 ) {
     val effectiveBudget: Money? get() = baseBudget?.let { it + carriedOver }
     val remaining: Money? get() = effectiveBudget?.let { it - spent }
@@ -69,7 +76,10 @@ data class BudgetsUiState(
     val totalBudget: Money = Money.zero("PKR"),
     val totalSpentOnBudgeted: Money = Money.zero("PKR"),
     val spentOutsideBudgets: Money = Money.zero("PKR"),
-    val rolloverOn: Boolean = false
+    val rolloverOn: Boolean = false,
+    /** The latest earlier month that has budgets, offered as "copy from" when this month has none. */
+    val copySourceMonth: LocalDate? = null,
+    val copySourceLabel: String? = null
 ) {
     val totalRemaining: Money get() = totalBudget - totalSpentOnBudgeted
     val hasAnyBudget: Boolean get() = lines.any { it.budgetId != null }
@@ -81,13 +91,18 @@ class BudgetsViewModel @Inject constructor(
     private val budgetRepository: BudgetRepository,
     categoryRepository: CategoryRepository,
     private val transactionRepository: TransactionRepository,
-    settingsRepository: SettingsRepository
+    settingsRepository: SettingsRepository,
+    private val launchFilter: RecordsLaunchFilter
 ) : ViewModel() {
+
+    init {
+        viewModelScope.launch { budgetRepository.convertLegacyMonthlyBudgets() }
+    }
 
     private val period = MutableStateFlow(PeriodSelection(mode = PeriodMode.MONTH))
     private val currencyFlow = settingsRepository.preferences
     private val categoriesFlow = categoryRepository.observeByType(CategoryType.EXPENSE)
-    private val budgetsFlow = budgetRepository.observeEnabledBudgets()
+    private val budgetsFlow = budgetRepository.observeAllBudgets()
 
     val uiState: StateFlow<BudgetsUiState> = combine(period, currencyFlow) { p, prefs -> p to prefs }
         .flatMapLatest { (p, prefs) ->
@@ -99,8 +114,18 @@ class BudgetsViewModel @Inject constructor(
                 transactionRepository.observeTotalsByCategory(TransactionType.EXPENSE, range),
                 transactionRepository.observeTotalsByCategory(TransactionType.EXPENSE, prevRange),
                 transactionRepository.observeTotalForTypeInRange(TransactionType.EXPENSE, range, prefs.currencyCode)
-            ) { budgets, categories, totals, prevTotals, totalExpense ->
+            ) { allBudgets, categories, totals, prevTotals, totalExpense ->
                 val currency = prefs.currencyCode
+                fun forMonth(start: LocalDate) = allBudgets.filter {
+                    it.isEnabled && it.period == BudgetPeriod.CUSTOM && it.customPeriodStart == start
+                }
+                val budgets = forMonth(range.start)
+                val prevBudgets = forMonth(prevRange.start)
+                val copySource = allBudgets
+                    .filter { it.period == BudgetPeriod.CUSTOM }
+                    .mapNotNull { it.customPeriodStart }
+                    .filter { it.isBefore(range.start) }
+                    .maxByOrNull { it.toEpochDay() }
                 val parentOf = categories.associate { it.id to (it.parentCategoryId ?: it.id) }
 
                 fun spentByTop(rows: List<CategoryTotal>): Map<Long, Long> {
@@ -121,13 +146,18 @@ class BudgetsViewModel @Inject constructor(
                     .filter { it.scope == BudgetScope.CATEGORY && it.categoryId != null }
                     .associateBy { it.categoryId }
 
+                val prevCategoryBudgets = prevBudgets
+                    .filter { it.scope == BudgetScope.CATEGORY && it.categoryId != null }
+                    .associateBy { it.categoryId }
+
                 val lines = categories
                     .filter { it.parentCategoryId == null }
                     .map { category ->
                         val budget = categoryBudgets[category.id]
                         val base = budget?.let { Money(it.amount.minorUnits, currency) }
-                        val carried = if (prefs.rolloverBudgets && base != null) {
-                            val left = base.minorUnits - (spentBefore[category.id] ?: 0L)
+                        val prevBase = prevCategoryBudgets[category.id]?.amount?.minorUnits
+                        val carried = if (prefs.rolloverBudgets && base != null && prevBase != null) {
+                            val left = prevBase - (spentBefore[category.id] ?: 0L)
                             Money(if (left > 0) left else 0L, currency)
                         } else {
                             Money.zero(currency)
@@ -138,7 +168,9 @@ class BudgetsViewModel @Inject constructor(
                             alertThresholdPercent = budget?.alertThresholdPercent ?: 90,
                             baseBudget = base,
                             carriedOver = carried,
-                            spent = Money(spentNow[category.id] ?: 0L, currency)
+                            spent = Money(spentNow[category.id] ?: 0L, currency),
+                            categoryIds = setOf(category.id) +
+                                categories.filter { it.parentCategoryId == category.id }.map { it.id }
                         )
                     }
                     .sortedWith(
@@ -164,7 +196,9 @@ class BudgetsViewModel @Inject constructor(
                     totalBudget = totalBudget,
                     totalSpentOnBudgeted = spentOnBudgeted,
                     spentOutsideBudgets = if (outside.isNegative) Money.zero(currency) else outside,
-                    rolloverOn = prefs.rolloverBudgets
+                    rolloverOn = prefs.rolloverBudgets,
+                    copySourceMonth = copySource,
+                    copySourceLabel = copySource?.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
                 )
             }
         }
@@ -178,12 +212,13 @@ class BudgetsViewModel @Inject constructor(
     fun saveBudget(line: BudgetLine, amountInput: String): Boolean {
         val amount = Money.fromDecimalInput(amountInput, uiState.value.currencyCode)
         if (amount == null || amount.isZero) return false
+        val monthStart = uiState.value.period.range().start
         viewModelScope.launch {
             val existingId = line.budgetId
             if (existingId != null) {
                 budgetRepository.updateAmount(existingId, amount, line.alertThresholdPercent)
             } else {
-                budgetRepository.createCategoryBudget(line.category.id, amount)
+                budgetRepository.createCategoryBudgetForMonth(line.category.id, amount, monthStart)
             }
         }
         return true
@@ -191,5 +226,22 @@ class BudgetsViewModel @Inject constructor(
 
     fun deleteBudget(budgetId: Long) {
         viewModelScope.launch { budgetRepository.delete(budgetId) }
+    }
+
+    /** Copies the budgets of the latest earlier month that has any into the month on screen. */
+    fun copyFromPrevious() {
+        val state = uiState.value
+        val source = state.copySourceMonth ?: return
+        val target = state.period.range().start
+        viewModelScope.launch { budgetRepository.copyBudgets(source, target) }
+    }
+
+    /** Hands a category (and its subcategories) to Records so the user sees its transactions for this month. */
+    fun prepareRecords(line: BudgetLine) {
+        launchFilter.clear()
+        launchFilter.type = TypeFilter.EXPENSE
+        launchFilter.period = uiState.value.period
+        launchFilter.categoryIds = line.categoryIds
+        launchFilter.categoryTitle = line.category.name
     }
 }

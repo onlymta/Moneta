@@ -3,7 +3,10 @@ package com.moneta.app.ui.categories
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -13,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -29,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.moneta.app.data.local.entity.CategoryType
 import com.moneta.app.ui.common.FormScreenScaffold
+import com.moneta.app.ui.common.IconMapper
 import com.moneta.app.ui.theme.MonetaSpacing
 
 @Composable
@@ -56,6 +61,41 @@ fun AddEditCategoryScreen(
             supportingText = state.nameError?.let { { Text(it) } },
             modifier = Modifier.fillMaxWidth()
         )
+
+        Text("Icon", style = MaterialTheme.typography.labelMedium)
+        val selectedColor = Color(android.graphics.Color.parseColor(state.colorHex))
+        IconMapper.pickerNames.chunked(6).forEach { rowNames ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                rowNames.forEach { name ->
+                    val selected = state.icon == name
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape)
+                            .background(if (selected) selectedColor.copy(alpha = 0.25f) else Color.Transparent)
+                            .border(
+                                width = if (selected) 2.dp else 1.dp,
+                                color = if (selected) selectedColor else MaterialTheme.colorScheme.outlineVariant,
+                                shape = CircleShape
+                            )
+                            .clickable { viewModel.onIconChange(name) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = IconMapper.iconFor(name),
+                            contentDescription = name,
+                            tint = if (selected) selectedColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+                // Keep the last row's icons aligned with the rows above it.
+                repeat(6 - rowNames.size) { Spacer(Modifier.size(46.dp)) }
+            }
+        }
 
         Text("Color", style = MaterialTheme.typography.labelMedium)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {

@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
@@ -73,6 +74,16 @@ fun TransactionsScreen(
                 horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                state.categoryTitle?.let { title ->
+                    item {
+                        FilterChip(
+                            selected = true,
+                            onClick = { viewModel.clearCategoryFilter() },
+                            label = { Text(title) },
+                            trailingIcon = { Icon(Icons.Outlined.Close, contentDescription = "Clear category filter") }
+                        )
+                    }
+                }
                 items(TypeFilter.entries.toList()) { filter ->
                     FilterChip(
                         selected = state.typeFilter == filter,

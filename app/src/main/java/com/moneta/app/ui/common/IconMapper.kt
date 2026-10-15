@@ -30,6 +30,28 @@ import androidx.compose.material.icons.filled.Subscriptions
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.Work
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.LocalCafe
+import androidx.compose.material.icons.filled.LocalGroceryStore
+import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.ChildCare
+import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.LocalPharmacy
+import androidx.compose.material.icons.filled.DirectionsBus
+import androidx.compose.material.icons.filled.Checkroom
+import androidx.compose.material.icons.filled.Cake
+import androidx.compose.material.icons.filled.VolunteerActivism
+import androidx.compose.material.icons.filled.LocalLaundryService
+import androidx.compose.material.icons.filled.Hotel
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -47,7 +69,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
  */
 object IconMapper {
     fun iconFor(name: String): ImageVector = when (name) {
-        "restaurant" -> Icons.Filled.Category // conservative: avoid unverified "Restaurant" symbol name
+        "restaurant" -> Icons.Filled.Restaurant
         "shopping_cart" -> Icons.Filled.ShoppingCart
         "directions_car" -> Icons.Filled.DirectionsCar
         "local_gas_station" -> Icons.Filled.LocalGasStation
@@ -76,6 +98,81 @@ object IconMapper {
         "savings" -> Icons.Filled.Savings
         "account_balance_wallet" -> Icons.Filled.AccountBalanceWallet
         "flag" -> Icons.Filled.Flag
+        "local_cafe" -> Icons.Filled.LocalCafe
+        "grocery" -> Icons.Filled.LocalGroceryStore
+        "pets" -> Icons.Filled.Pets
+        "fitness" -> Icons.Filled.FitnessCenter
+        "games" -> Icons.Filled.SportsEsports
+        "phone" -> Icons.Filled.PhoneAndroid
+        "wifi" -> Icons.Filled.Wifi
+        "repairs" -> Icons.Filled.Build
+        "kids" -> Icons.Filled.ChildCare
+        "spa" -> Icons.Filled.Spa
+        "music" -> Icons.Filled.MusicNote
+        "books" -> Icons.Filled.Book
+        "pharmacy" -> Icons.Filled.LocalPharmacy
+        "bus" -> Icons.Filled.DirectionsBus
+        "clothes" -> Icons.Filled.Checkroom
+        "cake" -> Icons.Filled.Cake
+        "charity" -> Icons.Filled.VolunteerActivism
+        "laundry" -> Icons.Filled.LocalLaundryService
+        "hotel" -> Icons.Filled.Hotel
+        "star" -> Icons.Filled.Star
+        "favorite" -> Icons.Filled.Favorite
         else -> Icons.Filled.Category
     }
+
+    /** Icons offered in the picker when creating or editing a category. */
+    val pickerNames: List<String> = listOf(
+        "restaurant",
+        "local_cafe",
+        "grocery",
+        "shopping_cart",
+        "shopping_bag",
+        "clothes",
+        "directions_car",
+        "local_gas_station",
+        "bus",
+        "flight",
+        "home",
+        "bolt",
+        "wifi",
+        "phone",
+        "receipt_long",
+        "repairs",
+        "local_hospital",
+        "pharmacy",
+        "fitness",
+        "spa",
+        "school",
+        "books",
+        "kids",
+        "pets",
+        "movie",
+        "games",
+        "music",
+        "subscriptions",
+        "hotel",
+        "cake",
+        "card_giftcard",
+        "charity",
+        "laundry",
+        "work",
+        "laptop",
+        "store",
+        "payments",
+        "savings",
+        "trending_up",
+        "redeem",
+        "undo",
+        "account_balance",
+        "credit_card",
+        "person",
+        "groups",
+        "shield",
+        "flag",
+        "star",
+        "favorite",
+        "category",
+    )
 }

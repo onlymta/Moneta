@@ -37,6 +37,16 @@ sealed class MonetaDestination(val route: String, val icon: ImageVector, val lab
     }
 }
 
+/** Maps a stored tab key (see AppPreferences.tabOrder) to its destination. */
+fun destinationForKey(key: String): MonetaDestination? = when (key) {
+    "home" -> MonetaDestination.Home
+    "transactions" -> MonetaDestination.Transactions
+    "budgets" -> MonetaDestination.Budgets
+    "reports" -> MonetaDestination.Reports
+    "accounts" -> MonetaDestination.Accounts
+    else -> null
+}
+
 /** Quick Add sheet destination, opened from the center FAB - not part of the bottom bar. */
 const val QUICK_ADD_ROUTE = "quick_add"
 private const val TRANSACTION_ID_ARG = "transactionId"
@@ -48,6 +58,9 @@ fun transactionDetailRoute(transactionId: Long) = "transaction_detail/$transacti
 
 const val ACCOUNTS_ROUTE = "accounts"
 const val SEARCH_ROUTE = "search"
+private const val HISTORY_ACCOUNT_ARG = "historyAccountId"
+const val ACCOUNT_HISTORY_ROUTE_PATTERN = "account_history/{$HISTORY_ACCOUNT_ARG}"
+fun accountHistoryRoute(accountId: Long) = "account_history/$accountId"
 const val NOTIFICATIONS_ROUTE = "notifications"
 private const val ACCOUNT_ID_ARG = "accountId"
 const val ACCOUNT_FORM_ROUTE_PATTERN = "account_form?$ACCOUNT_ID_ARG={$ACCOUNT_ID_ARG}"
@@ -93,6 +106,7 @@ const val ONBOARDING_ROUTE = "onboarding"
 
 internal const val ARG_TRANSACTION_ID = TRANSACTION_ID_ARG
 internal const val ARG_ACCOUNT_ID = ACCOUNT_ID_ARG
+internal const val ARG_HISTORY_ACCOUNT_ID = HISTORY_ACCOUNT_ARG
 internal const val ARG_CATEGORY_TYPE = CATEGORY_TYPE_ARG
 internal const val ARG_CATEGORY_ID = CATEGORY_ID_ARG
 internal const val ARG_GOAL_ID = GOAL_ID_ARG

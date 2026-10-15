@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -57,8 +58,16 @@ data class AppPreferences(
     /** When on, unspent budget from last month is added to this month's budget. */
     val rolloverBudgets: Boolean = false,
     val showAccountsInBottomBar: Boolean = false,
-    val pickerStyle: PickerStyle = PickerStyle.DROPDOWN
+    val pickerStyle: PickerStyle = PickerStyle.DROPDOWN,
+    /** Notification ids the user has already looked at (so the bell badge only counts new ones). */
+    val seenAlertIds: Set<String> = emptySet(),
+    /** Left-to-right order of the main tabs, as keys: home, transactions, budgets, reports, accounts. */
+    val tabOrder: List<String> = DEFAULT_TAB_ORDER,
+    /** Tabs switched off in the bottom bar (they stay reachable from the side menu). */
+    val hiddenTabs: Set<String> = setOf("accounts")
 )
+
+val DEFAULT_TAB_ORDER = listOf("home", "transactions", "budgets", "reports", "accounts")
 
 private val Context.dataStore by preferencesDataStore(name = "moneta_settings")
 
@@ -83,6 +92,9 @@ class SettingsRepository @Inject constructor(
         val ROLLOVER_BUDGETS = booleanPreferencesKey("rollover_budgets")
         val SHOW_ACCOUNTS_IN_BAR = booleanPreferencesKey("show_accounts_in_bar")
         val PICKER_STYLE = stringPreferencesKey("picker_style")
+        val SEEN_ALERTS = stringSetPreferencesKey("seen_alert_ids")
+        val TAB_ORDER = stringPreferencesKey("tab_order")
+        val HIDDEN_TABS = stringPreferencesKey("hidden_tabs")
     }
 
     val preferences: Flow<AppPreferences> = context.dataStore.data.map { prefs ->
@@ -107,7 +119,12 @@ class SettingsRepository @Inject constructor(
             showAccountsInBottomBar = prefs[Keys.SHOW_ACCOUNTS_IN_BAR] ?: false,
             pickerStyle = prefs[Keys.PICKER_STYLE]
                 ?.let { runCatching { PickerStyle.valueOf(it) }.getOrNull() }
-                ?: PickerStyle.DROPDOWN
+                ?: PickerStyle.DROPDOWN,
+            seenAlertIds = prefs[Keys.SEEN_ALERTS] ?: emptySet(),
+            tabOrder = parseTabOrder(prefs[Keys.TAB_ORDER]),
+            hiddenTabs = prefs[Keys.HIDDEN_TABS]
+                ?.split(",")?.filter { it.isNotBlank() }?.toSet()
+                ?: if (prefs[Keys.SHOW_ACCOUNTS_IN_BAR] == true) emptySet() else setOf("accounts")
         )
     }
 
@@ -150,4 +167,16 @@ class SettingsRepository @Inject constructor(
         context.dataStore.edit { it[Keys.SHOW_ACCOUNTS_IN_BAR] = enabled }
 
     suspend fun setPickerStyle(style: PickerStyle) = context.dataStore.edit { it[Keys.PICKER_STYLE] = style.name }
+
+    suspend fun markAlertsSeen(ids: Set<String>) = context.dataStore.edit { it[Keys.SEEN_ALERTS] = ids }
+
+    suspend fun setTabOrder(order: List<String>) = context.dataStore.edit { it[Keys.TAB_ORDER] = order.joinToString(",") }
+
+    suspend fun setHiddenTabs(hidden: Set<String>) = context.dataStore.edit { it[Keys.HIDDEN_TABS] = hidden.joinToString(",") }
+
+    private fun parseTabOrder(raw: String?): List<String> {
+        val saved = raw?.split(",")?.filter { it in DEFAULT_TAB_ORDER }?.distinct() ?: emptyList()
+        // Any tab missing from the saved order (e.g. after an update) is appended so it never disappears.
+        return saved + DEFAULT_TAB_ORDER.filter { it !in saved }
+    }
 }

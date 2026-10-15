@@ -39,6 +39,7 @@ data class TransactionsUiState(
     val query: String = "",
     val typeFilter: TypeFilter = TypeFilter.ALL,
     val accountFilterId: Long? = null,
+    val categoryTitle: String? = null,
     val accounts: List<Account> = emptyList(),
     val groups: List<DayGroup> = emptyList(),
     val currencyCode: String = "PKR",
@@ -62,26 +63,39 @@ class TransactionsViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     accountRepository: AccountRepository,
     categoryRepository: CategoryRepository,
-    settingsRepository: SettingsRepository
+    settingsRepository: SettingsRepository,
+    launchFilter: RecordsLaunchFilter
 ) : ViewModel() {
 
     private val period = MutableStateFlow(PeriodSelection(mode = PeriodMode.MONTH))
     private val queryFlow = MutableStateFlow("")
     private val typeFlow = MutableStateFlow(TypeFilter.ALL)
     private val accountFilterFlow = MutableStateFlow<Long?>(null)
+    private val categoryIdsFlow = MutableStateFlow<Set<Long>?>(null)
+    private val categoryTitleFlow = MutableStateFlow<String?>(null)
     private val accountsFlow = accountRepository.observeAllAccounts()
     private val categoriesFlow = categoryRepository.observeAll()
     private val prefsFlow = settingsRepository.preferences
 
-    private val filters = combine(period, queryFlow, typeFlow, accountFilterFlow) { p, q, t, a ->
-        Filters(p, q, t, a)
+    init {
+        launchFilter.period?.let { period.value = it }
+        launchFilter.type?.let { typeFlow.value = it }
+        launchFilter.accountId?.let { accountFilterFlow.value = it }
+        launchFilter.categoryIds?.let { categoryIdsFlow.value = it }
+        categoryTitleFlow.value = launchFilter.categoryTitle
+        launchFilter.clear()
+    }
+
+    private val filters = combine(period, queryFlow, typeFlow, accountFilterFlow, categoryIdsFlow) { p, q, t, a, c ->
+        Filters(p, q, t, a, c)
     }
 
     private data class Filters(
         val period: PeriodSelection,
         val query: String,
         val type: TypeFilter,
-        val accountId: Long?
+        val accountId: Long?,
+        val categoryIds: Set<Long>?
     )
 
     val uiState: StateFlow<TransactionsUiState> = filters.flatMapLatest { f ->
@@ -99,6 +113,10 @@ class TransactionsViewModel @Inject constructor(
         ) { transactions, accounts, categories, prefs ->
             val currency = prefs.currencyCode
             var items = buildTransactionItems(transactions, accounts, categories)
+            val ids = f.categoryIds
+            if (ids != null) {
+                items = items.filter { item -> item.transaction.categoryId?.let { it in ids } == true }
+            }
             val needle = f.query.trim().lowercase()
             if (needle.isNotEmpty()) {
                 items = items.filter { item ->
@@ -125,6 +143,7 @@ class TransactionsViewModel @Inject constructor(
                 query = f.query,
                 typeFilter = f.type,
                 accountFilterId = f.accountId,
+                categoryTitle = if (f.categoryIds != null) categoryTitleFlow.value else null,
                 accounts = accounts.filter { !it.isArchived },
                 groups = groups,
                 currencyCode = currency,
@@ -146,6 +165,10 @@ class TransactionsViewModel @Inject constructor(
 
     fun onTypeFilterChange(filter: TypeFilter) {
         typeFlow.value = filter
+    }
+
+    fun clearCategoryFilter() {
+        categoryIdsFlow.value = null
     }
 
     fun onAccountFilterChange(accountId: Long?) {

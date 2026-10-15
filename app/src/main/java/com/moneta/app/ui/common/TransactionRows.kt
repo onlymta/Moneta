@@ -35,6 +35,7 @@ data class TransactionListItem(
     val transaction: Transaction,
     val title: String,
     val subtitle: String,
+    val detail: String?,
     val iconName: String,
     val colorHex: String
 )
@@ -52,20 +53,25 @@ fun buildTransactionItems(
             val toName = t.toAccountId?.let { accountById[it]?.name } ?: "Unknown account"
             TransactionListItem(
                 transaction = t,
-                title = t.payee ?: t.notes ?: "Transfer",
+                title = "Transfer",
                 subtitle = "$accountName → $toName",
+                detail = listOfNotNull(t.payee, t.notes).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { null },
                 iconName = "account_balance_wallet",
-                colorHex = "#5B6B76"
+                colorHex = "#3B82F6"
             )
         } else {
             val category = t.categoryId?.let { categoryById[it] }
-            val categoryName = category?.name ?: "Uncategorized"
-            val title = t.payee ?: t.notes ?: categoryName
-            val subtitle = if (title == categoryName) accountName else "$categoryName · $accountName"
+            val parent = category?.parentCategoryId?.let { categoryById[it] }
+            val categoryName = when {
+                category == null -> "Uncategorized"
+                parent != null -> parent.name + " › " + category.name
+                else -> category.name
+            }
             TransactionListItem(
                 transaction = t,
-                title = title,
-                subtitle = subtitle,
+                title = categoryName,
+                subtitle = accountName,
+                detail = listOfNotNull(t.payee, t.notes).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { null },
                 iconName = category?.icon ?: "category",
                 colorHex = category?.colorHex ?: "#5B6B76"
             )
@@ -117,6 +123,15 @@ fun TransactionRowCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                item.detail?.let { detail ->
+                    Text(
+                        detail,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             Spacer(Modifier.width(MonetaSpacing.sm))
             Column(horizontalAlignment = Alignment.End) {

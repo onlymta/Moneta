@@ -42,6 +42,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.moneta.app.data.repository.Account
@@ -53,6 +54,7 @@ import kotlinx.coroutines.launch
 fun AccountsScreen(
     onAddAccount: () -> Unit,
     onEditAccount: (Long) -> Unit,
+    onOpenAccount: (Long) -> Unit,
     viewModel: AccountsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -88,12 +90,33 @@ fun AccountsScreen(
                 contentPadding = PaddingValues(start = MonetaSpacing.screenHorizontal, end = MonetaSpacing.screenHorizontal, top = MonetaSpacing.sm, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
             ) {
-                items(state.accounts, key = { it.id }) { account ->
+                val active = state.accounts.filter { !it.isArchived }
+                val archived = state.accounts.filter { it.isArchived }
+                items(active, key = { it.id }) { account ->
                     AccountRow(
                         account = account,
-                        onClick = { onEditAccount(account.id) },
+                        onClick = { onOpenAccount(account.id) },
+                        onEdit = { onEditAccount(account.id) },
                         onArchiveOrDelete = { viewModel.archiveOrDeleteAccount(account) }
                     )
+                }
+                if (archived.isNotEmpty()) {
+                    item(key = "archived-header") {
+                        Text(
+                            "Archived",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = MonetaSpacing.md)
+                        )
+                    }
+                    items(archived, key = { it.id }) { account ->
+                        AccountRow(
+                            account = account,
+                            onClick = { onOpenAccount(account.id) },
+                            onEdit = { onEditAccount(account.id) },
+                            onArchiveOrDelete = { viewModel.archiveOrDeleteAccount(account) }
+                        )
+                    }
                 }
             }
         }
@@ -120,10 +143,20 @@ private fun AccountsEmptyState(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun AccountRow(account: Account, onClick: () -> Unit, onArchiveOrDelete: () -> Unit) {
+private fun AccountRow(account: Account, onClick: () -> Unit, onEdit: () -> Unit, onArchiveOrDelete: () -> Unit) {
     var menuExpanded by remember { mutableStateOf(false) }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    val archived = account.isArchived
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(if (archived) 0.55f else 1f),
+        colors = if (archived) {
+            androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        } else {
+            androidx.compose.material3.CardDefaults.cardColors()
+        }
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -142,7 +175,7 @@ private fun AccountRow(account: Account, onClick: () -> Unit, onArchiveOrDelete:
                 Column {
                     Text(account.name, style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        account.type.name.replace('_', ' ').lowercase()
+                        (if (archived) "Archived · " else "") + account.type.name.replace('_', ' ').lowercase()
                             .replaceFirstChar { it.uppercase() },
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -161,17 +194,19 @@ private fun AccountRow(account: Account, onClick: () -> Unit, onArchiveOrDelete:
                         leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
                         onClick = {
                             menuExpanded = false
-                            onClick()
+                            onEdit()
                         }
                     )
-                    DropdownMenuItem(
-                        text = { Text("Archive or delete") },
-                        leadingIcon = { Icon(Icons.Outlined.Archive, contentDescription = null) },
-                        onClick = {
-                            menuExpanded = false
-                            onArchiveOrDelete()
-                        }
-                    )
+                    if (!archived) {
+                        DropdownMenuItem(
+                            text = { Text("Archive or delete") },
+                            leadingIcon = { Icon(Icons.Outlined.Archive, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onArchiveOrDelete()
+                            }
+                        )
+                    }
                 }
             }
         }

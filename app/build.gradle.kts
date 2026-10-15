@@ -14,8 +14,8 @@ android {
         applicationId = "com.moneta.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "0.15.0-overhaul"
+        versionCode = 18
+        versionName = "0.16.0-refinements"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

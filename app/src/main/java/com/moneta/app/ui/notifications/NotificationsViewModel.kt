@@ -10,7 +10,10 @@ import com.moneta.app.data.repository.BudgetRepository
 import com.moneta.app.data.repository.BudgetStatus
 import com.moneta.app.data.repository.RecurringTransactionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.moneta.app.data.settings.SettingsRepository
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
@@ -39,7 +42,8 @@ data class AppAlert(
 class NotificationsViewModel @Inject constructor(
     budgetRepository: BudgetRepository,
     private val billRepository: BillRepository,
-    recurringRepository: RecurringTransactionRepository
+    recurringRepository: RecurringTransactionRepository,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     val alerts: StateFlow<List<AppAlert>> = combine(
@@ -55,7 +59,7 @@ class NotificationsViewModel @Inject constructor(
             when (p.status) {
                 BudgetStatus.OVER -> out.add(
                     AppAlert(
-                        id = "budget-${p.budget.id}",
+                        id = "budget-${p.budget.id}-${p.status.name}",
                         level = AlertLevel.URGENT,
                         title = "$name is over budget",
                         message = "Spent ${p.spent.formatted()} of ${p.budget.amount.formatted()}.",
@@ -64,7 +68,7 @@ class NotificationsViewModel @Inject constructor(
                 )
                 BudgetStatus.NEAR -> out.add(
                     AppAlert(
-                        id = "budget-${p.budget.id}",
+                        id = "budget-${p.budget.id}-${p.status.name}",
                         level = AlertLevel.WARNING,
                         title = "$name is close to its limit",
                         message = "Spent ${p.spent.formatted()} of ${p.budget.amount.formatted()}.",
@@ -79,7 +83,7 @@ class NotificationsViewModel @Inject constructor(
             when (billRepository.urgencyOf(bill, today)) {
                 BillUrgency.OVERDUE -> out.add(
                     AppAlert(
-                        id = "bill-${bill.id}",
+                        id = "bill-${bill.id}-${bill.dueDate}",
                         level = AlertLevel.URGENT,
                         title = "${bill.name} is overdue",
                         message = "${bill.amount.formatted()} was due " +
@@ -89,7 +93,7 @@ class NotificationsViewModel @Inject constructor(
                 )
                 BillUrgency.DUE_TODAY -> out.add(
                     AppAlert(
-                        id = "bill-${bill.id}",
+                        id = "bill-${bill.id}-${bill.dueDate}",
                         level = AlertLevel.URGENT,
                         title = "${bill.name} is due today",
                         message = bill.amount.formatted(),
@@ -98,7 +102,7 @@ class NotificationsViewModel @Inject constructor(
                 )
                 BillUrgency.DUE_SOON -> out.add(
                     AppAlert(
-                        id = "bill-${bill.id}",
+                        id = "bill-${bill.id}-${bill.dueDate}",
                         level = AlertLevel.WARNING,
                         title = "${bill.name} is due soon",
                         message = bill.amount.formatted() + " on " +
@@ -116,7 +120,7 @@ class NotificationsViewModel @Inject constructor(
                 val label = r.payee ?: r.notes ?: "Scheduled transaction"
                 out.add(
                     AppAlert(
-                        id = "recurring-${r.id}",
+                        id = "recurring-${r.id}-${r.nextOccurrenceDate}",
                         level = AlertLevel.INFO,
                         title = "Coming up: $label",
                         message = r.amount.formatted() + " on " +
@@ -129,4 +133,19 @@ class NotificationsViewModel @Inject constructor(
 
         out.sortedBy { it.level.ordinal }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val seenIds: StateFlow<Set<String>> = settingsRepository.preferences
+        .map { it.seenAlertIds }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    /** How many alerts the user hasn't looked at yet (drives the bell badge). */
+    val unseenCount: StateFlow<Int> = combine(alerts, seenIds) { list, seen ->
+        list.count { it.id !in seen }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    fun markAllSeen() {
+        viewModelScope.launch {
+            settingsRepository.markAlertsSeen(alerts.value.map { it.id }.toSet())
+        }
+    }
 }

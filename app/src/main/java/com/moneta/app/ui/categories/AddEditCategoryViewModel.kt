@@ -82,6 +82,8 @@ class AddEditCategoryViewModel @Inject constructor(
 
     fun onNameChange(name: String) = _uiState.update { it.copy(name = name, nameError = null) }
 
+    fun onIconChange(icon: String) = _uiState.update { it.copy(icon = icon) }
+
     fun onColorChange(colorHex: String) = _uiState.update { it.copy(colorHex = colorHex) }
 
     /** Tapping the currently-selected parent again clears it back to "top-level" (Section 12). */

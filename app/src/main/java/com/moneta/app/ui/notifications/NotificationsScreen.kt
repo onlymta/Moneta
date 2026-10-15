@@ -40,6 +40,7 @@ fun NotificationsScreen(
     viewModel: NotificationsViewModel = hiltViewModel()
 ) {
     val alerts by viewModel.alerts.collectAsState()
+    val seen by viewModel.seenIds.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
@@ -90,7 +91,7 @@ fun NotificationsScreen(
                 verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
             ) {
                 items(alerts, key = { it.id }) { alert ->
-                    AlertCard(alert, onClick = { onOpen(alert.route) })
+                    AlertCard(alert, isNew = alert.id !in seen, onClick = { onOpen(alert.route) })
                 }
             }
         }
@@ -98,7 +99,7 @@ fun NotificationsScreen(
 }
 
 @Composable
-private fun AlertCard(alert: AppAlert, onClick: () -> Unit) {
+private fun AlertCard(alert: AppAlert, isNew: Boolean, onClick: () -> Unit) {
     val tint = when (alert.level) {
         AlertLevel.URGENT -> ExpenseRed
         AlertLevel.WARNING -> androidx.compose.ui.graphics.Color(0xFFB8860B)
@@ -121,7 +122,11 @@ private fun AlertCard(alert: AppAlert, onClick: () -> Unit) {
             Icon(icon, contentDescription = null, tint = tint)
             Spacer(Modifier.width(MonetaSpacing.md))
             Column(modifier = Modifier.weight(1f)) {
-                Text(alert.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                Text(
+                    if (isNew) alert.title + "  ·  NEW" else alert.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (isNew) FontWeight.Bold else FontWeight.Normal
+                )
                 Text(
                     alert.message,
                     style = MaterialTheme.typography.bodyMedium,

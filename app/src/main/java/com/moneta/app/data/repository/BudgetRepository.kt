@@ -10,6 +10,7 @@ import com.moneta.app.data.local.entity.TransactionType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -38,6 +39,69 @@ class BudgetRepository @Inject constructor(
 
     suspend fun getById(id: Long): Budget? = budgetDao.getById(id)?.toDomain()
 
+    /** Every budget of every month (each month's budgets are separate rows). */
+    fun observeAllBudgets(): Flow<List<Budget>> =
+        budgetDao.observeAll().map { list -> list.map { it.toDomain() } }
+
+    /**
+     * Budgets used to repeat every month. Now each month has its own set, so any
+     * leftover "every month" budget is turned into this month's budget once.
+     */
+    suspend fun convertLegacyMonthlyBudgets() {
+        val month = LocalDate.now().withDayOfMonth(1)
+        budgetDao.observeAll().first()
+            .filter { it.period == BudgetPeriod.MONTHLY }
+            .forEach {
+                budgetDao.update(
+                    it.copy(
+                        period = BudgetPeriod.CUSTOM,
+                        customPeriodStart = month.toEpochDay(),
+                        customPeriodEnd = month.withDayOfMonth(month.lengthOfMonth()).toEpochDay()
+                    )
+                )
+            }
+    }
+
+    /** Creates a category budget that belongs to one specific month (the month containing [month]). */
+    suspend fun createCategoryBudgetForMonth(categoryId: Long, amount: Money, month: LocalDate) {
+        val start = month.withDayOfMonth(1)
+        budgetDao.insert(
+            BudgetEntity(
+                scope = BudgetScope.CATEGORY,
+                categoryId = categoryId,
+                amountMinor = amount.minorUnits,
+                currencyCode = amount.currencyCode,
+                period = BudgetPeriod.CUSTOM,
+                customPeriodStart = start.toEpochDay(),
+                customPeriodEnd = start.withDayOfMonth(start.lengthOfMonth()).toEpochDay()
+            )
+        )
+    }
+
+    /** Copies every budget of [fromMonth] into [toMonth] (skipping ones already there). Returns how many were added. */
+    suspend fun copyBudgets(fromMonth: LocalDate, toMonth: LocalDate): Int {
+        val from = fromMonth.withDayOfMonth(1)
+        val to = toMonth.withDayOfMonth(1)
+        val all = budgetDao.observeAll().first().filter { it.period == BudgetPeriod.CUSTOM }
+        val source = all.filter { it.customPeriodStart == from.toEpochDay() }
+        val existing = all.filter { it.customPeriodStart == to.toEpochDay() }
+        var added = 0
+        source.forEach { b ->
+            val already = existing.any { it.scope == b.scope && it.categoryId == b.categoryId }
+            if (!already) {
+                budgetDao.insert(
+                    b.copy(
+                        id = 0,
+                        customPeriodStart = to.toEpochDay(),
+                        customPeriodEnd = to.withDayOfMonth(to.lengthOfMonth()).toEpochDay()
+                    )
+                )
+                added += 1
+            }
+        }
+        return added
+    }
+
     /**
      * The single place budget progress is computed (Section 17: "the same
      * 'spent' number must be reused between the Budget screen, Home dashboard
@@ -45,7 +109,10 @@ class BudgetRepository @Inject constructor(
      * TransactionRepository's existing queries rather than running its own SQL.
      */
     fun observeProgress(): Flow<List<BudgetProgress>> =
-        observeEnabledBudgets().flatMapLatest { budgets ->
+        observeEnabledBudgets().map { all ->
+            val today = LocalDate.now()
+            all.filter { today in periodRangeFor(it) }
+        }.flatMapLatest { budgets ->
             if (budgets.isEmpty()) {
                 flowOf(emptyList())
             } else {

@@ -52,7 +52,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -74,6 +77,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.moneta.app.data.local.entity.CategoryType
 import com.moneta.app.ui.accounts.AccountsScreen
+import com.moneta.app.ui.accounts.AccountHistoryScreen
 import com.moneta.app.ui.accounts.AddEditAccountScreen
 import com.moneta.app.ui.backup.BackupScreen
 import com.moneta.app.ui.budgets.BudgetsScreen
@@ -140,7 +144,29 @@ private fun MonetaAppContent(
     // its own title bar (or is a full-screen form).
     val isMainTab = MonetaDestination.bottomBarItems.any { it.route == currentRoute } ||
         currentRoute == MonetaDestination.More.route
-    val alertCount by notificationsViewModel.alerts.collectAsState()
+    val alertCount by notificationsViewModel.unseenCount.collectAsState()
+    // Alerts count as "seen" once the user has opened Notifications and left it again.
+    val previousRoute = remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(currentRoute) {
+        if (previousRoute.value == NOTIFICATIONS_ROUTE && currentRoute != NOTIFICATIONS_ROUTE) {
+            notificationsViewModel.markAllSeen()
+        }
+        previousRoute.value = currentRoute
+    }
+    val visibleTabs = prefs.tabOrder.mapNotNull { key ->
+        val destination = destinationForKey(key)
+        val shown = when {
+            destination == null -> false
+            key == "home" -> true
+            key == "budgets" -> prefs.budgetsEnabled && key !in prefs.hiddenTabs
+            else -> key !in prefs.hiddenTabs
+        }
+        if (shown) destination else null
+    }
+    val hiddenTabDestinations = prefs.tabOrder.mapNotNull { key ->
+        val destination = destinationForKey(key)
+        if (destination != null && destination !in visibleTabs && (key != "budgets" || prefs.budgetsEnabled)) destination else null
+    }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val drawerScope = rememberCoroutineScope()
     // Welcome flow and Quick Add are focused full-screen pages: no bottom bar, and they
@@ -157,7 +183,8 @@ private fun MonetaAppContent(
             MonetaDrawerContent(
                 goalsEnabled = prefs.goalsEnabled,
                 billsEnabled = prefs.billsEnabled,
-                alertCount = alertCount.size,
+                alertCount = alertCount,
+                extraTabs = hiddenTabDestinations,
                 onItem = { route ->
                     drawerScope.launch { drawerState.close() }
                     navController.openRoute(route)
@@ -171,7 +198,7 @@ private fun MonetaAppContent(
             if (isMainTab) {
                 MonetaTopBar(
                     navController = navController,
-                    alertCount = alertCount.size,
+                    alertCount = alertCount,
                     onMenu = { drawerScope.launch { drawerState.open() } }
                 )
             }
@@ -180,8 +207,7 @@ private fun MonetaAppContent(
             if (!fullScreen) {
                 MonetaBottomBar(
                     navController,
-                    budgetsEnabled = prefs.budgetsEnabled,
-                    accountsInBar = prefs.showAccountsInBottomBar
+                    tabs = visibleTabs
                 )
             }
         },
@@ -239,7 +265,7 @@ private fun MonetaAppContent(
             }
 
             composable(MonetaDestination.Budgets.route) {
-                BudgetsScreen()
+                BudgetsScreen(onOpenRecords = { navController.navigateToTab(MonetaDestination.Transactions.route) })
             }
             composable(MonetaDestination.Reports.route) { ReportsScreen() }
 
@@ -303,7 +329,8 @@ private fun MonetaAppContent(
             composable(ACCOUNTS_ROUTE) {
                 AccountsScreen(
                     onAddAccount = { navController.navigate(ACCOUNT_FORM_ADD_ROUTE) },
-                    onEditAccount = { id -> navController.navigate(accountEditRoute(id)) }
+                    onEditAccount = { id -> navController.navigate(accountEditRoute(id)) },
+                    onOpenAccount = { id -> navController.navigate(accountHistoryRoute(id)) }
                 )
             }
             composable(
@@ -315,6 +342,19 @@ private fun MonetaAppContent(
             ) { backStackEntry ->
                 val accountId = backStackEntry.arguments?.getLong(ARG_ACCOUNT_ID)?.takeIf { it >= 0 }
                 AddEditAccountScreen(accountId = accountId, onDone = { navController.popBackStack() })
+            }
+
+            composable(
+                ACCOUNT_HISTORY_ROUTE_PATTERN,
+                arguments = listOf(navArgument(ARG_HISTORY_ACCOUNT_ID) { type = NavType.LongType })
+            ) { backStackEntry ->
+                val accountId = backStackEntry.arguments?.getLong(ARG_HISTORY_ACCOUNT_ID) ?: return@composable
+                AccountHistoryScreen(
+                    accountId = accountId,
+                    onBack = { navController.popBackStack() },
+                    onTransactionClick = { id -> navController.navigate(transactionDetailRoute(id)) },
+                    onEdit = { navController.navigate(accountEditRoute(accountId)) }
+                )
             }
 
             // --- Categories ---
@@ -444,17 +484,11 @@ private fun SetupReminderBanner(onFinish: () -> Unit, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun MonetaBottomBar(navController: NavHostController, budgetsEnabled: Boolean, accountsInBar: Boolean) {
+private fun MonetaBottomBar(navController: NavHostController, tabs: List<MonetaDestination>) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
 
-    val items = MonetaDestination.bottomBarItems.filter { destination ->
-        when (destination) {
-            MonetaDestination.Budgets -> budgetsEnabled
-            MonetaDestination.Accounts -> accountsInBar
-            else -> true
-        }
-    }
+    val items = tabs
 
     NavigationBar {
         items.forEach { destination ->
@@ -503,19 +537,11 @@ private fun MonetaTopBar(navController: NavHostController, alertCount: Int, onMe
         },
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.AccountBalanceWallet,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(com.moneta.app.R.drawable.ic_moneta_mark),
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp)
+                )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = stringResource(com.moneta.app.R.string.app_name),
@@ -538,9 +564,6 @@ private fun MonetaTopBar(navController: NavHostController, alertCount: Int, onMe
                     Icon(Icons.Outlined.Notifications, contentDescription = "Notifications")
                 }
             }
-            IconButton(onClick = { navController.navigate(SETTINGS_ROUTE) }) {
-                Icon(Icons.Outlined.Settings, contentDescription = "Settings")
-            }
         }
     )
 }
@@ -558,10 +581,13 @@ private fun MonetaDrawerContent(
     goalsEnabled: Boolean,
     billsEnabled: Boolean,
     alertCount: Int,
+    extraTabs: List<MonetaDestination>,
     onItem: (String) -> Unit
 ) {
     val entries = buildList {
-        add(DrawerEntry("Accounts", Icons.Outlined.AccountBalance, ACCOUNTS_ROUTE))
+        extraTabs.forEach { tab ->
+            add(DrawerEntry(stringResource(tab.labelRes), tab.icon, tab.route))
+        }
         add(DrawerEntry("Categories", Icons.Outlined.Category, CATEGORIES_ROUTE))
         if (billsEnabled) add(DrawerEntry("Bills", Icons.Outlined.Receipt, BILLS_ROUTE))
         add(DrawerEntry("Scheduled & recurring", Icons.Outlined.Repeat, RECURRING_ROUTE))

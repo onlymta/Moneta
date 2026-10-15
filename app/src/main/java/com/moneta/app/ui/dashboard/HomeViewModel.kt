@@ -69,7 +69,8 @@ class HomeViewModel @Inject constructor(
     categoryRepository: CategoryRepository,
     settingsRepository: SettingsRepository,
     private val categoryBreakdownUseCase: CategoryBreakdownUseCase,
-    private val netWorthTrendUseCase: NetWorthTrendUseCase
+    private val netWorthTrendUseCase: NetWorthTrendUseCase,
+    private val launchFilter: com.moneta.app.ui.transactions.RecordsLaunchFilter
 ) : ViewModel() {
 
     private val period = MutableStateFlow(PeriodSelection(mode = PeriodMode.MONTH))
@@ -168,5 +169,12 @@ class HomeViewModel @Inject constructor(
             expenseDeltaPercent = kotlin.math.abs(deltaPercent),
             isExpenseUp = deltaPercent > 0
         )
+    }
+
+    /** Tells Records what to show when the user taps a Home figure (the caller then opens Records). */
+    fun prepareRecords(type: com.moneta.app.ui.transactions.TypeFilter?) {
+        launchFilter.clear()
+        launchFilter.type = type
+        launchFilter.period = period.value
     }
 }

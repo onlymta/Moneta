@@ -6,6 +6,19 @@
 package com.moneta.app.ui.quickadd
 
 import androidx.compose.foundation.clickable
+import android.widget.Toast
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -108,6 +121,22 @@ fun QuickAddScreen(
         }
     }
 
+    val context = LocalContext.current
+    LaunchedEffect(state.formError) {
+        state.formError?.let { Toast.makeText(context, "Not saved: $it", Toast.LENGTH_LONG).show() }
+    }
+    LaunchedEffect(state.amountError) {
+        state.amountError?.let { Toast.makeText(context, "Not saved: $it", Toast.LENGTH_SHORT).show() }
+    }
+    LaunchedEffect(state.addAnotherTick) {
+        state.savedMessage?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+    }
+    val successText = when {
+        isEditing -> "Changes saved"
+        state.isFutureDate -> "Scheduled for " + state.date.format(DateTimeFormatter.ofPattern("d MMM yyyy"))
+        else -> "Transaction saved"
+    }
+
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
 
@@ -118,6 +147,9 @@ fun QuickAddScreen(
     }
 
     Scaffold(
+        // The keyboard/navigation-bar padding is applied once, on the Column below, so no blank
+        // strip is left between the Save bar and the keyboard.
+        contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
         topBar = {
             TopAppBar(
                 title = { Text(if (isEditing) "Edit transaction" else "Add transaction") },
@@ -133,7 +165,7 @@ fun QuickAddScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .imePadding()
+                .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
         ) {
             Column(
                 modifier = Modifier
@@ -179,7 +211,7 @@ fun QuickAddScreen(
                     TextButton(onClick = {
                         viewModel.setPickerStyle(if (dropdown) PickerStyle.CHIPS else PickerStyle.DROPDOWN)
                     }) {
-                        Text(if (dropdown) "Show as chips" else "Show as dropdown")
+                        Text(if (dropdown) "Show as chips" else "Show as pop-up list")
                     }
                 }
 
@@ -206,6 +238,14 @@ fun QuickAddScreen(
                     }
                 }
 
+                OutlinedTextField(
+                    value = state.notes,
+                    onValueChange = viewModel::onNotesChange,
+                    placeholder = { Text("Notes or description (optional)") },
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 // --- When: one tappable date and one tappable time, both showing "now" until changed ---
                 Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
                     ClickableField(
@@ -231,22 +271,14 @@ fun QuickAddScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
-
-                OutlinedTextField(
-                    value = state.notes,
-                    onValueChange = viewModel::onNotesChange,
-                    placeholder = { Text("Notes or description (optional)") },
-                    maxLines = 3,
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
 
             Surface(tonalElevation = 3.dp) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = MonetaSpacing.screenHorizontal, vertical = MonetaSpacing.md),
-                    verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
+                        .padding(horizontal = MonetaSpacing.screenHorizontal, vertical = MonetaSpacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(MonetaSpacing.xs)
                 ) {
                     state.formError?.let { message ->
                         Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
@@ -254,22 +286,27 @@ fun QuickAddScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
                         if (!isEditing) {
                             OutlinedButton(
-                                onClick = { viewModel.save(onDone, addAnother = true) },
+                                onClick = { viewModel.save(onSaved = onDone, addAnother = true) },
                                 enabled = !state.isSaving,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(52.dp)
+                                    .height(48.dp)
                             ) {
                                 Text("Save & add another")
                             }
                         }
                         Button(
-                            onClick = { viewModel.save(onDone) },
+                            onClick = {
+                                viewModel.save(onSaved = {
+                                    Toast.makeText(context, successText, Toast.LENGTH_SHORT).show()
+                                    onDone()
+                                })
+                            },
                             enabled = !state.isSaving,
                             colors = ButtonDefaults.buttonColors(containerColor = accent),
                             modifier = Modifier
                                 .weight(1f)
-                                .height(52.dp)
+                                .height(48.dp)
                         ) {
                             Text(
                                 when {
@@ -389,17 +426,20 @@ private fun ClickableField(
     }
 }
 
+/** A read-only field that opens a full-screen list (with search when the list is long) to choose from. */
 @Composable
 private fun <T> DropdownPicker(
     label: String,
     selectedText: String,
     selectedIcon: String?,
+    selectedId: Long?,
     items: List<T>,
+    itemId: (T) -> Long,
     itemText: (T) -> String,
     itemIcon: (T) -> String,
     onSelect: (T) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var popupOpen by remember { mutableStateOf(false) }
     Box(modifier = Modifier.fillMaxWidth()) {
         OutlinedTextField(
             value = selectedText,
@@ -420,20 +460,84 @@ private fun <T> DropdownPicker(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .clickable { expanded = true }
+                .clickable { popupOpen = true }
         )
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            items.forEach { item ->
-                DropdownMenuItem(
-                    text = { Text(itemText(item)) },
-                    leadingIcon = {
-                        Icon(IconMapper.iconFor(itemIcon(item)), contentDescription = null, modifier = Modifier.size(20.dp))
-                    },
-                    onClick = {
-                        expanded = false
-                        onSelect(item)
+    }
+    if (popupOpen) {
+        var search by remember { mutableStateOf("") }
+        val filtered = if (search.isBlank()) items else items.filter {
+            itemText(it).contains(search.trim(), ignoreCase = true)
+        }
+        Dialog(
+            onDismissRequest = { popupOpen = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = MonetaSpacing.sm, vertical = MonetaSpacing.sm),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { popupOpen = false }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Close")
+                        }
+                        Text(label, style = MaterialTheme.typography.titleLarge)
                     }
-                )
+                    if (items.size > 6) {
+                        OutlinedTextField(
+                            value = search,
+                            onValueChange = { search = it },
+                            placeholder = { Text("Search") },
+                            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                            singleLine = true,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = MonetaSpacing.screenHorizontal)
+                        )
+                    }
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(filtered, key = { itemId(it) }) { item ->
+                            val selected = itemId(item) == selectedId
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        popupOpen = false
+                                        onSelect(item)
+                                    }
+                                    .padding(horizontal = MonetaSpacing.screenHorizontal, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                com.moneta.app.ui.common.IconBadge(
+                                    iconName = itemIcon(item),
+                                    colorHex = "#0F6B5C",
+                                    size = 36.dp
+                                )
+                                androidx.compose.foundation.layout.Spacer(Modifier.size(14.dp))
+                                Text(
+                                    itemText(item),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (selected) {
+                                    Icon(Icons.Filled.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                        }
+                        if (filtered.isEmpty()) {
+                            item {
+                                Text(
+                                    "Nothing matches your search.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(MonetaSpacing.screenHorizontal)
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -460,7 +564,9 @@ private fun AccountPicker(
             label = label,
             selectedText = selected?.name ?: "Select",
             selectedIcon = selected?.icon,
+            selectedId = selectedId,
             items = accounts,
+            itemId = { it.id },
             itemText = { it.name },
             itemIcon = { it.icon },
             onSelect = { onSelect(it.id) }
@@ -507,7 +613,9 @@ private fun CategoryPicker(
             label = label,
             selectedText = selected?.name ?: "Select",
             selectedIcon = selected?.icon,
+            selectedId = selectedId,
             items = categories,
+            itemId = { it.id },
             itemText = { it.name },
             itemIcon = { it.icon },
             onSelect = { onSelect(it.id) }

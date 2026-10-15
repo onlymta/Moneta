@@ -1,29 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Simplified vector rendering of the Moneta mark described in
-    ARCHITECTURE.md Section 3: an upward-stepped bar merged with a checkmark,
-    drawn as one continuous off-white line on the teal adaptive-icon background.
-    A real production icon should be finished by a designer in a vector tool;
-    this establishes the correct proportions and stroke language.
+    Moneta icon: a gold coin carrying a bold "M", centred in the adaptive-icon safe zone.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- soft shadow under the coin -->
     <path
-        android:pathData="M30,66 L42,78 L78,34"
-        android:strokeColor="#FBFBF9"
-        android:strokeWidth="8"
+        android:pathData="M54,33 A25,25 0 1,1 54,83 A25,25 0 1,1 54,33 Z"
+        android:fillColor="#33000000" />
+    <!-- coin body -->
+    <path android:pathData="M54,30 A25,25 0 1,1 54,80 A25,25 0 1,1 54,30 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="32"
+                android:startY="30"
+                android:endX="78"
+                android:endY="80">
+                <item android:offset="0.0" android:color="#FFE08A" />
+                <item android:offset="1.0" android:color="#E8A21A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- inner rim -->
+    <path
+        android:pathData="M54,36 A19,19 0 1,1 54,74 A19,19 0 1,1 54,36 Z"
+        android:strokeColor="#B97A06"
+        android:strokeWidth="1.6"
+        android:strokeAlpha="0.55"
+        android:fillColor="#00000000" />
+    <!-- the M -->
+    <path
+        android:pathData="M43.5,65 L43.5,44 L54,57 L64.5,44 L64.5,65"
+        android:strokeColor="#0B4A3F"
+        android:strokeWidth="5.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
         android:fillColor="#00000000" />
-    <path
-        android:pathData="M30,70 L30,58 L44,58 L44,50 L58,50 L58,40 L72,40"
-        android:strokeColor="#FBFBF9"
-        android:strokeWidth="6"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:fillColor="#00000000"
-        android:fillAlpha="0" />
 </vector>

@@ -155,12 +155,50 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     if (advancedOpen) {
                         Text("Customization", style = MaterialTheme.typography.bodyLarge)
                         Spacer(Modifier.height(MonetaSpacing.xs))
-                        SettingsToggleRow(
-                            title = "Accounts in the bottom bar",
-                            subtitle = "Add Accounts next to Home, Records, Budgets and Reports. Everything else is always in the side menu.",
-                            checked = prefs.showAccountsInBottomBar,
-                            onCheckedChange = viewModel::setShowAccountsInBottomBar
+                        Text("Bottom bar tabs", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "Switch tabs on or off and move them left or right. Anything switched off stays available in the side menu. Home is always shown.",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        prefs.tabOrder.forEachIndexed { index, key ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    tabLabel(key),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(
+                                    enabled = index > 0,
+                                    onClick = {
+                                        val list = prefs.tabOrder.toMutableList()
+                                        list.removeAt(index)
+                                        list.add(index - 1, key)
+                                        viewModel.setTabOrder(list)
+                                    }
+                                ) { Text("Left") }
+                                TextButton(
+                                    enabled = index < prefs.tabOrder.size - 1,
+                                    onClick = {
+                                        val list = prefs.tabOrder.toMutableList()
+                                        list.removeAt(index)
+                                        list.add(index + 1, key)
+                                        viewModel.setTabOrder(list)
+                                    }
+                                ) { Text("Right") }
+                                Switch(
+                                    checked = key !in prefs.hiddenTabs,
+                                    enabled = key != "home",
+                                    onCheckedChange = { on ->
+                                        viewModel.setHiddenTabs(if (on) prefs.hiddenTabs - key else prefs.hiddenTabs + key)
+                                    }
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(MonetaSpacing.sm))
                         SettingsToggleRow(
                             title = "Carry forward balance",
                             subtitle = "On: each month's opening balance includes what was left from earlier months. Off: every month starts from zero and only shows that month's own income and spending.",
@@ -183,7 +221,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                                     onClick = { viewModel.setPickerStyle(style) },
                                     shape = SegmentedButtonDefaults.itemShape(index, PickerStyle.entries.size)
                                 ) {
-                                    Text(if (style == PickerStyle.CHIPS) "Chips" else "Dropdown")
+                                    Text(if (style == PickerStyle.CHIPS) "Chips" else "Pop-up list")
                                 }
                             }
                         }
@@ -231,4 +269,13 @@ private fun SettingsToggleRow(title: String, subtitle: String, checked: Boolean,
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
+}
+
+private fun tabLabel(key: String): String = when (key) {
+    "home" -> "Home"
+    "transactions" -> "Records"
+    "budgets" -> "Budgets"
+    "reports" -> "Reports"
+    "accounts" -> "Accounts"
+    else -> key
 }

@@ -2,6 +2,7 @@ package com.moneta.app.ui.budgets
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,7 +17,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -37,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.moneta.app.core.money.Money
 import com.moneta.app.data.repository.BudgetStatus
@@ -56,10 +63,13 @@ private fun statusColor(status: BudgetStatus?): Color = when (status) {
 }
 
 @Composable
-fun BudgetsScreen(viewModel: BudgetsViewModel = hiltViewModel()) {
+fun BudgetsScreen(onOpenRecords: () -> Unit, viewModel: BudgetsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     var editing by remember { mutableStateOf<BudgetLine?>(null) }
     var deleting by remember { mutableStateOf<BudgetLine?>(null) }
+    val monthKey = state.period.range().start
+    var setupStarted by remember(monthKey) { mutableStateOf(false) }
+    val showSetup = state.hasAnyBudget || setupStarted
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -67,7 +77,7 @@ fun BudgetsScreen(viewModel: BudgetsViewModel = hiltViewModel()) {
             start = MonetaSpacing.screenHorizontal,
             end = MonetaSpacing.screenHorizontal,
             top = MonetaSpacing.sm,
-            bottom = MonetaSpacing.xxxl * 2
+            bottom = 96.dp
         ),
         verticalArrangement = Arrangement.spacedBy(MonetaSpacing.md)
     ) {
@@ -78,9 +88,36 @@ fun BudgetsScreen(viewModel: BudgetsViewModel = hiltViewModel()) {
                 modes = listOf(PeriodMode.MONTH)
             )
         }
-        item { SummaryCard(state) }
+        if (!state.isLoading && !showSetup) {
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+                        Text("No budgets for ${state.period.label()}", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(MonetaSpacing.xs))
+                        Text(
+                            "Each month has its own budgets. Copy last month's, or set this month's from scratch.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(MonetaSpacing.md))
+                        state.copySourceLabel?.let { label ->
+                            Button(onClick = viewModel::copyFromPrevious, modifier = Modifier.fillMaxWidth()) {
+                                Text("Copy budgets from $label")
+                            }
+                            Spacer(Modifier.height(MonetaSpacing.sm))
+                        }
+                        OutlinedButton(onClick = { setupStarted = true }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Set this month's budgets")
+                        }
+                    }
+                }
+            }
+        }
+        if (showSetup) {
+            item { SummaryCard(state) }
+        }
 
-        state.overall?.let { overall ->
+        state.overall?.takeIf { showSetup }?.let { overall ->
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
@@ -115,20 +152,20 @@ fun BudgetsScreen(viewModel: BudgetsViewModel = hiltViewModel()) {
             }
         }
 
-        item {
+        if (showSetup) item {
             Text(
                 "Your expense categories",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(top = MonetaSpacing.sm)
             )
             Text(
-                "Tap a category to set its monthly budget.",
+                "Tap a category with a budget to see its transactions, or tap Set budget.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
-        if (!state.isLoading && state.lines.isEmpty()) {
+        if (showSetup && !state.isLoading && state.lines.isEmpty()) {
             item {
                 Text(
                     "No expense categories yet. Add some from the side menu (Categories).",
@@ -137,12 +174,18 @@ fun BudgetsScreen(viewModel: BudgetsViewModel = hiltViewModel()) {
             }
         }
 
-        items(state.lines, key = { it.category.id }) { line ->
-            CategoryBudgetCard(
-                line = line,
-                onOpen = { editing = line },
-                onDelete = { deleting = line }
-            )
+        if (showSetup) {
+            items(state.lines, key = { it.category.id }) { line ->
+                CategoryBudgetCard(
+                    line = line,
+                    onOpen = { editing = line },
+                    onDelete = { deleting = line },
+                    onSeeTransactions = {
+                        viewModel.prepareRecords(line)
+                        onOpenRecords()
+                    }
+                )
+            }
         }
     }
 
@@ -230,11 +273,17 @@ private fun SummaryCard(state: BudgetsUiState) {
 }
 
 @Composable
-private fun CategoryBudgetCard(line: BudgetLine, onOpen: () -> Unit, onDelete: () -> Unit) {
+private fun CategoryBudgetCard(
+    line: BudgetLine,
+    onOpen: () -> Unit,
+    onDelete: () -> Unit,
+    onSeeTransactions: () -> Unit
+) {
     val budget = line.effectiveBudget
+    var menuOpen by remember { mutableStateOf(false) }
     Card(modifier = Modifier
         .fillMaxWidth()
-        .clickable(onClick = onOpen)) {
+        .clickable(onClick = if (budget == null) onOpen else onSeeTransactions)) {
         Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconBadge(iconName = line.category.icon, colorHex = line.category.colorHex)
@@ -259,8 +308,29 @@ private fun CategoryBudgetCard(line: BudgetLine, onOpen: () -> Unit, onDelete: (
                 if (budget == null) {
                     TextButton(onClick = onOpen) { Text("Set budget") }
                 } else {
-                    IconButton(onClick = onOpen) { Icon(Icons.Outlined.Edit, contentDescription = "Edit budget") }
-                    IconButton(onClick = onDelete) { Icon(Icons.Outlined.Delete, contentDescription = "Delete budget") }
+                    Box {
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Outlined.MoreVert, contentDescription = "Budget options")
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Edit amount") },
+                                leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                                onClick = {
+                                    menuOpen = false
+                                    onOpen()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Delete budget") },
+                                leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                                onClick = {
+                                    menuOpen = false
+                                    onDelete()
+                                }
+                            )
+                        }
+                    }
                 }
             }
             if (budget != null) {

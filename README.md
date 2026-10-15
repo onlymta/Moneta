@@ -113,3 +113,15 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Accounts: opening balance editable; optional bottom-bar tab (Settings > Advanced settings > Customization).
 - Side drawer replaces the More tab; whole-app search; in-app notifications (bell).
 - Export: any custom period. Settings: change your name, carry-forward and budget rollover options.
+
+## v0.16.0 - refinements
+
+- Home is now a clean dashboard: collapsible total balance, tappable Income / Expenses / Net change tiles.
+- Notifications only badge new alerts; they count as seen once you open and leave the list.
+- Budgets are per month: a new month starts empty with "Copy from <previous month>" or "Set this month's budgets"; a three-dot menu edits or deletes; tapping a budget shows its transactions.
+- Accounts: tap for a month-by-month history, archived accounts look different.
+- Categories have an icon picker.
+- Add transaction: full-screen pop-up pickers with search, date/time below notes, no gap above the keyboard, a toast confirms saves and failures.
+- Settings > Advanced > Customization: show/hide and reorder the bottom-bar tabs.
+- Record rows show category > subcategory, account and notes; transfers are blue.
+- Cleaner whole-app search, and a new app icon.
