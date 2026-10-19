@@ -77,6 +77,7 @@ fun HomeScreen(
             state = state,
             userName = userName,
             onPeriodChange = viewModel::onPeriodChange,
+            onScopeChange = { sc -> viewModel.setBalanceScope(sc) },
             onOpenAccount = { id -> navController.navigate(accountHistoryRoute(id)) },
             onTransactionClick = onTransactionClick,
             onSeeAll = {
@@ -137,6 +138,7 @@ private fun HomeContent(
     state: HomeUiState,
     userName: String,
     onPeriodChange: (com.moneta.app.ui.common.PeriodSelection) -> Unit,
+    onScopeChange: (com.moneta.app.data.settings.BalanceScope) -> Unit,
     onOpenAccount: (Long) -> Unit,
     onTransactionClick: (Long) -> Unit,
     onSeeAll: () -> Unit,
@@ -155,7 +157,7 @@ private fun HomeContent(
         if (userName.isNotBlank()) {
             item { Text("Hello, $userName", style = MaterialTheme.typography.headlineSmall) }
         }
-        item { BalanceCard(state, onOpenAccount, viewModel::setBalanceScope) }
+        item { BalanceCard(state, onOpenAccount, onScopeChange) }
         item {
             PeriodBar(
                 selection = state.period,
