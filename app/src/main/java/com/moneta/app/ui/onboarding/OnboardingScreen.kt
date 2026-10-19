@@ -91,7 +91,7 @@ fun OnboardingScreen(
                 verticalArrangement = Arrangement.spacedBy(MonetaSpacing.lg)
             ) {
                 when (state.step) {
-                    0 -> WelcomeStep(state, viewModel)
+                    0 -> WelcomeStep(state, viewModel, onExit)
                     1 -> AccountsStep(state, viewModel)
                     2 -> CategoriesStep(state, viewModel)
                     else -> FinishStep(state, viewModel, onExit)
@@ -128,7 +128,7 @@ fun OnboardingScreen(
 }
 
 @Composable
-private fun WelcomeStep(state: OnboardingUiState, viewModel: OnboardingViewModel) {
+private fun WelcomeStep(state: OnboardingUiState, viewModel: OnboardingViewModel, onExit: (OnboardingExit) -> Unit) {
     Spacer(Modifier.height(MonetaSpacing.md))
     Text("Welcome to Moneta", style = MaterialTheme.typography.headlineMedium)
     Text(
@@ -143,6 +143,23 @@ private fun WelcomeStep(state: OnboardingUiState, viewModel: OnboardingViewModel
         singleLine = true,
         modifier = Modifier.fillMaxWidth()
     )
+
+    val restoreLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let { viewModel.restoreFromBackup(it.toString(), onExit) } }
+    Spacer(Modifier.height(MonetaSpacing.sm))
+    Text(
+        "Already used Moneta before?",
+        style = MaterialTheme.typography.titleMedium
+    )
+    OutlinedButton(
+        onClick = { restoreLauncher.launch(arrayOf("*/*")) },
+        enabled = !state.isWorking,
+        modifier = Modifier.fillMaxWidth()
+    ) { Text(if (state.isWorking) "Restoring..." else "Restore from a backup file") }
+    state.restoreMessage?.let {
+        Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+    }
 }
 
 @Composable

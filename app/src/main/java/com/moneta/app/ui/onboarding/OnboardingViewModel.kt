@@ -41,7 +41,8 @@ private data class OnboardingForm(
     val accountError: String? = null,
     val removedCategoryIds: Set<Long> = emptySet(),
     val newCategoryName: String = "",
-    val isWorking: Boolean = false
+    val isWorking: Boolean = false,
+    val restoreMessage: String? = null
 )
 
 data class OnboardingUiState(
@@ -55,11 +56,14 @@ data class OnboardingUiState(
     val expenseCategories: List<Category> = emptyList(),
     val removedCategoryIds: Set<Long> = emptySet(),
     val newCategoryName: String = "",
-    val isWorking: Boolean = false
+    val isWorking: Boolean = false,
+    val restoreMessage: String? = null
 )
 
 @HiltViewModel
 class OnboardingViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
+    private val backupManager: com.moneta.app.data.backup.BackupManager,
     private val accountRepository: AccountRepository,
     private val categoryRepository: CategoryRepository,
     private val settingsRepository: SettingsRepository
@@ -83,7 +87,8 @@ class OnboardingViewModel @Inject constructor(
             expenseCategories = categories.filter { it.parentCategoryId == null },
             removedCategoryIds = f.removedCategoryIds,
             newCategoryName = f.newCategoryName,
-            isWorking = f.isWorking
+            isWorking = f.isWorking,
+            restoreMessage = f.restoreMessage
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), OnboardingUiState())
 
@@ -187,6 +192,31 @@ class OnboardingViewModel @Inject constructor(
             settingsRepository.setOnboardingStatus(OnboardingStatus.COMPLETED)
             form.update { it.copy(isWorking = false) }
             onExit(exit)
+        }
+    }
+
+    /** Restores a backup file picked on the welcome screen, then goes straight to Home. */
+    fun restoreFromBackup(uriString: String, onExit: (OnboardingExit) -> Unit) {
+        if (form.value.isWorking) return
+        viewModelScope.launch {
+            form.update { it.copy(isWorking = true, restoreMessage = null) }
+            val result = try {
+                appContext.contentResolver.openInputStream(android.net.Uri.parse(uriString))?.use { stream ->
+                    backupManager.restoreBackup(stream)
+                } ?: com.moneta.app.data.backup.RestoreResult.Failed("Could not open the chosen file.")
+            } catch (e: Exception) {
+                com.moneta.app.data.backup.RestoreResult.Failed(e.message ?: "Could not read that file.")
+            }
+            when (result) {
+                is com.moneta.app.data.backup.RestoreResult.Success -> {
+                    settingsRepository.setOnboardingStatus(OnboardingStatus.COMPLETED)
+                    form.update { it.copy(isWorking = false) }
+                    onExit(OnboardingExit.HOME)
+                }
+                is com.moneta.app.data.backup.RestoreResult.Failed -> {
+                    form.update { it.copy(isWorking = false, restoreMessage = result.reason) }
+                }
+            }
         }
     }
 

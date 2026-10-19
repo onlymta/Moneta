@@ -98,6 +98,7 @@ const val RECURRING_ROUTE = "recurring"
 const val ADD_RECURRING_ROUTE = "add_recurring"
 
 const val SETTINGS_ROUTE = "settings"
+const val ABOUT_ROUTE = "about"
 
 /** First-run welcome/setup flow. */
 const val ONBOARDING_ROUTE = "onboarding"

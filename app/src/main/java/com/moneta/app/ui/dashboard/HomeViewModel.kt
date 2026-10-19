@@ -13,6 +13,7 @@ import com.moneta.app.data.repository.Category
 import com.moneta.app.data.repository.CategoryRepository
 import com.moneta.app.data.repository.Transaction
 import com.moneta.app.data.repository.TransactionRepository
+import com.moneta.app.data.settings.BalanceScope
 import com.moneta.app.data.settings.SettingsRepository
 import com.moneta.app.domain.usecase.CategoryBreakdownUseCase
 import com.moneta.app.domain.usecase.CategorySlice
@@ -30,6 +31,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /** Month-over-month comparison used for the small "spending is up/down" note. */
@@ -46,6 +48,9 @@ data class HomeUiState(
     val isCurrentMonth: Boolean = true,
     val currencyCode: String = "PKR",
     val totalBalance: Money = Money.zero("PKR"),
+    val balanceScope: BalanceScope = BalanceScope.ALL,
+    val currentSubtotal: Money = Money.zero("PKR"),
+    val savingsSubtotal: Money = Money.zero("PKR"),
     val accounts: List<Account> = emptyList(),
     /** Balance at the start of the month when "carry forward" is on, otherwise null. */
     val openingBalance: Money? = null,
@@ -67,7 +72,7 @@ class HomeViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     budgetRepository: BudgetRepository,
     categoryRepository: CategoryRepository,
-    settingsRepository: SettingsRepository,
+    private val settingsRepository: SettingsRepository,
     private val categoryBreakdownUseCase: CategoryBreakdownUseCase,
     private val netWorthTrendUseCase: NetWorthTrendUseCase,
     private val launchFilter: com.moneta.app.ui.transactions.RecordsLaunchFilter
@@ -115,6 +120,10 @@ class HomeViewModel @Inject constructor(
         period.value = selection.copy(mode = PeriodMode.MONTH)
     }
 
+    fun setBalanceScope(scope: BalanceScope) {
+        viewModelScope.launch { settingsRepository.setBalanceScope(scope) }
+    }
+
     private suspend fun build(
         p: PeriodSelection,
         accounts: List<Account>,
@@ -135,8 +144,16 @@ class HomeViewModel @Inject constructor(
         } else {
             null
         }
+        val counted = accounts.filter { it.includeInNetWorth }
+        val savingsMinor = counted.filter { it.type == com.moneta.app.data.local.entity.AccountType.SAVINGS }
+            .sumOf { it.currentBalance.minorUnits }
+        val allMinor = counted.sumOf { it.currentBalance.minorUnits }
         val total = Money(
-            accounts.filter { it.includeInNetWorth }.sumOf { it.currentBalance.minorUnits },
+            when (prefs.balanceScope) {
+                BalanceScope.ALL -> allMinor
+                BalanceScope.SAVINGS -> savingsMinor
+                BalanceScope.CURRENT -> allMinor - savingsMinor
+            },
             currency
         )
         return HomeUiState(
@@ -146,6 +163,9 @@ class HomeViewModel @Inject constructor(
             isCurrentMonth = p.containsToday(),
             currencyCode = currency,
             totalBalance = total,
+            balanceScope = prefs.balanceScope,
+            currentSubtotal = Money(allMinor - savingsMinor, currency),
+            savingsSubtotal = Money(savingsMinor, currency),
             accounts = accounts,
             openingBalance = opening,
             monthIncome = income,

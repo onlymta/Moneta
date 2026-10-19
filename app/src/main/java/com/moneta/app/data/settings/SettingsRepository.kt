@@ -22,6 +22,9 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 /** How Quick Add shows its account/category pickers: all chips at once, or compact dropdown menus. */
 enum class PickerStyle { CHIPS, DROPDOWN }
 
+/** Which accounts the headline balance adds up. */
+enum class BalanceScope { ALL, CURRENT, SAVINGS }
+
 /**
  * Where the first-run welcome flow stands. NOT_STARTED shows the welcome flow on
  * launch; SKIPPED ("do this later") shows a reminder banner on Home until the
@@ -78,6 +81,8 @@ data class AppPreferences(
     val formPickersAboveAmount: Boolean = false,
     val formCustomKeypad: Boolean = false,
     val formNotesAboveAmount: Boolean = false,
+    val formDateBelowKeypad: Boolean = false,
+    val balanceScope: BalanceScope = BalanceScope.ALL,
     // --- Reminders and backups ---
     val reminderEnabled: Boolean = false,
     val reminderHour: Int = 21,
@@ -122,6 +127,8 @@ class SettingsRepository @Inject constructor(
         val FORM_PICKERS_ABOVE = booleanPreferencesKey("form_pickers_above")
         val FORM_KEYPAD = booleanPreferencesKey("form_keypad")
         val FORM_NOTES_ABOVE = booleanPreferencesKey("form_notes_above")
+        val FORM_DATE_BELOW = booleanPreferencesKey("form_date_below")
+        val BALANCE_SCOPE = stringPreferencesKey("balance_scope")
         val REMINDER_ENABLED = booleanPreferencesKey("reminder_enabled")
         val REMINDER_HOUR = intPreferencesKey("reminder_hour")
         val REMINDER_MINUTE = intPreferencesKey("reminder_minute")
@@ -165,6 +172,10 @@ class SettingsRepository @Inject constructor(
             formPickersAboveAmount = prefs[Keys.FORM_PICKERS_ABOVE] ?: false,
             formCustomKeypad = prefs[Keys.FORM_KEYPAD] ?: false,
             formNotesAboveAmount = prefs[Keys.FORM_NOTES_ABOVE] ?: false,
+            formDateBelowKeypad = prefs[Keys.FORM_DATE_BELOW] ?: false,
+            balanceScope = prefs[Keys.BALANCE_SCOPE]
+                ?.let { name -> BalanceScope.entries.firstOrNull { it.name == name } }
+                ?: BalanceScope.ALL,
             reminderEnabled = prefs[Keys.REMINDER_ENABLED] ?: false,
             reminderHour = prefs[Keys.REMINDER_HOUR] ?: 21,
             reminderMinute = prefs[Keys.REMINDER_MINUTE] ?: 0,
@@ -233,6 +244,10 @@ class SettingsRepository @Inject constructor(
     suspend fun setFormPickersAboveAmount(on: Boolean) = context.dataStore.edit { it[Keys.FORM_PICKERS_ABOVE] = on }
 
     suspend fun setFormCustomKeypad(on: Boolean) = context.dataStore.edit { it[Keys.FORM_KEYPAD] = on }
+
+    suspend fun setFormDateBelowKeypad(on: Boolean) = context.dataStore.edit { it[Keys.FORM_DATE_BELOW] = on }
+
+    suspend fun setBalanceScope(scope: BalanceScope) = context.dataStore.edit { it[Keys.BALANCE_SCOPE] = scope.name }
 
     suspend fun setFormNotesAboveAmount(on: Boolean) = context.dataStore.edit { it[Keys.FORM_NOTES_ABOVE] = on }
 

@@ -155,7 +155,7 @@ private fun HomeContent(
         if (userName.isNotBlank()) {
             item { Text("Hello, $userName", style = MaterialTheme.typography.headlineSmall) }
         }
-        item { BalanceCard(state, onOpenAccount) }
+        item { BalanceCard(state, onOpenAccount, viewModel::setBalanceScope) }
         item {
             PeriodBar(
                 selection = state.period,
@@ -245,8 +245,13 @@ private fun FigureTile(
 }
 
 /** Total balance: just the figure by default; tap to see each account (tap an account for its history). */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun BalanceCard(state: HomeUiState, onOpenAccount: (Long) -> Unit) {
+private fun BalanceCard(
+    state: HomeUiState,
+    onOpenAccount: (Long) -> Unit,
+    onScopeChange: (com.moneta.app.data.settings.BalanceScope) -> Unit
+) {
     var expanded by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -260,7 +265,14 @@ private fun BalanceCard(state: HomeUiState, onOpenAccount: (Long) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Total balance", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        when (state.balanceScope) {
+                            com.moneta.app.data.settings.BalanceScope.ALL -> "Total balance"
+                            com.moneta.app.data.settings.BalanceScope.CURRENT -> "Current accounts balance"
+                            com.moneta.app.data.settings.BalanceScope.SAVINGS -> "Savings balance"
+                        },
+                        style = MaterialTheme.typography.labelLarge
+                    )
                     Text(
                         state.totalBalance.formatted(),
                         style = MaterialTheme.typography.headlineMedium,
@@ -276,6 +288,28 @@ private fun BalanceCard(state: HomeUiState, onOpenAccount: (Long) -> Unit) {
                     contentDescription = null
                 )
             }
+            Spacer(Modifier.height(MonetaSpacing.sm))
+            Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                com.moneta.app.data.settings.BalanceScope.values().forEach { sc ->
+                    androidx.compose.material3.FilterChip(
+                        selected = state.balanceScope == sc,
+                        onClick = { onScopeChange(sc) },
+                        label = {
+                            Text(
+                                when (sc) {
+                                    com.moneta.app.data.settings.BalanceScope.ALL -> "All"
+                                    com.moneta.app.data.settings.BalanceScope.CURRENT -> "Current"
+                                    com.moneta.app.data.settings.BalanceScope.SAVINGS -> "Savings"
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Text(
+                "Current " + state.currentSubtotal.formatted() + "  ·  Savings " + state.savingsSubtotal.formatted(),
+                style = MaterialTheme.typography.labelMedium
+            )
             if (expanded) {
                 Spacer(Modifier.height(MonetaSpacing.sm))
                 Divider()

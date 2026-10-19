@@ -64,7 +64,7 @@ fun AddEditAccountScreen(
                 FilterChip(
                     selected = state.type == type,
                     onClick = { viewModel.onTypeChange(type) },
-                    label = { Text(type.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }) }
+                    label = { Text(if (type == AccountType.SAVINGS) "Savings account" else if (type == AccountType.BANK) "Bank (current)" else type.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }) }
                 )
             }
         }

@@ -22,6 +22,8 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -111,17 +113,6 @@ fun QuickAddScreen(
     val state by viewModel.uiState.collectAsState()
     val isEditing = viewModel.isEditing
 
-    val amountFocus = remember { FocusRequester() }
-    LaunchedEffect(state.addAnotherTick) {
-        if (transactionId == null && !state.customKeypad) {
-            try {
-                amountFocus.requestFocus()
-            } catch (e: Exception) {
-                // Focus can fail if the field is not on screen yet; the user can just tap it.
-            }
-        }
-    }
-
     val context = LocalContext.current
     LaunchedEffect(state.formError) {
         state.formError?.let { Toast.makeText(context, "Not saved: $it", Toast.LENGTH_LONG).show() }
@@ -147,9 +138,14 @@ fun QuickAddScreen(
         TransactionType.TRANSFER -> TransferGray
     }
 
+    val isTransfer = state.type == TransactionType.TRANSFER
+    val dropdown = state.pickerStyle == PickerStyle.DROPDOWN
+    val selectedSub = state.subcategoryOptions.firstOrNull { it.id == state.selectedCategoryId }
+    val topSelectedId = selectedSub?.parentCategoryId ?: state.selectedCategoryId
+    val inRow = state.pickersInRow && dropdown
+
     Scaffold(
-        // The keyboard/navigation-bar padding is applied once, on the Column below, so no blank
-        // strip is left between the Save bar and the keyboard.
+        // Insets are applied once, on the Column below.
         contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
         topBar = {
             TopAppBar(
@@ -185,152 +181,150 @@ fun QuickAddScreen(
             )
         }
     ) { padding ->
+        // With the built-in number pad the phone keyboard (for notes) slides OVER the pad instead
+        // of pushing it up, so only the navigation bar is avoided in that case.
+        val bottomInsets = if (state.customKeypad) {
+            WindowInsets.navigationBars
+        } else {
+            WindowInsets.ime.union(WindowInsets.navigationBars)
+        }
+
+        val amountBlock: @Composable () -> Unit = {
+            if (state.customKeypad) {
+                AmountDisplay(
+                    expression = state.amountInput,
+                    accent = accent,
+                    error = state.amountError
+                )
+            } else {
+                OutlinedTextField(
+                    value = state.amountInput,
+                    onValueChange = viewModel::onAmountChange,
+                    placeholder = {
+                        Text("0", style = MaterialTheme.typography.displayMedium)
+                    },
+                    prefix = { Text(com.moneta.app.core.money.DisplayCurrency.entryPrefix(), style = MaterialTheme.typography.titleLarge) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    textStyle = MaterialTheme.typography.displayMedium.copy(color = accent),
+                    isError = state.amountError != null,
+                    supportingText = state.amountError?.let { message -> { Text(message) } },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            state.savedMessage?.let { message ->
+                Text(message, style = MaterialTheme.typography.bodyMedium, color = IncomeGreen)
+            }
+        }
+
+        val pickersBlock: @Composable () -> Unit = {
+            if (isTransfer) {
+                val toAccounts = state.accounts.filter { it.id != state.selectedAccountId }
+                if (inRow) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            AccountPicker("From", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
+                        }
+                        Box(modifier = Modifier.weight(1f)) {
+                            AccountPicker("To", toAccounts, state.selectedToAccountId, dropdown, viewModel::onToAccountSelected)
+                        }
+                    }
+                } else {
+                    AccountPicker("From account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
+                    AccountPicker("To account", toAccounts, state.selectedToAccountId, dropdown, viewModel::onToAccountSelected)
+                }
+            } else {
+                if (inRow) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            AccountPicker("Account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
+                        }
+                        Box(modifier = Modifier.weight(1f)) {
+                            CategoryPicker("Category", state.topLevelCategories, topSelectedId, dropdown, viewModel::onCategorySelected)
+                        }
+                    }
+                } else {
+                    AccountPicker("Account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
+                    CategoryPicker("Category", state.topLevelCategories, topSelectedId, dropdown, viewModel::onCategorySelected)
+                }
+                if (state.subcategoryOptions.isNotEmpty()) {
+                    CategoryPicker(
+                        "Subcategory (optional)",
+                        state.subcategoryOptions,
+                        selectedSub?.id,
+                        dropdown,
+                        viewModel::onCategorySelected
+                    )
+                }
+            }
+        }
+
+        // The notes box takes whatever height is left on a fixed screen, so it is as large as it can be.
+        val notesBlock: @Composable ColumnScope.() -> Unit = {
+            OutlinedTextField(
+                value = state.notes,
+                onValueChange = viewModel::onNotesChange,
+                placeholder = { Text("Notes or description (optional)") },
+                modifier = if (dropdown) {
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .heightIn(min = 72.dp)
+                } else {
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 110.dp)
+                }
+            )
+        }
+
+        val dateTimeBlock: @Composable () -> Unit = {
+            Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                CompactChip(
+                    icon = Icons.Filled.Event,
+                    text = state.date.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy")),
+                    onClick = { showDatePicker = true },
+                    modifier = Modifier.weight(1.5f)
+                )
+                CompactChip(
+                    icon = Icons.Filled.Schedule,
+                    text = formatTime(state.timeMinutes),
+                    onClick = { showTimePicker = true },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            if (state.isFutureDate && !isEditing) {
+                Text(
+                    "Scheduled for " + state.date.format(DateTimeFormatter.ofPattern("d MMM yyyy")) +
+                        ". Your balance changes on that date.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
+                .windowInsetsPadding(bottomInsets)
         ) {
+            // Fixed screen. It only scrolls when the account/category chips are used, since those can be long.
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = MonetaSpacing.screenHorizontal, vertical = MonetaSpacing.md),
-                verticalArrangement = Arrangement.spacedBy(MonetaSpacing.md)
+                    .fillMaxWidth()
+                    .let { if (dropdown) it else it.verticalScroll(rememberScrollState()) }
+                    .padding(horizontal = MonetaSpacing.screenHorizontal, vertical = MonetaSpacing.sm),
+                verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
             ) {
-                val isTransfer = state.type == TransactionType.TRANSFER
-                val dropdown = state.pickerStyle == PickerStyle.DROPDOWN
-                val selectedSub = state.subcategoryOptions.firstOrNull { it.id == state.selectedCategoryId }
-                val topSelectedId = selectedSub?.parentCategoryId ?: state.selectedCategoryId
-                val inRow = state.pickersInRow && dropdown
-
-                val amountBlock: @Composable () -> Unit = {
-                    if (state.customKeypad) {
-                        AmountDisplay(
-                            expression = state.amountInput,
-                            accent = accent,
-                            error = state.amountError
-                        )
-                    } else {
-                        OutlinedTextField(
-                            value = state.amountInput,
-                            onValueChange = viewModel::onAmountChange,
-                            placeholder = {
-                                Text("0", style = MaterialTheme.typography.displaySmall)
-                            },
-                            prefix = { Text(com.moneta.app.core.money.DisplayCurrency.entryPrefix(), style = MaterialTheme.typography.titleMedium) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            textStyle = MaterialTheme.typography.displaySmall.copy(color = accent),
-                            isError = state.amountError != null,
-                            supportingText = state.amountError?.let { message -> { Text(message) } },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(amountFocus)
-                        )
-                    }
-                    state.savedMessage?.let { message ->
-                        Text(message, style = MaterialTheme.typography.bodyMedium, color = IncomeGreen)
-                    }
-                }
-
-                val pickersBlock: @Composable () -> Unit = {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        SectionLabel(if (isTransfer) "Accounts" else "Account and category")
-                        TextButton(onClick = {
-                            viewModel.setPickerStyle(if (dropdown) PickerStyle.CHIPS else PickerStyle.DROPDOWN)
-                        }) {
-                            Text(if (dropdown) "Show as chips" else "Show as pop-up list")
-                        }
-                    }
-
-                    if (isTransfer) {
-                        val toAccounts = state.accounts.filter { it.id != state.selectedAccountId }
-                        if (inRow) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
-                                Box(modifier = Modifier.weight(1f)) {
-                                    AccountPicker("From", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
-                                }
-                                Box(modifier = Modifier.weight(1f)) {
-                                    AccountPicker("To", toAccounts, state.selectedToAccountId, dropdown, viewModel::onToAccountSelected)
-                                }
-                            }
-                        } else {
-                            AccountPicker("From account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
-                            AccountPicker("To account", toAccounts, state.selectedToAccountId, dropdown, viewModel::onToAccountSelected)
-                        }
-                    } else {
-                        if (inRow) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
-                                Box(modifier = Modifier.weight(1f)) {
-                                    AccountPicker("Account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
-                                }
-                                Box(modifier = Modifier.weight(1f)) {
-                                    CategoryPicker("Category", state.topLevelCategories, topSelectedId, dropdown, viewModel::onCategorySelected)
-                                }
-                            }
-                        } else {
-                            AccountPicker("Account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
-                            CategoryPicker("Category", state.topLevelCategories, topSelectedId, dropdown, viewModel::onCategorySelected)
-                        }
-                        if (state.subcategoryOptions.isNotEmpty()) {
-                            CategoryPicker(
-                                "Subcategory (optional)",
-                                state.subcategoryOptions,
-                                selectedSub?.id,
-                                dropdown,
-                                viewModel::onCategorySelected
-                            )
-                        }
-                    }
-                }
-
-                val notesBlock: @Composable () -> Unit = {
-                    OutlinedTextField(
-                        value = state.notes,
-                        onValueChange = viewModel::onNotesChange,
-                        placeholder = { Text("Notes or description (optional)") },
-                        maxLines = 3,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
                 TypeSelector(state.type, onSelect = viewModel::onTypeChange)
                 if (state.pickersAboveAmount) pickersBlock()
                 if (state.notesAboveAmount) notesBlock()
                 amountBlock()
                 if (!state.pickersAboveAmount) pickersBlock()
                 if (!state.notesAboveAmount) notesBlock()
-
-                // --- When: one tappable date and one tappable time, both showing "now" until changed ---
-                Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
-                    ClickableField(
-                        label = "Date",
-                        value = state.date.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy")),
-                        icon = Icons.Filled.Event,
-                        onClick = { showDatePicker = true },
-                        modifier = Modifier.weight(1.5f)
-                    )
-                    ClickableField(
-                        label = "Time",
-                        value = formatTime(state.timeMinutes),
-                        icon = Icons.Filled.Schedule,
-                        onClick = { showTimePicker = true },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                if (state.isFutureDate && !isEditing) {
-                    Text(
-                        "Scheduled for " + state.date.format(DateTimeFormatter.ofPattern("d MMM yyyy")) +
-                            ". It will be added to your records, and your balance will change, on that date.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+                if (!state.dateBelowKeypad) dateTimeBlock()
             }
 
             if (state.customKeypad) {
@@ -339,6 +333,15 @@ fun QuickAddScreen(
                         viewModel.onAmountExpressionChange(applyKeypadKey(state.amountInput, key))
                     }
                 )
+            }
+
+            if (state.dateBelowKeypad) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = MonetaSpacing.screenHorizontal, vertical = MonetaSpacing.xs),
+                    verticalArrangement = Arrangement.spacedBy(MonetaSpacing.xs)
+                ) { dateTimeBlock() }
             }
 
             if (!state.saveAtTop) Surface(tonalElevation = 3.dp) {
@@ -469,32 +472,30 @@ private fun TypeSelector(selected: TransactionType, onSelect: (TransactionType) 
 }
 
 @Composable
-private fun ClickableField(
-    label: String,
-    value: String,
+private fun CompactChip(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = {},
-            readOnly = true,
-            singleLine = true,
-            label = { Text(label) },
-            leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .clickable(onClick = onClick)
-        )
+    Surface(
+        onClick = onClick,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+        modifier = modifier.height(38.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
+            androidx.compose.foundation.layout.Spacer(Modifier.size(6.dp))
+            Text(text, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+        }
     }
 }
 
-/** A read-only field that opens a full-screen list (with search when the list is long) to choose from. */
+/** A tappable card showing the current choice; it opens a centred pop-up card to pick from (like the date picker). */
 @Composable
 private fun <T> DropdownPicker(
     label: String,
@@ -508,51 +509,57 @@ private fun <T> DropdownPicker(
     onSelect: (T) -> Unit
 ) {
     var popupOpen by remember { mutableStateOf(false) }
-    Box(modifier = Modifier.fillMaxWidth()) {
-        OutlinedTextField(
-            value = selectedText,
-            onValueChange = {},
-            readOnly = true,
-            singleLine = true,
-            label = { Text(label) },
-            leadingIcon = {
-                Icon(
-                    IconMapper.iconFor(selectedIcon ?: "category"),
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
+    val currentIcon = selectedIcon ?: "category"
+    Surface(
+        onClick = { popupOpen = true },
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            com.moneta.app.ui.common.IconBadge(
+                iconName = currentIcon,
+                colorHex = IconMapper.colorFor(currentIcon),
+                size = 34.dp
+            )
+            androidx.compose.foundation.layout.Spacer(Modifier.size(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    selectedText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
-            },
-            trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .clickable { popupOpen = true }
-        )
+            }
+            Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+        }
     }
     if (popupOpen) {
         var search by remember { mutableStateOf("") }
         val filtered = if (search.isBlank()) items else items.filter {
             itemText(it).contains(search.trim(), ignoreCase = true)
         }
-        Dialog(
-            onDismissRequest = { popupOpen = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Surface(modifier = Modifier.fillMaxSize()) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = MonetaSpacing.sm, vertical = MonetaSpacing.sm),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { popupOpen = false }) {
-                            Icon(Icons.Filled.Close, contentDescription = "Close")
-                        }
-                        Text(label, style = MaterialTheme.typography.titleLarge)
-                    }
+        Dialog(onDismissRequest = { popupOpen = false }) {
+            Surface(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+                tonalElevation = 6.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+            ) {
+                Column(modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                    )
                     if (items.size > 6) {
                         OutlinedTextField(
                             value = search,
@@ -563,10 +570,14 @@ private fun <T> DropdownPicker(
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = MonetaSpacing.screenHorizontal)
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
                         )
                     }
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .padding(top = 4.dp)
+                    ) {
                         items(filtered, key = { itemId(it) }) { item ->
                             val selected = itemId(item) == selectedId
                             Row(
@@ -576,12 +587,12 @@ private fun <T> DropdownPicker(
                                         popupOpen = false
                                         onSelect(item)
                                     }
-                                    .padding(horizontal = MonetaSpacing.screenHorizontal, vertical = 14.dp),
+                                    .padding(horizontal = 24.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 com.moneta.app.ui.common.IconBadge(
                                     iconName = itemIcon(item),
-                                    colorHex = "#0F6B5C",
+                                    colorHex = IconMapper.colorFor(itemIcon(item)),
                                     size = 36.dp
                                 )
                                 androidx.compose.foundation.layout.Spacer(Modifier.size(14.dp))
@@ -600,10 +611,18 @@ private fun <T> DropdownPicker(
                                 Text(
                                     "Nothing matches your search.",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.padding(MonetaSpacing.screenHorizontal)
+                                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
                                 )
                             }
                         }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { popupOpen = false }) { Text("Cancel") }
                     }
                 }
             }
@@ -721,11 +740,11 @@ private fun AmountDisplay(expression: String, accent: Color, error: String?) {
         color = MaterialTheme.colorScheme.surfaceVariant,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(horizontal = MonetaSpacing.md, vertical = MonetaSpacing.sm)) {
+        Column(modifier = Modifier.padding(horizontal = MonetaSpacing.md, vertical = MonetaSpacing.md)) {
             Text(
                 (com.moneta.app.core.money.DisplayCurrency.entryPrefix() + " " +
                     (if (expression.isEmpty()) "0" else expression.replace('-', '−'))).trim(),
-                style = MaterialTheme.typography.displaySmall,
+                style = MaterialTheme.typography.displayMedium,
                 color = accent,
                 maxLines = 2
             )
@@ -810,10 +829,10 @@ private fun KeypadKey(key: String, modifier: Modifier, onKey: (String) -> Unit) 
         onClick = { onKey(key) },
         shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
         color = if (isOp) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
-        modifier = modifier.height(42.dp)
+        modifier = modifier.height(52.dp)
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(label, style = MaterialTheme.typography.titleLarge)
+            Text(label, style = MaterialTheme.typography.headlineSmall)
         }
     }
 }

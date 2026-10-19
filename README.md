@@ -144,3 +144,9 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 
 - Amount formatting is cached (it was rebuilding a number formatter for every amount on screen).
 - Release build: baseline profile for faster start, English-only library strings, trimmed packaging. CI now builds the release APK on every push; install that one (the debug APK is unshrunk and much slower).
+
+## v0.18.0
+- Quick Add: fixed (non-scrolling) layout, bigger amount/notes/keypad, Android keyboard overlays the built-in keypad, modern account/category pop-ups, optional date/time below the keypad.
+- Settings: removed duplicates of side-menu items; About moved to the side menu.
+- Onboarding: "Restore from a backup file". Splash screen with app icon.
+- Balance scope (All / Current / Savings) on Home; Accounts grouped into Current and Savings.

@@ -95,13 +95,34 @@ fun AccountsScreen(
             ) {
                 val active = state.accounts.filter { !it.isArchived }
                 val archived = state.accounts.filter { it.isArchived }
-                items(active, key = { it.id }) { account ->
-                    AccountRow(
-                        account = account,
-                        onClick = { onOpenAccount(account.id) },
-                        onEdit = { onEditAccount(account.id) },
-                        onArchiveOrDelete = { viewModel.archiveOrDeleteAccount(account) }
-                    )
+                val savingsType = com.moneta.app.data.local.entity.AccountType.SAVINGS
+                val currentList = active.filter { it.type != savingsType }
+                val savingsList = active.filter { it.type == savingsType }
+                if (currentList.isNotEmpty()) {
+                    item(key = "current-header") {
+                        GroupHeader("Current accounts", currentList.sumOf { it.currentBalance.minorUnits }, currentList.first().currentBalance.currencyCode)
+                    }
+                    items(currentList, key = { it.id }) { account ->
+                        AccountRow(
+                            account = account,
+                            onClick = { onOpenAccount(account.id) },
+                            onEdit = { onEditAccount(account.id) },
+                            onArchiveOrDelete = { viewModel.archiveOrDeleteAccount(account) }
+                        )
+                    }
+                }
+                if (savingsList.isNotEmpty()) {
+                    item(key = "savings-header") {
+                        GroupHeader("Savings accounts", savingsList.sumOf { it.currentBalance.minorUnits }, savingsList.first().currentBalance.currencyCode)
+                    }
+                    items(savingsList, key = { it.id }) { account ->
+                        AccountRow(
+                            account = account,
+                            onClick = { onOpenAccount(account.id) },
+                            onEdit = { onEditAccount(account.id) },
+                            onArchiveOrDelete = { viewModel.archiveOrDeleteAccount(account) }
+                        )
+                    }
                 }
                 if (archived.isNotEmpty()) {
                     item(key = "archived-header") {
@@ -123,6 +144,17 @@ fun AccountsScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun GroupHeader(title: String, minor: Long, currency: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = MonetaSpacing.sm),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        MoneyText(com.moneta.app.core.money.Money(minor, currency))
     }
 }
 

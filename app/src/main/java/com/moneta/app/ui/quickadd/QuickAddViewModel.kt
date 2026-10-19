@@ -84,6 +84,7 @@ data class QuickAddUiState(
     val pickersAboveAmount: Boolean = false,
     val customKeypad: Boolean = false,
     val notesAboveAmount: Boolean = false,
+    val dateBelowKeypad: Boolean = false,
     val isSaving: Boolean = false,
     val saved: Boolean = false
 )
@@ -171,6 +172,7 @@ class QuickAddViewModel @Inject constructor(
             pickersAboveAmount = prefs.formPickersAboveAmount,
             customKeypad = prefs.formCustomKeypad,
             notesAboveAmount = prefs.formNotesAboveAmount,
+            dateBelowKeypad = prefs.formDateBelowKeypad,
             isSaving = f.isSaving,
             saved = f.saved
         )

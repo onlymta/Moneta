@@ -89,9 +89,7 @@ private enum class SettingsArea(val title: String) {
     BUDGETS("Budgets and balances"),
     MODULES("Features"),
     CUSTOMIZE("Customization"),
-    REMINDERS("Reminders"),
-    DATA("Data and backup"),
-    ABOUT("About")
+    REMINDERS("Reminders")
 }
 
 @Composable
@@ -129,8 +127,6 @@ fun SettingsScreen(
                     SettingsArea.MODULES -> ModulesArea(prefs.budgetsEnabled, prefs.goalsEnabled, prefs.billsEnabled, viewModel)
                     SettingsArea.CUSTOMIZE -> CustomizeArea(prefs, viewModel)
                     SettingsArea.REMINDERS -> RemindersArea(prefs.reminderEnabled, prefs.reminderHour, prefs.reminderMinute, viewModel)
-                    SettingsArea.DATA -> DataArea(prefs.autoBackupFrequency, viewModel, onOpenRoute)
-                    SettingsArea.ABOUT -> AboutArea()
                 }
             }
         }
@@ -214,18 +210,6 @@ private fun SettingsHome(
     Card(modifier = Modifier.fillMaxWidth()) {
         Column {
             AreaRow(Icons.Filled.Tune, "Customization", "Bottom bar, record form") { onOpen(SettingsArea.CUSTOMIZE) }
-            Divider()
-            AreaRow(
-                Icons.Filled.Backup,
-                "Data and backup",
-                when (prefs.autoBackupFrequency) {
-                    BackupFrequency.OFF -> "Auto backup off"
-                    BackupFrequency.DAILY -> "Auto backup daily"
-                    BackupFrequency.WEEKLY -> "Auto backup weekly"
-                }
-            ) { onOpen(SettingsArea.DATA) }
-            Divider()
-            AreaRow(Icons.Filled.Info, "About", "Version " + com.moneta.app.BuildConfig.VERSION_NAME) { onOpen(SettingsArea.ABOUT) }
         }
     }
 }
@@ -420,6 +404,7 @@ private fun CustomizeArea(prefs: com.moneta.app.data.settings.AppPreferences, vi
     ToggleRow("Account and category in one row", "Pop-up list style only", prefs.formPickersInRow, viewModel::setFormPickersInRow)
     ToggleRow("Pickers above the amount", "Choose account and category first", prefs.formPickersAboveAmount, viewModel::setFormPickersAboveAmount)
     ToggleRow("Notes above the amount", "Instead of below it", prefs.formNotesAboveAmount, viewModel::setFormNotesAboveAmount)
+    ToggleRow("Date and time below the pad", "Moves the date row under the number pad", prefs.formDateBelowKeypad, viewModel::setFormDateBelowKeypad)
     ToggleRow("Built-in number pad", "Calculator keys (+ − × ÷) instead of the phone keyboard", prefs.formCustomKeypad, viewModel::setFormCustomKeypad)
     Text("Account and category pickers", style = MaterialTheme.typography.bodyMedium)
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -494,74 +479,6 @@ private fun RemindersArea(enabled: Boolean, hour: Int, minute: Int, viewModel: S
             dismissButton = { TextButton(onClick = { showTime = false }) { Text("Cancel") } },
             text = { TimePicker(state = timeState) }
         )
-    }
-}
-
-@Composable
-private fun DataArea(frequency: BackupFrequency, viewModel: SettingsViewModel, onOpenRoute: (String) -> Unit) {
-    Text("Automatic backup", style = MaterialTheme.typography.bodyLarge)
-    Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
-        BackupFrequency.entries.forEach { option ->
-            FilterChip(
-                selected = frequency == option,
-                onClick = { viewModel.setAutoBackupFrequency(option) },
-                label = {
-                    Text(
-                        when (option) {
-                            BackupFrequency.OFF -> "Off"
-                            BackupFrequency.DAILY -> "Daily"
-                            BackupFrequency.WEEKLY -> "Weekly"
-                        }
-                    )
-                }
-            )
-        }
-    }
-    Text(
-        "Saved on this phone when you open the app.",
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    Spacer(Modifier.height(MonetaSpacing.xs))
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column {
-            LinkRow("Backup and restore") { onOpenRoute(BACKUP_ROUTE) }
-            Divider()
-            LinkRow("Import transactions") { onOpenRoute(IMPORT_ROUTE) }
-            Divider()
-            LinkRow("Export") { onOpenRoute(EXPORT_ROUTE) }
-            Divider()
-            LinkRow("Manage categories") { onOpenRoute(CATEGORIES_ROUTE) }
-        }
-    }
-}
-
-@Composable
-private fun AboutArea() {
-    Text("Moneta", style = MaterialTheme.typography.titleLarge)
-    Text(
-        "Version ${com.moneta.app.BuildConfig.VERSION_NAME}",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    Text(
-        "Your data stays on this phone.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-}
-
-@Composable
-private fun LinkRow(title: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = MonetaSpacing.cardPadding, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

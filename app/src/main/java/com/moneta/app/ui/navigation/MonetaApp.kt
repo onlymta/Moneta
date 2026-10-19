@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Badge
@@ -428,6 +429,10 @@ private fun MonetaAppContent(
                 AddRecurringScreen(onDone = { navController.popBackStack() })
             }
 
+            composable(ABOUT_ROUTE) {
+                com.moneta.app.ui.settings.AboutScreen(onBack = goBack)
+            }
+
             // --- Settings ---
             composable(SETTINGS_ROUTE) {
                 SettingsScreen(onBack = goBack, onOpenRoute = { route -> navController.navigate(route) })
@@ -591,6 +596,7 @@ private fun MonetaDrawerContent(
         add(DrawerEntry("Export", Icons.Outlined.FileDownload, EXPORT_ROUTE))
         add(DrawerEntry("Backup & restore", Icons.Outlined.Backup, BACKUP_ROUTE))
         add(DrawerEntry("Settings", Icons.Outlined.Settings, SETTINGS_ROUTE))
+        add(DrawerEntry("About", Icons.Outlined.Info, ABOUT_ROUTE))
     }
     ModalDrawerSheet {
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {

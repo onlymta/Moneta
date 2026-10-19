@@ -78,4 +78,9 @@ class SettingsViewModel @Inject constructor(
 
     fun setReminder(enabled: Boolean, hour: Int, minute: Int) =
         viewModelScope.launch { settingsRepository.setReminder(enabled, hour, minute) }
+
+    fun setFormDateBelowKeypad(on: Boolean) = viewModelScope.launch { settingsRepository.setFormDateBelowKeypad(on) }
+
+    fun setBalanceScope(scope: com.moneta.app.data.settings.BalanceScope) =
+        viewModelScope.launch { settingsRepository.setBalanceScope(scope) }
 }
