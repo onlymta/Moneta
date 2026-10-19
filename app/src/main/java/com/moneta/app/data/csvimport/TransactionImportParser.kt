@@ -259,7 +259,13 @@ object TransactionImportParser {
         rowOffset: Int = 0
     ): ImportPreview {
         if (table.isEmpty()) {
-            return ImportPreview(0, emptyList(), listOf(ImportIssue(1, "The file is empty.")), emptyList(), emptySet())
+            return ImportPreview(
+                dataRowCount = 0,
+                rows = emptyList(),
+                errors = listOf(ImportIssue(1, "The file is empty.")),
+                warnings = emptyList(),
+                newCategoryLabels = emptySet()
+            )
         }
 
         val headerIndex = HashMap<String, Int>()
@@ -284,7 +290,13 @@ object TransactionImportParser {
         if (missingColumns.isNotEmpty()) {
             val message = "Couldn't find the ${missingColumns.joinToString(" and ")} column. " +
                 "Match it to a column of your file, or download the template to see the expected headings."
-            return ImportPreview(0, emptyList(), listOf(ImportIssue(1, message)), emptyList(), emptySet())
+            return ImportPreview(
+                dataRowCount = 0,
+                rows = emptyList(),
+                errors = listOf(ImportIssue(1, message)),
+                warnings = emptyList(),
+                newCategoryLabels = emptySet()
+            )
         }
 
         fun cell(row: List<String>, name: String): String =
