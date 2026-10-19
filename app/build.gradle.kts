@@ -14,11 +14,13 @@ android {
         applicationId = "com.moneta.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 18
-        versionName = "0.16.0-refinements"
+        versionCode = 20
+        versionName = "0.17.1-speed"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+        // Keep only English strings from libraries (the app itself is English only).
+        resourceConfigurations += listOf("en")
     }
 
     // Release signing: if a real release keystore is provided (via env vars, wired
@@ -76,7 +78,15 @@ android {
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
 
     packaging {
-        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/*.version"
+            excludes += "/META-INF/DEPENDENCIES"
+            excludes += "/META-INF/LICENSE*"
+            excludes += "/META-INF/NOTICE*"
+            excludes += "/DebugProbesKt.bin"
+            excludes += "/kotlin-tooling-metadata.json"
+        }
     }
 }
 
@@ -85,6 +95,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("androidx.lifecycle:lifecycle-process:2.8.4")
+    // Installs the bundled baseline profile so the app starts faster even when sideloaded.
+    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
     implementation("androidx.activity:activity-compose:1.9.1")
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")

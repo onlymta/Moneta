@@ -5,6 +5,10 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.moneta.app.core.date.DateRange
+import com.moneta.app.data.backup.AutoBackupManager
+import com.moneta.app.data.backup.LocalBackup
+import com.moneta.app.data.settings.BackupFrequency
+import com.moneta.app.data.settings.SettingsRepository
 import com.moneta.app.data.backup.BackupManager
 import com.moneta.app.data.backup.CloudBackupProvider
 import com.moneta.app.data.backup.RestoreResult
@@ -24,14 +28,21 @@ data class BackupUiState(
     /** Set when a restore is about to overwrite existing data, so the screen can confirm first. */
     val pendingRestoreUri: String? = null,
     val cloudProviderName: String = "",
-    val isCloudConnected: Boolean = false
+    val isCloudConnected: Boolean = false,
+    val frequency: BackupFrequency = BackupFrequency.OFF,
+    val lastAutoBackupAt: Long = 0L,
+    val localBackups: List<LocalBackup> = emptyList()
 )
+
+private const val LOCAL_PREFIX = "local:"
 
 @HiltViewModel
 class BackupViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val backupManager: BackupManager,
-    private val cloudBackupProvider: CloudBackupProvider
+    private val cloudBackupProvider: CloudBackupProvider,
+    private val autoBackupManager: AutoBackupManager,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -41,9 +52,48 @@ class BackupViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            settingsRepository.preferences.collect { prefs ->
+                _uiState.update {
+                    it.copy(frequency = prefs.autoBackupFrequency, lastAutoBackupAt = prefs.lastAutoBackupAt)
+                }
+            }
+        }
+        refreshLocal()
+        viewModelScope.launch {
             val connected = cloudBackupProvider.isConnected()
             _uiState.update { it.copy(isCloudConnected = connected) }
         }
+    }
+
+    private fun refreshLocal() {
+        _uiState.update { it.copy(localBackups = autoBackupManager.list()) }
+    }
+
+    fun setFrequency(frequency: BackupFrequency) {
+        viewModelScope.launch { settingsRepository.setAutoBackupFrequency(frequency) }
+    }
+
+    fun backupNow() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isWorking = true, lastMessage = null) }
+            val result = runCatching { autoBackupManager.backupNow() }
+            refreshLocal()
+            _uiState.update {
+                it.copy(
+                    isWorking = false,
+                    lastMessage = if (result.isSuccess) "Backup saved on this phone." else "Backup failed: ${result.exceptionOrNull()?.message}"
+                )
+            }
+        }
+    }
+
+    fun requestRestoreLocal(name: String) {
+        _uiState.update { it.copy(pendingRestoreUri = LOCAL_PREFIX + name) }
+    }
+
+    fun deleteLocal(name: String) {
+        autoBackupManager.delete(name)
+        refreshLocal()
     }
 
     fun connectCloud() {
@@ -94,9 +144,13 @@ class BackupViewModel @Inject constructor(
         val uriString = _uiState.value.pendingRestoreUri ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isWorking = true, pendingRestoreUri = null, lastMessage = null) }
-            val result = appContext.contentResolver.openInputStream(Uri.parse(uriString))?.use { stream ->
-                backupManager.restoreBackup(stream)
-            } ?: RestoreResult.Failed("Could not open the chosen file.")
+            val result = if (uriString.startsWith(LOCAL_PREFIX)) {
+                autoBackupManager.restore(uriString.removePrefix(LOCAL_PREFIX))
+            } else {
+                appContext.contentResolver.openInputStream(Uri.parse(uriString))?.use { stream ->
+                    backupManager.restoreBackup(stream)
+                } ?: RestoreResult.Failed("Could not open the chosen file.")
+            }
 
             _uiState.update {
                 it.copy(

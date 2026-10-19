@@ -17,6 +17,8 @@ data class TransactionExportRow(
     val category: String,
     val account: String,
     val amountFormatted: String,
+    /** The amount as a plain decimal like 1250.50, for spreadsheets. */
+    val amountPlain: String,
     val payee: String,
     val notes: String,
     val reference: Long
@@ -57,6 +59,7 @@ class ExportRowMapper @Inject constructor(
                 category = categoryName,
                 account = accountName,
                 amountFormatted = transaction.amount.formatted(),
+                amountPlain = java.math.BigDecimal.valueOf(transaction.amount.minorUnits, 2).toPlainString(),
                 payee = transaction.payee.orEmpty(),
                 notes = transaction.notes.orEmpty(),
                 reference = transaction.id

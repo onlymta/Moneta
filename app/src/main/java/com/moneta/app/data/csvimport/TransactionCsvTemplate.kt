@@ -32,7 +32,7 @@ object TransactionCsvTemplate {
     )
 
     /** Sample rows shipped in the template so the format is shown by example, not just described. */
-    private val EXAMPLE_ROWS = listOf(
+    val EXAMPLE_ROWS = listOf(
         listOf("2026-01-15", "Expense", "450", "Cash", "", "Food", "Groceries", "Al-Fatah", "Weekly shop", "Cash", "essentials", ""),
         listOf("2026-01-16", "Income", "85000", "Bank", "", "Salary", "", "", "January salary", "", "", "09:00"),
         listOf("2026-01-18", "Transfer", "5000", "Bank", "Cash", "", "", "", "ATM withdrawal", "", "", "")
@@ -52,5 +52,33 @@ object TransactionCsvTemplate {
                 writer.appendLine(row.joinToString(",") { CsvTable.escape(it) })
             }
         }
+    }
+
+    /** The downloadable Excel template: a Transactions sheet with examples and a short Guide sheet. */
+    fun writeXlsx(outputStream: OutputStream) {
+        val transactions = XlsxSheet(
+            name = "Transactions",
+            rows = listOf(HEADER) + EXAMPLE_ROWS,
+            numberColumns = setOf(2),
+            columnWidths = listOf(13, 11, 12, 16, 16, 16, 16, 16, 24, 15, 14, 8)
+        )
+        val guide = XlsxSheet(
+            name = "Guide",
+            rows = listOf(
+                listOf("Column", "What to enter"),
+                listOf("Date", "Required. Like 2026-01-15 or 15/01/2026."),
+                listOf("Amount", "Required. A positive number. Negative also works for expenses."),
+                listOf("Type", "Expense, Income or Transfer. Optional."),
+                listOf("Account", "Account name. Created if it does not exist."),
+                listOf("To Account", "Only for transfers."),
+                listOf("Category / Subcategory", "Created if missing. Optional."),
+                listOf("Payee, Notes, Payment Method, Tags", "Optional. Separate several tags with ;"),
+                listOf("Time", "Optional, like 14:30."),
+                listOf("", ""),
+                listOf("Tip", "Delete the example rows, then add yours. Your own column names also work: Moneta lets you match them.")
+            ),
+            columnWidths = listOf(34, 80)
+        )
+        XlsxWriter.write(outputStream, listOf(transactions, guide))
     }
 }

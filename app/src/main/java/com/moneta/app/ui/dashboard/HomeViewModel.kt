@@ -89,7 +89,7 @@ class HomeViewModel @Inject constructor(
                 transactionRepository.observeTotalForTypeInRange(TransactionType.INCOME, range, "PKR"),
                 transactionRepository.observeTotalForTypeInRange(TransactionType.EXPENSE, range, "PKR"),
                 transactionRepository.observeTotalForTypeInRange(TransactionType.EXPENSE, previous, "PKR"),
-                transactionRepository.observeFiltered(range = range),
+                transactionRepository.observeRecent(5),
                 transactionRepository.observeTotalsByCategory(TransactionType.EXPENSE, range),
                 budgetProgressFlow,
                 categoriesFlow
@@ -169,6 +169,12 @@ class HomeViewModel @Inject constructor(
             expenseDeltaPercent = kotlin.math.abs(deltaPercent),
             isExpenseUp = deltaPercent > 0
         )
+    }
+
+    /** "See all": Records over all time. */
+    fun prepareRecordsAll() {
+        launchFilter.clear()
+        launchFilter.period = PeriodSelection(mode = PeriodMode.ALL)
     }
 
     /** Tells Records what to show when the user taps a Home figure (the caller then opens Records). */

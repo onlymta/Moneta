@@ -55,7 +55,6 @@ import com.moneta.app.ui.common.PeriodMode
 import com.moneta.app.ui.common.TransactionRowCard
 import com.moneta.app.ui.navigation.ACCOUNT_FORM_ADD_ROUTE
 import com.moneta.app.ui.navigation.MonetaDestination
-import com.moneta.app.ui.navigation.transactionDetailRoute
 import com.moneta.app.ui.theme.ExpenseRed
 import com.moneta.app.ui.theme.IncomeGreen
 import com.moneta.app.ui.theme.MoneyText
@@ -66,6 +65,7 @@ import com.moneta.app.ui.theme.WarningAmber
 fun HomeScreen(
     navController: NavHostController,
     userName: String = "",
+    onTransactionClick: (Long) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -78,6 +78,14 @@ fun HomeScreen(
             userName = userName,
             onPeriodChange = viewModel::onPeriodChange,
             onOpenAccount = { id -> navController.navigate(accountHistoryRoute(id)) },
+            onTransactionClick = onTransactionClick,
+            onSeeAll = {
+                viewModel.prepareRecordsAll()
+                navController.navigate(MonetaDestination.Transactions.route) {
+                    popUpTo(MonetaDestination.Home.route) { inclusive = false }
+                    launchSingleTop = true
+                }
+            },
             onOpenRecords = { type ->
                 viewModel.prepareRecords(type)
                 navController.navigate(MonetaDestination.Transactions.route) {
@@ -130,6 +138,8 @@ private fun HomeContent(
     userName: String,
     onPeriodChange: (com.moneta.app.ui.common.PeriodSelection) -> Unit,
     onOpenAccount: (Long) -> Unit,
+    onTransactionClick: (Long) -> Unit,
+    onSeeAll: () -> Unit,
     onOpenRecords: (TypeFilter?) -> Unit
 ) {
     LazyColumn(
@@ -181,6 +191,33 @@ private fun HomeContent(
                 caption = state.openingBalance?.let { "Opening " + it.formatted() + "  →  Closing " + (it + net).formatted() },
                 onClick = { onOpenRecords(null) }
             )
+        }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Last 5 transactions", style = MaterialTheme.typography.titleMedium)
+                TextButton(onClick = onSeeAll) { Text("See all") }
+            }
+        }
+        if (state.recentItems.isEmpty()) {
+            item {
+                Text(
+                    "Nothing recorded yet. Tap + to add your first transaction.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            items(state.recentItems, key = { it.transaction.id }) { item ->
+                TransactionRowCard(
+                    item = item,
+                    showDate = true,
+                    onClick = { onTransactionClick(item.transaction.id) }
+                )
+            }
         }
     }
 }

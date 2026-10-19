@@ -38,6 +38,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.moneta.app.ui.common.FabStyle
+import com.moneta.app.ui.common.MovableFab
+import com.moneta.app.ui.common.SubPageHeader
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.moneta.app.data.local.entity.CategoryType
@@ -47,6 +50,7 @@ import com.moneta.app.ui.theme.MonetaSpacing
 
 @Composable
 fun CategoriesScreen(
+    onBack: (() -> Unit)?,
     onAddCategory: (CategoryType) -> Unit,
     onEditCategory: (Long) -> Unit,
     onAddSubcategory: (CategoryType, Long) -> Unit,
@@ -55,11 +59,14 @@ fun CategoriesScreen(
     val state by viewModel.uiState.collectAsState()
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Categories") }) },
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
+        topBar = { SubPageHeader("Categories", onBack) },
         floatingActionButton = {
-            FloatingActionButton(onClick = { onAddCategory(state.selectedType) }) {
-                Icon(Icons.Filled.Add, contentDescription = "Add category")
-            }
+            MovableFab(
+                onClick = { onAddCategory(state.selectedType) },
+                contentDescription = "Add category",
+                style = FabStyle.OTHER
+            )
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {

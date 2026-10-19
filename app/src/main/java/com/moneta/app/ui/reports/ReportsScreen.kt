@@ -1,6 +1,15 @@
 package com.moneta.app.ui.reports
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.moneta.app.ui.common.PeriodMode
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,7 +57,7 @@ import com.moneta.app.ui.theme.MonetaSpacing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
+fun ReportsScreen(onOpenBudgets: () -> Unit = {}, viewModel: ReportsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -69,10 +78,9 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
         }
 
         when (state.tab) {
-            ReportTab.OVERVIEW -> OverviewTab(state)
-            ReportTab.SPENDING -> BreakdownTab(state.spendingSlices, "spending", state.period.label())
-            ReportTab.INCOME -> BreakdownTab(state.incomeSlices, "income", state.period.label())
-            ReportTab.TRENDS -> TrendsTab(state, viewModel::onBucketChoice)
+            ReportTab.OVERVIEW -> OverviewTab(state, viewModel::onTabSelected, onOpenBudgets)
+            ReportTab.SPENDING -> BreakdownTab(state.spendingSlices, "spending", state.period.label(), state)
+            ReportTab.INCOME -> BreakdownTab(state.incomeSlices, "income", state.period.label(), null)
             ReportTab.ACCOUNTS -> AccountsTab(state)
         }
     }
@@ -86,34 +94,72 @@ private val reportPadding = PaddingValues(
 )
 
 @Composable
-private fun OverviewTab(state: ReportsUiState) {
+private fun OverviewTab(state: ReportsUiState, onGoTo: (ReportTab) -> Unit, onOpenBudgets: () -> Unit) {
     LazyColumn(contentPadding = reportPadding, verticalArrangement = Arrangement.spacedBy(MonetaSpacing.lg)) {
         item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
-                StatCard("Income", state.income, IncomeGreen, Modifier.weight(1f))
-                StatCard("Expenses", state.expense, ExpenseRed, Modifier.weight(1f))
-            }
-        }
-        item {
             Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
-                    state.openingBalance?.let { opening ->
-                        Line("Opening balance", opening, Color.Unspecified)
-                    }
-                    Line(
-                        "Net change (income - expenses)",
-                        state.net,
-                        if (state.net.isNegative) ExpenseRed else IncomeGreen
+                Column(modifier = Modifier.padding(vertical = MonetaSpacing.sm)) {
+                    Text(
+                        "Summary for ${state.period.label()}",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(horizontal = MonetaSpacing.cardPadding, vertical = MonetaSpacing.xs)
                     )
                     state.openingBalance?.let { opening ->
-                        Divider(modifier = Modifier.padding(vertical = MonetaSpacing.xs))
-                        Line("Closing balance", opening + state.net, Color.Unspecified, bold = true)
+                        StatementRow("Opening balance", opening, Color.Unspecified, null, null)
+                    }
+                    StatementRow("Income", state.income, IncomeGreen, "+", { onGoTo(ReportTab.INCOME) })
+                    StatementRow("Expenses", state.expense, ExpenseRed, "-", { onGoTo(ReportTab.SPENDING) })
+                    state.closingBalance?.let { closing ->
+                        Divider(modifier = Modifier.padding(horizontal = MonetaSpacing.cardPadding, vertical = MonetaSpacing.xs))
+                        StatementRow(
+                            "Closing balance",
+                            closing,
+                            if (closing.isNegative) ExpenseRed else Color.Unspecified,
+                            null,
+                            { onGoTo(ReportTab.ACCOUNTS) },
+                            bold = true
+                        )
+                    }
+                    if (!state.pendingBudget.isZero) {
+                        StatementRow(
+                            "Budgeted, not yet spent",
+                            state.pendingBudget,
+                            MaterialTheme.colorScheme.tertiary,
+                            "-",
+                            onOpenBudgets
+                        )
+                    }
+                    state.expectedClosing?.let { expected ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = MonetaSpacing.sm, vertical = MonetaSpacing.xs)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = MonetaSpacing.md, vertical = MonetaSpacing.sm),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        if (state.pendingBudget.isZero) "Closing balance" else "Expected closing",
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        if (state.pendingBudget.isZero) "Nothing left to spend from budgets" else "After spending the rest of your budgets",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                                MoneyText(expected, color = if (expected.isNegative) ExpenseRed else IncomeGreen)
+                            }
+                        }
                     }
                     Text(
-                        "${state.transactionCount} transaction(s) in ${state.period.label()}",
-                        style = MaterialTheme.typography.labelMedium,
+                        "${state.transactionCount} transaction(s). Tap a figure to see its details.",
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = MonetaSpacing.xs)
+                        modifier = Modifier.padding(horizontal = MonetaSpacing.cardPadding, vertical = MonetaSpacing.xs)
                     )
                 }
             }
@@ -135,24 +181,6 @@ private fun OverviewTab(state: ReportsUiState) {
                 }
             }
         }
-        if (state.buckets.isNotEmpty() && (!state.income.isZero || !state.expense.isZero)) {
-            item { Text("Income vs expenses", style = MaterialTheme.typography.titleMedium) }
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
-                        ChartLegend()
-                        Spacer(Modifier.height(MonetaSpacing.sm))
-                        TrendBarChart(
-                            labels = state.buckets.map { it.shortLabel },
-                            incomeMinor = state.buckets.map { it.incomeMinor },
-                            expenseMinor = state.buckets.map { it.expenseMinor },
-                            currencyCode = state.currencyCode,
-                            labelEvery = state.labelEvery
-                        )
-                    }
-                }
-            }
-        }
         if (state.transactionCount == 0) {
             item {
                 Text(
@@ -160,6 +188,41 @@ private fun OverviewTab(state: ReportsUiState) {
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
+        }
+    }
+}
+
+/** One line of the summary statement; tappable when [onClick] is given. */
+@Composable
+private fun StatementRow(
+    label: String,
+    amount: Money,
+    color: Color,
+    sign: String?,
+    onClick: (() -> Unit)?,
+    bold: Boolean = false
+) {
+    val base = Modifier
+        .fillMaxWidth()
+        .let { if (onClick != null) it.clickable(onClick = onClick) else it }
+        .padding(horizontal = MonetaSpacing.cardPadding, vertical = 10.dp)
+    Row(modifier = base, verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.weight(1f)
+        )
+        if (sign != null) {
+            Text(sign + " ", style = MaterialTheme.typography.bodyLarge, color = color)
+        }
+        MoneyText(amount, color = color)
+        if (onClick != null) {
+            Text(
+                "  ›",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -191,20 +254,6 @@ private fun Line(label: String, amount: Money, color: Color, bold: Boolean = fal
             modifier = Modifier.weight(1f)
         )
         MoneyText(amount, color = color)
-    }
-}
-
-@Composable
-private fun ChartLegend() {
-    Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.lg), verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier
-            .size(10.dp)
-            .background(IncomeGreen, CircleShape))
-        Text("Income", style = MaterialTheme.typography.labelMedium)
-        Box(modifier = Modifier
-            .size(10.dp)
-            .background(ExpenseRed, CircleShape))
-        Text("Expenses", style = MaterialTheme.typography.labelMedium)
     }
 }
 
@@ -242,7 +291,8 @@ private fun SliceRow(slice: CategorySlice, showBar: Boolean) {
 }
 
 @Composable
-private fun BreakdownTab(slices: List<CategorySlice>, kind: String, periodLabel: String) {
+private fun BreakdownTab(slices: List<CategorySlice>, kind: String, periodLabel: String, spendingState: ReportsUiState?) {
+    var selectedId by remember { mutableStateOf<Long?>(null) }
     if (slices.isEmpty()) {
         Column(modifier = Modifier
             .fillMaxSize()
@@ -264,70 +314,105 @@ private fun BreakdownTab(slices: List<CategorySlice>, kind: String, periodLabel:
             }
         }
         items(slices, key = { "slice-${it.categoryId}-${it.name}" }) { slice ->
-            Card(modifier = Modifier.fillMaxWidth()) {
+            val sliceId = slice.categoryId
+            val canOpen = spendingState != null && sliceId != null
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .let { if (canOpen) it.clickable { selectedId = sliceId } else it }
+            ) {
                 Column(modifier = Modifier.padding(horizontal = MonetaSpacing.md, vertical = MonetaSpacing.sm)) {
                     SliceRow(slice, showBar = true)
                 }
             }
         }
+        if (spendingState != null) {
+            item {
+                Text(
+                    "Tap a category for a closer look.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+    val insight = selectedId?.let { spendingState?.insights?.get(it) }
+    if (insight != null && spendingState != null) {
+        InsightDialog(insight, spendingState.period.mode == PeriodMode.MONTH) { selectedId = null }
     }
 }
 
 @Composable
-private fun TrendsTab(state: ReportsUiState, onBucketChoice: (BucketChoice) -> Unit) {
-    LazyColumn(contentPadding = reportPadding, verticalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm), verticalAlignment = Alignment.CenterVertically) {
-                Text("Group by", style = MaterialTheme.typography.labelLarge)
-                BucketChoice.entries.forEach { choice ->
-                    FilterChip(
-                        selected = state.bucketChoice == choice,
-                        onClick = { onBucketChoice(choice) },
-                        label = { Text(choice.label) }
-                    )
-                }
-            }
-        }
-        item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
-                    ChartLegend()
-                    Spacer(Modifier.height(MonetaSpacing.sm))
-                    TrendBarChart(
-                        labels = state.buckets.map { it.shortLabel },
-                        incomeMinor = state.buckets.map { it.incomeMinor },
-                        expenseMinor = state.buckets.map { it.expenseMinor },
-                        currencyCode = state.currencyCode,
-                        labelEvery = state.labelEvery
-                    )
-                }
-            }
-        }
-        items(state.buckets.reversed(), key = { "bucket-${it.label}" }) { bucket ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
-                    Text(bucket.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(MonetaSpacing.xs))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Column {
-                            Text("Income", style = MaterialTheme.typography.labelMedium)
-                            MoneyText(Money(bucket.incomeMinor, state.currencyCode), color = IncomeGreen)
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Expenses", style = MaterialTheme.typography.labelMedium)
-                            MoneyText(Money(bucket.expenseMinor, state.currencyCode), color = ExpenseRed)
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("Net", style = MaterialTheme.typography.labelMedium)
-                            MoneyText(
-                                Money(bucket.netMinor, state.currencyCode),
-                                color = if (bucket.netMinor < 0) ExpenseRed else IncomeGreen
-                            )
-                        }
+private fun InsightDialog(insight: CategoryInsight, monthMode: Boolean, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        title = { Text(insight.name) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                InsightLine("Spent", insight.spent.formatted())
+                InsightLine("Average per day", insight.avgPerDay.formatted() + "  (" + insight.daysElapsed + " day(s))")
+                val prev = insight.prevSpent
+                if (prev != null) {
+                    InsightLine("Previous period", prev.formatted())
+                    val diff = insight.spent.minorUnits - prev.minorUnits
+                    val text = when {
+                        prev.minorUnits == 0L && diff > 0L -> "Nothing spent here last period"
+                        prev.minorUnits == 0L -> "No change"
+                        diff > 0L -> "Up " + (diff * 100 / prev.minorUnits) + "% on last period"
+                        diff < 0L -> "Down " + (-diff * 100 / prev.minorUnits) + "% on last period"
+                        else -> "Same as last period"
                     }
+                    Text(
+                        text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (diff > 0L) ExpenseRed else IncomeGreen
+                    )
+                }
+                Divider()
+                if (insight.isCurrent) {
+                    InsightLine(
+                        if (monthMode) "Expected next month (same pace)" else "Projected for this period",
+                        insight.projected.formatted()
+                    )
+                }
+                val budget = insight.budget
+                if (budget != null) {
+                    InsightLine("Budget", budget.formatted())
+                    val gap = budget.minorUnits - insight.projected.minorUnits
+                    val verdict = when {
+                        !insight.isCurrent && insight.spent.minorUnits > budget.minorUnits ->
+                            "Went over budget by " + Money(insight.spent.minorUnits - budget.minorUnits, budget.currencyCode).formatted()
+                        !insight.isCurrent ->
+                            "Stayed within budget, saved " + Money(gap, budget.currencyCode).formatted()
+                        gap < 0L ->
+                            "At this pace you will exceed the budget by " + Money(-gap, budget.currencyCode).formatted()
+                        else ->
+                            "At this pace you will save " + Money(gap, budget.currencyCode).formatted()
+                    }
+                    Text(
+                        verdict,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (verdict.contains("exceed") || verdict.contains("over")) ExpenseRed else IncomeGreen
+                    )
+                } else {
+                    Text(
+                        "No budget set for this category in this period.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
+    )
+}
+
+@Composable
+private fun InsightLine(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
     }
 }
 

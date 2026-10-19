@@ -42,6 +42,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.moneta.app.ui.common.FabStyle
+import com.moneta.app.ui.common.MovableFab
+import com.moneta.app.ui.common.SubPageHeader
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -52,6 +55,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun AccountsScreen(
+    onBack: (() -> Unit)?,
     onAddAccount: () -> Unit,
     onEditAccount: (Long) -> Unit,
     onOpenAccount: (Long) -> Unit,
@@ -72,10 +76,9 @@ fun AccountsScreen(
     }
 
     Scaffold(
+        topBar = { if (onBack != null) SubPageHeader("Accounts", onBack) },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddAccount) {
-                Icon(Icons.Filled.Add, contentDescription = "Add account")
-            }
+            MovableFab(onClick = onAddAccount, contentDescription = "Add account", style = FabStyle.OTHER)
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)

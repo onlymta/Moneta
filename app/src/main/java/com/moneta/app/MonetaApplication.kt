@@ -16,6 +16,7 @@ class MonetaApplication : Application() {
 
     @Inject lateinit var categoryDao: CategoryDao
     @Inject lateinit var recurringTransactionRepository: RecurringTransactionRepository
+    @Inject lateinit var autoBackupManager: com.moneta.app.data.backup.AutoBackupManager
 
     override fun onCreate() {
         super.onCreate()
@@ -34,6 +35,14 @@ class MonetaApplication : Application() {
             // occurrences appear even without opening the app) is the
             // natural next step rather than something faked here.
             recurringTransactionRepository.generateDueOccurrences()
+        }
+        ProcessLifecycleOwner.get().lifecycleScope.launch {
+            // Automatic local backup, when the chosen daily/weekly interval has passed.
+            try {
+                autoBackupManager.runIfDue()
+            } catch (e: Exception) {
+                // A failed automatic backup must never stop the app from starting.
+            }
         }
     }
 

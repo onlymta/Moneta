@@ -90,8 +90,6 @@ fun contributeGoalRoute(goalId: Long) = "contribute_goal/$goalId"
 const val BILLS_ROUTE = "bills"
 const val ADD_BILL_ROUTE = "add_bill"
 
-const val INSIGHTS_ROUTE = "insights"
-
 const val EXPORT_ROUTE = "export"
 const val IMPORT_ROUTE = "import"
 const val BACKUP_ROUTE = "backup"

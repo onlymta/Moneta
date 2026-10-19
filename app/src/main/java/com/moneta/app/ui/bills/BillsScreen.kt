@@ -34,6 +34,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.moneta.app.ui.common.FabStyle
+import com.moneta.app.ui.common.MovableFab
+import com.moneta.app.ui.common.SubPageHeader
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.moneta.app.data.repository.BillUrgency
@@ -46,6 +49,7 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 fun BillsScreen(
+    onBack: (() -> Unit)?,
     onAddBill: () -> Unit,
     viewModel: BillsViewModel = hiltViewModel()
 ) {
@@ -64,11 +68,10 @@ fun BillsScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Bills") }) },
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
+        topBar = { SubPageHeader("Bills", onBack) },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddBill) {
-                Icon(Icons.Filled.Add, contentDescription = "Add bill")
-            }
+            MovableFab(onClick = onAddBill, contentDescription = "Add bill", style = FabStyle.OTHER)
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->

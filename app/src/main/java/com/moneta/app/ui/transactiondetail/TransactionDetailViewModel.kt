@@ -42,7 +42,13 @@ class TransactionDetailViewModel @Inject constructor(
             val transaction = transactionRepository.getById(transactionId) ?: return@launch
             val accountName = accountRepository.getById(transaction.accountId)?.name ?: "Unknown account"
             val toAccountName = transaction.toAccountId?.let { accountRepository.getById(it)?.name }
-            val categoryName = transaction.categoryId?.let { categoryRepository.getById(it)?.name }
+            val category = transaction.categoryId?.let { categoryRepository.getById(it) }
+            val parent = category?.parentCategoryId?.let { categoryRepository.getById(it) }
+            val categoryName = when {
+                category == null -> null
+                parent != null -> parent.name + " › " + category.name
+                else -> category.name
+            }
             _uiState.value = TransactionDetailUiState(
                 isLoading = false,
                 transaction = transaction,

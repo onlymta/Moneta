@@ -2,6 +2,7 @@ package com.moneta.app.ui.quickadd
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.moneta.app.core.money.AmountCalculator
 import com.moneta.app.core.money.Money
 import com.moneta.app.data.local.entity.CategoryType
 import com.moneta.app.data.local.entity.RecurrenceFrequency
@@ -78,6 +79,11 @@ data class QuickAddUiState(
     val savedMessage: String? = null,
     val addAnotherTick: Int = 0,
     val pickerStyle: PickerStyle = PickerStyle.DROPDOWN,
+    val saveAtTop: Boolean = false,
+    val pickersInRow: Boolean = false,
+    val pickersAboveAmount: Boolean = false,
+    val customKeypad: Boolean = false,
+    val notesAboveAmount: Boolean = false,
     val isSaving: Boolean = false,
     val saved: Boolean = false
 )
@@ -160,6 +166,11 @@ class QuickAddViewModel @Inject constructor(
             savedMessage = f.savedMessage,
             addAnotherTick = f.addAnotherTick,
             pickerStyle = prefs.pickerStyle,
+            saveAtTop = prefs.formSaveAtTop,
+            pickersInRow = prefs.formPickersInRow,
+            pickersAboveAmount = prefs.formPickersAboveAmount,
+            customKeypad = prefs.formCustomKeypad,
+            notesAboveAmount = prefs.formNotesAboveAmount,
             isSaving = f.isSaving,
             saved = f.saved
         )
@@ -182,6 +193,18 @@ class QuickAddViewModel @Inject constructor(
         form.update {
             it.copy(
                 amountInput = singleDot.take(12),
+                amountError = null,
+                formError = null,
+                savedMessage = null
+            )
+        }
+    }
+
+    /** Used by the in-app keypad, which builds the text itself (digits, a dot and + - × ÷). */
+    fun onAmountExpressionChange(expression: String) {
+        form.update {
+            it.copy(
+                amountInput = expression.take(40),
                 amountError = null,
                 formError = null,
                 savedMessage = null
@@ -229,6 +252,16 @@ class QuickAddViewModel @Inject constructor(
 
     val isEditing: Boolean get() = editingTransactionId != null
 
+    /** A plain number, or a calculation like 250+80×2, turned into the amount to save. */
+    private fun resolveAmount(input: String): Money? {
+        val text = if (AmountCalculator.hasOperator(input)) {
+            AmountCalculator.evaluateToPlainString(input) ?: return null
+        } else {
+            input
+        }
+        return Money.fromDecimalInput(text, DEFAULT_CURRENCY)
+    }
+
     fun save(onSaved: () -> Unit, addAnother: Boolean = false) {
         val state = uiState.value
         if (state.isSaving) return
@@ -237,7 +270,7 @@ class QuickAddViewModel @Inject constructor(
             form.update { it.copy(formError = "Add an account first (More \u2192 Accounts).") }
             return
         }
-        val amount = Money.fromDecimalInput(state.amountInput, DEFAULT_CURRENCY)
+        val amount = resolveAmount(state.amountInput)
         if (amount == null || amount.isZero) {
             form.update { it.copy(amountError = "Enter an amount.") }
             return

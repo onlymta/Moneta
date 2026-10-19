@@ -1,0 +1,12 @@
+# Baseline profile: tells Android to pre-compile the app's startup and scrolling code,
+# which makes launch and first screens noticeably faster.
+HSPLandroidx/compose/**;->**(**)**
+HSPLandroidx/lifecycle/**;->**(**)**
+HSPLandroidx/navigation/**;->**(**)**
+HSPLandroidx/room/**;->**(**)**
+HSPLandroidx/datastore/**;->**(**)**
+HSPLcom/moneta/app/**;->**(**)**
+Landroidx/compose/**;
+Landroidx/lifecycle/**;
+Landroidx/navigation/**;
+Lcom/moneta/app/**;

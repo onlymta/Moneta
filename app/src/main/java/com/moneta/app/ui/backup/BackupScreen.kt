@@ -4,13 +4,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -18,12 +21,23 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.moneta.app.data.settings.BackupFrequency
+import com.moneta.app.ui.common.SubPageHeader
 import com.moneta.app.ui.theme.MonetaSpacing
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+private fun formatWhen(millis: Long): String =
+    Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a"))
 
 @Composable
-fun BackupScreen(viewModel: BackupViewModel = hiltViewModel()) {
+fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
 
     val createLauncher = rememberLauncherForActivityResult(
@@ -34,63 +48,123 @@ fun BackupScreen(viewModel: BackupViewModel = hiltViewModel()) {
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let { viewModel.requestRestore(it.toString()) } }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(MonetaSpacing.screenHorizontal),
-        verticalArrangement = Arrangement.spacedBy(MonetaSpacing.lg)
-    ) {
-        Text("Backup & Restore", style = MaterialTheme.typography.titleLarge)
-
-        Column {
-            Text("Local backup", style = MaterialTheme.typography.bodyLarge)
-            Spacer(Modifier.height(MonetaSpacing.xs))
-            Text(
-                "Saves everything - accounts, categories, transactions, budgets, goals, and bills - to a single file you choose the location for. This is separate from any cloud backup, which isn't set up yet.",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Button(
-            onClick = { createLauncher.launch(viewModel.defaultBackupFileName()) },
-            enabled = !state.isWorking,
-            modifier = Modifier.fillMaxWidth()
+    Column(modifier = Modifier.fillMaxSize()) {
+        SubPageHeader(title = "Backup & restore", onBack = onBack)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = MonetaSpacing.screenHorizontal, vertical = MonetaSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(MonetaSpacing.md)
         ) {
-            Text("Create backup")
-        }
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(MonetaSpacing.cardPadding),
+                    verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
+                ) {
+                    Text("Your data file", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Everything in one file you save wherever you like.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                        Button(
+                            onClick = { createLauncher.launch(viewModel.defaultBackupFileName()) },
+                            enabled = !state.isWorking,
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Download backup") }
+                        OutlinedButton(
+                            onClick = { restoreLauncher.launch(arrayOf("*/*")) },
+                            enabled = !state.isWorking,
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Restore") }
+                    }
+                }
+            }
 
-        OutlinedButton(
-            onClick = { restoreLauncher.launch(arrayOf("*/*")) },
-            enabled = !state.isWorking,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Restore from backup")
-        }
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(MonetaSpacing.cardPadding),
+                    verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
+                ) {
+                    Text("Automatic backup", style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                        BackupFrequency.entries.forEach { option ->
+                            FilterChip(
+                                selected = state.frequency == option,
+                                onClick = { viewModel.setFrequency(option) },
+                                label = {
+                                    Text(
+                                        when (option) {
+                                            BackupFrequency.OFF -> "Off"
+                                            BackupFrequency.DAILY -> "Daily"
+                                            BackupFrequency.WEEKLY -> "Weekly"
+                                        }
+                                    )
+                                }
+                            )
+                        }
+                    }
+                    Text(
+                        "Saved on this phone when you open the app and the time is due. The latest 7 are kept. " +
+                            "They are removed if you uninstall the app, so also download a copy now and then.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        if (state.lastAutoBackupAt > 0L) "Last automatic backup: " + formatWhen(state.lastAutoBackupAt)
+                        else "No automatic backup yet.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    OutlinedButton(
+                        onClick = viewModel::backupNow,
+                        enabled = !state.isWorking,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Back up now") }
 
-        state.lastMessage?.let {
-            Text(it, style = MaterialTheme.typography.bodyLarge)
-        }
+                    state.localBackups.forEach { backup ->
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(formatWhen(backup.modifiedAt), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                Text(
+                                    (backup.sizeBytes / 1024L).coerceAtLeast(1L).toString() + " KB",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            TextButton(onClick = { viewModel.requestRestoreLocal(backup.name) }) { Text("Restore") }
+                            TextButton(onClick = { viewModel.deleteLocal(backup.name) }) { Text("Delete") }
+                        }
+                    }
+                }
+            }
 
-        Column {
-            Text("Cloud backup", style = MaterialTheme.typography.bodyLarge)
-            Spacer(Modifier.height(MonetaSpacing.xs))
-            Text(
-                if (state.isCloudConnected) {
-                    "Connected to ${state.cloudProviderName}."
-                } else {
-                    "Not connected. ${state.cloudProviderName} support needs a Google Cloud project and OAuth client that only Moneta's publisher can set up - this button is honest about that rather than pretending to work."
-                },
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        OutlinedButton(
-            onClick = viewModel::connectCloud,
-            enabled = !state.isCloudConnected,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (state.isCloudConnected) "Connected" else "Connect ${state.cloudProviderName}")
+            state.lastMessage?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(MonetaSpacing.cardPadding),
+                    verticalArrangement = Arrangement.spacedBy(MonetaSpacing.xs)
+                ) {
+                    Text("Cloud backup", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (state.isCloudConnected) "Connected to ${state.cloudProviderName}."
+                        else "Not available yet. ${state.cloudProviderName} needs a Google Cloud setup by the app's publisher.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedButton(
+                        onClick = viewModel::connectCloud,
+                        enabled = !state.isCloudConnected,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (state.isCloudConnected) "Connected" else "Connect ${state.cloudProviderName}")
+                    }
+                }
+            }
         }
     }
 
@@ -100,7 +174,7 @@ fun BackupScreen(viewModel: BackupViewModel = hiltViewModel()) {
             title = { Text("Replace all current data?") },
             text = {
                 Text(
-                    "Restoring will replace every account, category, transaction, budget, goal, and bill currently in Moneta with what's in this backup file. This can't be undone from within the app - make sure this is the backup you want."
+                    "Restoring replaces every account, category, transaction, budget, goal and bill in Moneta with what is in this backup. This can't be undone, so download a backup of your current data first if unsure."
                 )
             },
             confirmButton = {

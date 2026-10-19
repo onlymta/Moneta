@@ -58,4 +58,24 @@ class SettingsViewModel @Inject constructor(
     fun setTabOrder(order: List<String>) = viewModelScope.launch { settingsRepository.setTabOrder(order) }
 
     fun setHiddenTabs(hidden: Set<String>) = viewModelScope.launch { settingsRepository.setHiddenTabs(hidden) }
+
+    fun setDisplayCurrency(code: String) = viewModelScope.launch { settingsRepository.setDisplayCurrency(code) }
+
+    fun setShowCurrencySymbol(show: Boolean) = viewModelScope.launch { settingsRepository.setShowCurrencySymbol(show) }
+
+    fun setFormSaveAtTop(on: Boolean) = viewModelScope.launch { settingsRepository.setFormSaveAtTop(on) }
+
+    fun setFormPickersInRow(on: Boolean) = viewModelScope.launch { settingsRepository.setFormPickersInRow(on) }
+
+    fun setFormPickersAboveAmount(on: Boolean) = viewModelScope.launch { settingsRepository.setFormPickersAboveAmount(on) }
+
+    fun setFormCustomKeypad(on: Boolean) = viewModelScope.launch { settingsRepository.setFormCustomKeypad(on) }
+
+    fun setFormNotesAboveAmount(on: Boolean) = viewModelScope.launch { settingsRepository.setFormNotesAboveAmount(on) }
+
+    fun setAutoBackupFrequency(frequency: com.moneta.app.data.settings.BackupFrequency) =
+        viewModelScope.launch { settingsRepository.setAutoBackupFrequency(frequency) }
+
+    fun setReminder(enabled: Boolean, hour: Int, minute: Int) =
+        viewModelScope.launch { settingsRepository.setReminder(enabled, hour, minute) }
 }

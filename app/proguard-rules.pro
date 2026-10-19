@@ -1,3 +1,6 @@
-# Phase 1 has no reflection-heavy libraries beyond Room/Hilt, which ship
-# their own consumer ProGuard rules. Add app-specific keep rules here as
-# later phases introduce things like PDF/Excel export libraries that need them.
+# Room, Hilt and Compose ship their own consumer rules. Nothing else here uses reflection.
+-dontwarn org.slf4j.**
+-assumenosideeffects class android.util.Log {
+    public static int d(...);
+    public static int v(...);
+}

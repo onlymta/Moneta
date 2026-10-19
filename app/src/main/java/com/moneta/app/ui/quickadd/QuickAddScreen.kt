@@ -78,6 +78,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.moneta.app.core.money.AmountCalculator
 import com.moneta.app.data.local.entity.TransactionType
 import com.moneta.app.data.repository.Account
 import com.moneta.app.data.repository.Category
@@ -112,7 +113,7 @@ fun QuickAddScreen(
 
     val amountFocus = remember { FocusRequester() }
     LaunchedEffect(state.addAnotherTick) {
-        if (transactionId == null) {
+        if (transactionId == null && !state.customKeypad) {
             try {
                 amountFocus.requestFocus()
             } catch (e: Exception) {
@@ -157,6 +158,29 @@ fun QuickAddScreen(
                     IconButton(onClick = onDone) {
                         Icon(Icons.Filled.Close, contentDescription = "Close")
                     }
+                },
+                actions = {
+                    if (state.saveAtTop) {
+                        if (!isEditing) {
+                            TextButton(
+                                onClick = { viewModel.save(onSaved = onDone, addAnother = true) },
+                                enabled = !state.isSaving
+                            ) { Text("+ Another") }
+                        }
+                        Button(
+                            onClick = {
+                                viewModel.save(onSaved = {
+                                    Toast.makeText(context, successText, Toast.LENGTH_SHORT).show()
+                                    onDone()
+                                })
+                            },
+                            enabled = !state.isSaving,
+                            colors = ButtonDefaults.buttonColors(containerColor = accent),
+                            modifier = Modifier.padding(end = MonetaSpacing.sm)
+                        ) {
+                            Text(if (isEditing) "Save changes" else if (state.isFutureDate) "Schedule" else "Save")
+                        }
+                    }
                 }
             )
         }
@@ -174,77 +198,113 @@ fun QuickAddScreen(
                     .padding(horizontal = MonetaSpacing.screenHorizontal, vertical = MonetaSpacing.md),
                 verticalArrangement = Arrangement.spacedBy(MonetaSpacing.md)
             ) {
-                TypeSelector(state.type, onSelect = viewModel::onTypeChange)
-
-                OutlinedTextField(
-                    value = state.amountInput,
-                    onValueChange = viewModel::onAmountChange,
-                    placeholder = {
-                        Text("0", style = MaterialTheme.typography.displaySmall)
-                    },
-                    prefix = { Text("PKR ", style = MaterialTheme.typography.titleMedium) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    textStyle = MaterialTheme.typography.displaySmall.copy(color = accent),
-                    isError = state.amountError != null,
-                    supportingText = state.amountError?.let { message -> { Text(message) } },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(amountFocus)
-                )
-
-                state.savedMessage?.let { message ->
-                    Text(message, style = MaterialTheme.typography.bodyMedium, color = IncomeGreen)
-                }
-
                 val isTransfer = state.type == TransactionType.TRANSFER
                 val dropdown = state.pickerStyle == PickerStyle.DROPDOWN
                 val selectedSub = state.subcategoryOptions.firstOrNull { it.id == state.selectedCategoryId }
                 val topSelectedId = selectedSub?.parentCategoryId ?: state.selectedCategoryId
+                val inRow = state.pickersInRow && dropdown
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    SectionLabel(if (isTransfer) "Accounts" else "Account and category")
-                    TextButton(onClick = {
-                        viewModel.setPickerStyle(if (dropdown) PickerStyle.CHIPS else PickerStyle.DROPDOWN)
-                    }) {
-                        Text(if (dropdown) "Show as chips" else "Show as pop-up list")
-                    }
-                }
-
-                if (isTransfer) {
-                    AccountPicker("From account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
-                    AccountPicker(
-                        "To account",
-                        state.accounts.filter { it.id != state.selectedAccountId },
-                        state.selectedToAccountId,
-                        dropdown,
-                        viewModel::onToAccountSelected
-                    )
-                } else {
-                    AccountPicker("Account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
-                    CategoryPicker("Category", state.topLevelCategories, topSelectedId, dropdown, viewModel::onCategorySelected)
-                    if (state.subcategoryOptions.isNotEmpty()) {
-                        CategoryPicker(
-                            "Subcategory (optional)",
-                            state.subcategoryOptions,
-                            selectedSub?.id,
-                            dropdown,
-                            viewModel::onCategorySelected
+                val amountBlock: @Composable () -> Unit = {
+                    if (state.customKeypad) {
+                        AmountDisplay(
+                            expression = state.amountInput,
+                            accent = accent,
+                            error = state.amountError
+                        )
+                    } else {
+                        OutlinedTextField(
+                            value = state.amountInput,
+                            onValueChange = viewModel::onAmountChange,
+                            placeholder = {
+                                Text("0", style = MaterialTheme.typography.displaySmall)
+                            },
+                            prefix = { Text(com.moneta.app.core.money.DisplayCurrency.entryPrefix(), style = MaterialTheme.typography.titleMedium) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            textStyle = MaterialTheme.typography.displaySmall.copy(color = accent),
+                            isError = state.amountError != null,
+                            supportingText = state.amountError?.let { message -> { Text(message) } },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(amountFocus)
                         )
                     }
+                    state.savedMessage?.let { message ->
+                        Text(message, style = MaterialTheme.typography.bodyMedium, color = IncomeGreen)
+                    }
                 }
 
-                OutlinedTextField(
-                    value = state.notes,
-                    onValueChange = viewModel::onNotesChange,
-                    placeholder = { Text("Notes or description (optional)") },
-                    maxLines = 3,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                val pickersBlock: @Composable () -> Unit = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        SectionLabel(if (isTransfer) "Accounts" else "Account and category")
+                        TextButton(onClick = {
+                            viewModel.setPickerStyle(if (dropdown) PickerStyle.CHIPS else PickerStyle.DROPDOWN)
+                        }) {
+                            Text(if (dropdown) "Show as chips" else "Show as pop-up list")
+                        }
+                    }
+
+                    if (isTransfer) {
+                        val toAccounts = state.accounts.filter { it.id != state.selectedAccountId }
+                        if (inRow) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                                Box(modifier = Modifier.weight(1f)) {
+                                    AccountPicker("From", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
+                                }
+                                Box(modifier = Modifier.weight(1f)) {
+                                    AccountPicker("To", toAccounts, state.selectedToAccountId, dropdown, viewModel::onToAccountSelected)
+                                }
+                            }
+                        } else {
+                            AccountPicker("From account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
+                            AccountPicker("To account", toAccounts, state.selectedToAccountId, dropdown, viewModel::onToAccountSelected)
+                        }
+                    } else {
+                        if (inRow) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                                Box(modifier = Modifier.weight(1f)) {
+                                    AccountPicker("Account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
+                                }
+                                Box(modifier = Modifier.weight(1f)) {
+                                    CategoryPicker("Category", state.topLevelCategories, topSelectedId, dropdown, viewModel::onCategorySelected)
+                                }
+                            }
+                        } else {
+                            AccountPicker("Account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
+                            CategoryPicker("Category", state.topLevelCategories, topSelectedId, dropdown, viewModel::onCategorySelected)
+                        }
+                        if (state.subcategoryOptions.isNotEmpty()) {
+                            CategoryPicker(
+                                "Subcategory (optional)",
+                                state.subcategoryOptions,
+                                selectedSub?.id,
+                                dropdown,
+                                viewModel::onCategorySelected
+                            )
+                        }
+                    }
+                }
+
+                val notesBlock: @Composable () -> Unit = {
+                    OutlinedTextField(
+                        value = state.notes,
+                        onValueChange = viewModel::onNotesChange,
+                        placeholder = { Text("Notes or description (optional)") },
+                        maxLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                TypeSelector(state.type, onSelect = viewModel::onTypeChange)
+                if (state.pickersAboveAmount) pickersBlock()
+                if (state.notesAboveAmount) notesBlock()
+                amountBlock()
+                if (!state.pickersAboveAmount) pickersBlock()
+                if (!state.notesAboveAmount) notesBlock()
 
                 // --- When: one tappable date and one tappable time, both showing "now" until changed ---
                 Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
@@ -273,7 +333,15 @@ fun QuickAddScreen(
                 }
             }
 
-            Surface(tonalElevation = 3.dp) {
+            if (state.customKeypad) {
+                CalculatorKeypad(
+                    onKey = { key ->
+                        viewModel.onAmountExpressionChange(applyKeypadKey(state.amountInput, key))
+                    }
+                )
+            }
+
+            if (!state.saveAtTop) Surface(tonalElevation = 3.dp) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -640,6 +708,112 @@ private fun CategoryPicker(
                     }
                 )
             }
+        }
+    }
+}
+
+/** Shows the typed amount (or calculation) big, with the running result underneath. */
+@Composable
+private fun AmountDisplay(expression: String, accent: Color, error: String?) {
+    val result = if (AmountCalculator.hasOperator(expression)) AmountCalculator.evaluateToPlainString(expression) else null
+    Surface(
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(horizontal = MonetaSpacing.md, vertical = MonetaSpacing.sm)) {
+            Text(
+                (com.moneta.app.core.money.DisplayCurrency.entryPrefix() + " " +
+                    (if (expression.isEmpty()) "0" else expression.replace('-', '−'))).trim(),
+                style = MaterialTheme.typography.displaySmall,
+                color = accent,
+                maxLines = 2
+            )
+            if (result != null) {
+                Text(
+                    "= " + result,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (error != null) {
+                Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+}
+
+/** Applies one keypad press to the current amount text. */
+private fun applyKeypadKey(current: String, key: String): String {
+    return when (key) {
+        "C" -> ""
+        "<" -> current.dropLast(1)
+        "=" -> AmountCalculator.evaluateToPlainString(current) ?: current
+        "." -> {
+            val lastNumber = current.takeLastWhile { !AmountCalculator.isOperator(it) }
+            when {
+                lastNumber.contains('.') -> current
+                lastNumber.isEmpty() -> current + "0."
+                else -> current + "."
+            }
+        }
+        "+", "-", "×", "÷" -> {
+            when {
+                current.isEmpty() -> current
+                AmountCalculator.isOperator(current.last()) -> current.dropLast(1) + key
+                else -> current + key
+            }
+        }
+        else -> if (current.length >= 40) current else current + key
+    }
+}
+
+@Composable
+private fun CalculatorKeypad(onKey: (String) -> Unit) {
+    val rows = listOf(
+        listOf("7", "8", "9", "÷"),
+        listOf("4", "5", "6", "×"),
+        listOf("1", "2", "3", "-"),
+        listOf(".", "0", "<", "+")
+    )
+    Surface(tonalElevation = 2.dp) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = MonetaSpacing.sm, vertical = MonetaSpacing.xs),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            rows.forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    row.forEach { key ->
+                        KeypadKey(key, Modifier.weight(1f), onKey)
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                KeypadKey("C", Modifier.weight(1f), onKey)
+                KeypadKey("=", Modifier.weight(3f), onKey)
+            }
+        }
+    }
+}
+
+@Composable
+private fun KeypadKey(key: String, modifier: Modifier, onKey: (String) -> Unit) {
+    val isOp = key in listOf("÷", "×", "-", "+", "=")
+    val label = when (key) {
+        "<" -> "⌫"
+        "-" -> "−"
+        else -> key
+    }
+    Surface(
+        onClick = { onKey(key) },
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+        color = if (isOp) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+        modifier = modifier.height(42.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(label, style = MaterialTheme.typography.titleLarge)
         }
     }
 }

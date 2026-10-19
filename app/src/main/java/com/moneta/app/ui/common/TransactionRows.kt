@@ -8,7 +8,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
+import androidx.compose.material3.Surface
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -112,36 +117,47 @@ fun TransactionRowCard(
                 Text(
                     item.title,
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    item.subtitle,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Spacer(Modifier.height(3.dp))
+                // The account sits in a little tag so it never reads like the description below it.
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Text(
+                        item.subtitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
                 item.detail?.let { detail ->
                     Text(
                         detail,
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontStyle = FontStyle.Italic,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 3.dp)
                     )
                 }
             }
             Spacer(Modifier.width(MonetaSpacing.sm))
             Column(horizontalAlignment = Alignment.End) {
-                MoneyText(shown, color = color)
-                Text(
-                    if (showDate) t.date.format(DateTimeFormatter.ofPattern("d MMM")) + " · " + formatMinutes(t.timeMinutesSinceMidnight)
-                    else formatMinutes(t.timeMinutesSinceMidnight),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                MoneyText(shown, color = color, modifier = Modifier)
+                if (showDate) {
+                    Text(
+                        t.date.format(DateTimeFormatter.ofPattern("d MMM")),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
@@ -150,6 +166,7 @@ fun TransactionRowCard(
 /** "Tue, 13 Oct" header above each day's rows, with that day's net total on the right. */
 @Composable
 fun DayHeader(date: LocalDate, net: Money, modifier: Modifier = Modifier) {
+    val tint = if (net.isNegative) ExpenseRed else IncomeGreen
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -162,9 +179,15 @@ fun DayHeader(date: LocalDate, net: Money, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        MoneyText(
-            net,
-            color = if (net.isNegative) ExpenseRed else IncomeGreen
-        )
+        // The day's total is drawn as a tinted pill so it can't be mistaken for a transaction amount.
+        Surface(shape = RoundedCornerShape(50), color = tint.copy(alpha = 0.14f)) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Day ", style = MaterialTheme.typography.labelSmall, color = tint)
+                MoneyText(net, color = tint)
+            }
+        }
     }
 }

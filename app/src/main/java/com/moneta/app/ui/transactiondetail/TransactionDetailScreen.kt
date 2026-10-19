@@ -1,139 +1,153 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-
 package com.moneta.app.ui.transactiondetail
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.moneta.app.data.local.entity.TransactionType
+import com.moneta.app.ui.common.formatMinutes
 import com.moneta.app.ui.theme.ExpenseRed
 import com.moneta.app.ui.theme.IncomeGreen
 import com.moneta.app.ui.theme.MoneyText
 import com.moneta.app.ui.theme.MonetaSpacing
-import kotlinx.coroutines.launch
+import com.moneta.app.ui.theme.TransferGray
+import java.time.format.DateTimeFormatter
 
+/**
+ * A compact pop-up with everything about one transaction (including the time of day,
+ * which the list rows leave out) and Edit / Duplicate / Delete actions.
+ */
 @Composable
-fun TransactionDetailScreen(
+fun TransactionDetailPopup(
     transactionId: Long,
+    onDismiss: () -> Unit,
     onEdit: (Long) -> Unit,
-    onBack: () -> Unit,
-    viewModel: TransactionDetailViewModel = hiltViewModel()
+    viewModel: TransactionDetailViewModel = hiltViewModel(key = "detail-$transactionId")
 ) {
     LaunchedEffect(transactionId) { viewModel.load(transactionId) }
     val state by viewModel.uiState.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    var showDeleteConfirm by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var confirmDelete by remember { mutableStateOf(false) }
 
-    // Once soft-deleted, offer an undo snackbar then leave the screen (Section 9/31).
     LaunchedEffect(state.deleted) {
         if (state.deleted) {
-            val result = snackbarHostState.showSnackbar(
-                message = "Transaction deleted",
-                actionLabel = "Undo"
-            )
-            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
-                viewModel.undoDelete()
-            } else {
-                onBack()
-            }
+            Toast.makeText(context, "Transaction deleted", Toast.LENGTH_SHORT).show()
+            onDismiss()
         }
     }
-
     LaunchedEffect(state.duplicatedId) {
         if (state.duplicatedId != null) {
-            scope.launch { snackbarHostState.showSnackbar("Transaction duplicated") }
+            Toast.makeText(context, "Transaction duplicated", Toast.LENGTH_SHORT).show()
+            onDismiss()
         }
     }
 
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("Transaction") }) },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { padding ->
-        val transaction = state.transaction
-        if (state.isLoading || transaction == null) {
-            return@Scaffold
-        }
+    val transaction = state.transaction
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(24.dp), tonalElevation = 6.dp) {
+            if (state.isLoading || transaction == null) {
+                Text("Loading…", modifier = Modifier.padding(MonetaSpacing.xl))
+            } else {
+                val accent = when (transaction.type) {
+                    TransactionType.INCOME -> IncomeGreen
+                    TransactionType.EXPENSE -> ExpenseRed
+                    TransactionType.TRANSFER -> TransferGray
+                }
+                Column(
+                    modifier = Modifier.padding(MonetaSpacing.lg),
+                    verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
+                ) {
+                    Text(
+                        transaction.type.name.lowercase().replaceFirstChar { it.uppercase() },
+                        style = MaterialTheme.typography.labelLarge,
+                        color = accent
+                    )
+                    MoneyText(
+                        transaction.amount,
+                        color = accent,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(MonetaSpacing.xs))
+                    DetailRow("Category", state.categoryName ?: if (transaction.type == TransactionType.TRANSFER) "Transfer" else "Uncategorized")
+                    DetailRow("Account", state.accountName)
+                    state.toAccountName?.let { DetailRow("To account", it) }
+                    DetailRow(
+                        "When",
+                        transaction.date.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy")) + " · " +
+                            formatMinutes(transaction.timeMinutesSinceMidnight)
+                    )
+                    transaction.payee?.takeIf { it.isNotBlank() }?.let { DetailRow("Payee", it) }
+                    transaction.notes?.takeIf { it.isNotBlank() }?.let { DetailRow("Notes", it) }
+                    Spacer(Modifier.height(MonetaSpacing.xs))
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(MonetaSpacing.screenHorizontal),
-            verticalArrangement = Arrangement.spacedBy(MonetaSpacing.lg)
-        ) {
-            val amountColor = when (transaction.type) {
-                TransactionType.INCOME -> IncomeGreen
-                TransactionType.EXPENSE -> ExpenseRed
-                TransactionType.TRANSFER -> MaterialTheme.colorScheme.onSurfaceVariant
-            }
-            MoneyText(transaction.amount, color = amountColor)
-
-            DetailRow("Type", transaction.type.name.lowercase().replaceFirstChar { it.uppercase() })
-            DetailRow("Account", state.accountName)
-            state.toAccountName?.let { DetailRow("To account", it) }
-            state.categoryName?.let { DetailRow("Category", it) }
-            DetailRow("Date", transaction.date.toString())
-            transaction.payee?.let { DetailRow("Payee", it) }
-            transaction.notes?.let { DetailRow("Notes", it) }
-
-            Spacer(Modifier.height(0.dp))
-
-            Button(onClick = { onEdit(transactionId) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Edit")
-            }
-            OutlinedButton(onClick = viewModel::duplicate, modifier = Modifier.fillMaxWidth()) {
-                Text("Duplicate")
-            }
-            OutlinedButton(
-                onClick = { showDeleteConfirm = true },
-                modifier = Modifier.fillMaxWidth(),
-                colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = ExpenseRed)
-            ) {
-                Text("Delete")
+                    if (confirmDelete) {
+                        Text("Delete this transaction?", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                            TextButton(onClick = { confirmDelete = false }) { Text("Keep") }
+                            TextButton(onClick = viewModel::delete) {
+                                Text("Delete", color = ExpenseRed)
+                            }
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            ActionButton("Edit", Icons.Outlined.Edit) { onEdit(transactionId) }
+                            ActionButton("Duplicate", Icons.Outlined.ContentCopy) { viewModel.duplicate() }
+                            ActionButton("Delete", Icons.Outlined.Delete, ExpenseRed) { confirmDelete = true }
+                        }
+                    }
+                }
             }
         }
     }
+}
 
-    if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete this transaction?") },
-            text = { Text("You can undo this right after deleting.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDeleteConfirm = false
-                    viewModel.delete()
-                }) { Text("Delete") }
-            },
-            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
+@Composable
+private fun ActionButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified,
+    onClick: () -> Unit
+) {
+    TextButton(onClick = onClick) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = if (tint == androidx.compose.ui.graphics.Color.Unspecified) MaterialTheme.colorScheme.primary else tint
         )
+        Spacer(Modifier.width(4.dp))
+        Text(label, color = if (tint == androidx.compose.ui.graphics.Color.Unspecified) androidx.compose.ui.graphics.Color.Unspecified else tint)
     }
 }
 
@@ -141,9 +155,15 @@ fun TransactionDetailScreen(
 private fun DetailRow(label: String, value: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
     ) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyLarge)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(84.dp)
+        )
+        Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
     }
 }

@@ -50,6 +50,71 @@ object TransactionImportParser {
         TransactionCsvTemplate.COL_TIME to listOf("time", "timeofday")
     )
 
+    /** The fields a file can provide, in the order they are shown when matching columns. */
+    val FIELDS: List<String> = listOf(
+        TransactionCsvTemplate.COL_DATE,
+        TransactionCsvTemplate.COL_AMOUNT,
+        TransactionCsvTemplate.COL_TYPE,
+        TransactionCsvTemplate.COL_ACCOUNT,
+        TransactionCsvTemplate.COL_TO_ACCOUNT,
+        TransactionCsvTemplate.COL_CATEGORY,
+        TransactionCsvTemplate.COL_SUBCATEGORY,
+        TransactionCsvTemplate.COL_PAYEE,
+        TransactionCsvTemplate.COL_NOTES,
+        TransactionCsvTemplate.COL_PAYMENT_METHOD,
+        TransactionCsvTemplate.COL_TAGS,
+        TransactionCsvTemplate.COL_TIME
+    )
+
+    val REQUIRED_FIELDS: Set<String> = setOf(TransactionCsvTemplate.COL_DATE, TransactionCsvTemplate.COL_AMOUNT)
+
+    /** Which row holds the column headings: the first of the top rows that has both a date and an amount heading. */
+    fun detectHeaderRow(table: List<List<String>>): Int {
+        for (i in 0 until minOf(table.size, 15)) {
+            val keys = table[i].map { headerKey(it) }.toSet()
+            val hasDate = ALIASES[TransactionCsvTemplate.COL_DATE].orEmpty().any { it in keys }
+            val hasAmount = ALIASES[TransactionCsvTemplate.COL_AMOUNT].orEmpty().any { it in keys }
+            if (hasDate && hasAmount) return i
+        }
+        return 0
+    }
+
+    /**
+     * Matches the file's headings to Moneta's fields by name (ignoring case, spaces and punctuation).
+     * The result maps a field to the zero-based column that holds it; fields with no match are absent.
+     */
+    fun suggestMapping(header: List<String>): Map<String, Int> {
+        val headerIndex = HashMap<String, Int>()
+        header.forEachIndexed { index, name ->
+            val key = headerKey(name)
+            if (key.isNotEmpty() && !headerIndex.containsKey(key)) headerIndex[key] = index
+        }
+        val result = LinkedHashMap<String, Int>()
+        val used = HashSet<Int>()
+        FIELDS.forEach { field ->
+            for (alias in ALIASES[field].orEmpty()) {
+                val idx = headerIndex[alias]
+                if (idx != null && idx !in used) {
+                    result[field] = idx
+                    used += idx
+                    break
+                }
+            }
+        }
+        return result
+    }
+
+    /** Two transactions with the same key are treated as the same transaction already in the app. */
+    fun duplicateKey(
+        date: LocalDate,
+        amountMinor: Long,
+        type: TransactionType,
+        accountName: String,
+        toAccountName: String?
+    ): String =
+        date.toString() + "|" + amountMinor + "|" + type.name + "|" + normalizeImportName(accountName) +
+            "|" + normalizeImportName(toAccountName.orEmpty())
+
     private fun headerKey(raw: String): String =
         raw.removePrefix("﻿").lowercase().filter { it.isLetterOrDigit() }
 
@@ -188,7 +253,10 @@ object TransactionImportParser {
         table: List<List<String>>,
         existingAccounts: List<Account>,
         existingCategories: List<Category>,
-        defaultCurrencyCode: String
+        defaultCurrencyCode: String,
+        mapping: Map<String, Int>? = null,
+        existingKeys: Map<String, Int> = emptyMap(),
+        rowOffset: Int = 0
     ): ImportPreview {
         if (table.isEmpty()) {
             return ImportPreview(0, emptyList(), listOf(ImportIssue(1, "The file is empty.")), emptyList(), emptySet())
@@ -201,6 +269,10 @@ object TransactionImportParser {
         }
 
         fun columnIndex(name: String): Int? {
+            if (mapping != null) {
+                val chosen = mapping[name]
+                return if (chosen != null && chosen >= 0) chosen else null
+            }
             for (alias in ALIASES[name].orEmpty()) {
                 headerIndex[alias]?.let { return it }
             }
@@ -210,8 +282,8 @@ object TransactionImportParser {
         val missingColumns = listOf(TransactionCsvTemplate.COL_DATE, TransactionCsvTemplate.COL_AMOUNT)
             .filter { columnIndex(it) == null }
         if (missingColumns.isNotEmpty()) {
-            val message = "Couldn't find the ${missingColumns.joinToString(" and ")} column in the first row. " +
-                "Download the template to see the expected headers."
+            val message = "Couldn't find the ${missingColumns.joinToString(" and ")} column. " +
+                "Match it to a column of your file, or download the template to see the expected headings."
             return ImportPreview(0, emptyList(), listOf(ImportIssue(1, message)), emptyList(), emptySet())
         }
 
@@ -258,13 +330,15 @@ object TransactionImportParser {
             .toSet()
 
         val pending = mutableListOf<PendingImportRow>()
+        val duplicates = mutableListOf<PendingImportRow>()
+        val remainingExisting = HashMap<String, Int>(existingKeys)
         val errors = mutableListOf<ImportIssue>()
         val warnings = mutableListOf<ImportIssue>()
         val newCategoryLabels = linkedSetOf<String>()
         var guessedTypeCount = 0
 
         dataRows.forEachIndexed { dataIndex, row ->
-            val rowNumber = dataIndex + 2
+            val rowNumber = dataIndex + 2 + rowOffset
             if (row.all { it.isBlank() }) return@forEachIndexed
 
             val rowErrors = mutableListOf<String>()
@@ -361,20 +435,7 @@ object TransactionImportParser {
             }
             rowWarnings.forEach { warnings += ImportIssue(rowNumber, it) }
 
-            if (categoryTop != null) {
-                val categoryType = if (type == TransactionType.INCOME) CategoryType.INCOME else CategoryType.EXPENSE
-                val typeLabel = if (categoryType == CategoryType.INCOME) "Income" else "Expense"
-                val topKey = categoryType to normalizeImportName(categoryTop)
-                val parentId = topLevelIdByKey[topKey]
-                if (parentId == null) newCategoryLabels += "$typeLabel: $categoryTop"
-                if (categorySub != null) {
-                    val subExists = parentId != null &&
-                        subKeys.contains(Triple(categoryType, parentId, normalizeImportName(categorySub)))
-                    if (!subExists) newCategoryLabels += "$typeLabel: $categoryTop > $categorySub"
-                }
-            }
-
-            pending += PendingImportRow(
+            val candidate = PendingImportRow(
                 rowNumber = rowNumber,
                 type = type,
                 amount = parsedAmount.money,
@@ -393,6 +454,30 @@ object TransactionImportParser {
                     .filter { it.isNotEmpty() }
                     .distinct()
             )
+
+            // Already in the app? Each existing transaction can match only one row of the file.
+            val dupKey = duplicateKey(parsedDate.date, parsedAmount.money.minorUnits, type, accountName, toAccountName)
+            val left = remainingExisting[dupKey] ?: 0
+            if (left > 0) {
+                remainingExisting[dupKey] = left - 1
+                duplicates += candidate
+                return@forEachIndexed
+            }
+
+            if (categoryTop != null) {
+                val categoryType = if (type == TransactionType.INCOME) CategoryType.INCOME else CategoryType.EXPENSE
+                val typeLabel = if (categoryType == CategoryType.INCOME) "Income" else "Expense"
+                val topKey = categoryType to normalizeImportName(categoryTop)
+                val parentId = topLevelIdByKey[topKey]
+                if (parentId == null) newCategoryLabels += "$typeLabel: $categoryTop"
+                if (categorySub != null) {
+                    val subExists = parentId != null &&
+                        subKeys.contains(Triple(categoryType, parentId, normalizeImportName(categorySub)))
+                    if (!subExists) newCategoryLabels += "$typeLabel: $categoryTop > $categorySub"
+                }
+            }
+
+            pending += candidate
         }
 
         // Only accounts actually used by a surviving row are really "new".
@@ -423,6 +508,7 @@ object TransactionImportParser {
         return ImportPreview(
             dataRowCount = dataRows.count { row -> !row.all { it.isBlank() } },
             rows = pending,
+            duplicates = duplicates,
             errors = errors,
             warnings = warnings,
             newCategoryLabels = newCategoryLabels,

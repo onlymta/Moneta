@@ -38,6 +38,8 @@ data class PendingImportRow(
 data class ImportPreview(
     val dataRowCount: Int,
     val rows: List<PendingImportRow>,
+    /** Rows that match a transaction already in the app; they are not imported again. */
+    val duplicates: List<PendingImportRow> = emptyList(),
     /** Rows that cannot be imported at all (they will be skipped), with the reason. */
     val errors: List<ImportIssue>,
     /** Things that were fixed or filled in automatically, row by row. */

@@ -85,13 +85,30 @@ data class Money(
      * never for further arithmetic on the result.
      */
     fun formatted(locale: Locale = Locale.getDefault()): String {
-        val currency = runCatching { Currency.getInstance(currencyCode) }.getOrNull()
-        val format = NumberFormat.getCurrencyInstance(locale).apply {
-            if (currency != null) setCurrency(currency)
+        // The label comes from the user's display-currency setting; the number itself is unchanged.
+        // Building a NumberFormat is slow, so one is kept per thread and rebuilt only when the
+        // currency, symbol setting or language changes (lists format many amounts per frame).
+        val code = DisplayCurrency.code
+        val showSymbol = DisplayCurrency.showSymbol
+        val key = locale.toString() + "|" + code + "|" + showSymbol
+        val holder = formatCache.get() ?: FormatHolder().also { formatCache.set(it) }
+        if (holder.key != key || holder.format == null) {
+            val currency = runCatching { Currency.getInstance(code) }.getOrNull()
+            val fractionDigits = currency?.defaultFractionDigits?.coerceAtLeast(0) ?: 2
+            holder.divisor = Math.pow(10.0, fractionDigits.toDouble())
+            holder.format = if (!showSymbol) {
+                NumberFormat.getNumberInstance(locale).apply {
+                    minimumFractionDigits = fractionDigits
+                    maximumFractionDigits = fractionDigits
+                }
+            } else {
+                NumberFormat.getCurrencyInstance(locale).apply {
+                    if (currency != null) setCurrency(currency)
+                }
+            }
+            holder.key = key
         }
-        val fractionDigits = currency?.defaultFractionDigits?.coerceAtLeast(0) ?: 2
-        val divisor = Math.pow(10.0, fractionDigits.toDouble())
-        return format.format(minorUnits / divisor)
+        return holder.format?.format(minorUnits / holder.divisor).orEmpty()
     }
 
     /**
@@ -139,3 +156,11 @@ data class Money(
                 ?: runCatching { this.setScale(0, java.math.RoundingMode.HALF_UP).longValueExact() }.getOrNull()
     }
 }
+
+private class FormatHolder {
+    var key: String = ""
+    var format: NumberFormat? = null
+    var divisor: Double = 100.0
+}
+
+private val formatCache = ThreadLocal<FormatHolder>()

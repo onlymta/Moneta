@@ -3,6 +3,7 @@ package com.moneta.app.data.settings
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -12,6 +13,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** How often the app saves an automatic backup into its own storage. */
+enum class BackupFrequency { OFF, DAILY, WEEKLY }
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
@@ -64,7 +68,23 @@ data class AppPreferences(
     /** Left-to-right order of the main tabs, as keys: home, transactions, budgets, reports, accounts. */
     val tabOrder: List<String> = DEFAULT_TAB_ORDER,
     /** Tabs switched off in the bottom bar (they stay reachable from the side menu). */
-    val hiddenTabs: Set<String> = setOf("accounts")
+    val hiddenTabs: Set<String> = setOf("accounts"),
+    /** Currency shown on screen. (The stored amounts do not change; this only changes how they are labelled.) */
+    val displayCurrency: String = "PKR",
+    val showCurrencySymbol: Boolean = true,
+    // --- Record form customization ---
+    val formSaveAtTop: Boolean = false,
+    val formPickersInRow: Boolean = false,
+    val formPickersAboveAmount: Boolean = false,
+    val formCustomKeypad: Boolean = false,
+    val formNotesAboveAmount: Boolean = false,
+    // --- Reminders and backups ---
+    val reminderEnabled: Boolean = false,
+    val reminderHour: Int = 21,
+    val reminderMinute: Int = 0,
+    val autoBackupFrequency: BackupFrequency = BackupFrequency.OFF,
+    val lastAutoBackupAt: Long = 0L,
+    val dismissedAlertIds: Set<String> = emptySet()
 )
 
 val DEFAULT_TAB_ORDER = listOf("home", "transactions", "budgets", "reports", "accounts")
@@ -95,6 +115,19 @@ class SettingsRepository @Inject constructor(
         val SEEN_ALERTS = stringSetPreferencesKey("seen_alert_ids")
         val TAB_ORDER = stringPreferencesKey("tab_order")
         val HIDDEN_TABS = stringPreferencesKey("hidden_tabs")
+        val DISPLAY_CURRENCY = stringPreferencesKey("display_currency")
+        val SHOW_CURRENCY_SYMBOL = booleanPreferencesKey("show_currency_symbol")
+        val FORM_SAVE_TOP = booleanPreferencesKey("form_save_top")
+        val FORM_PICKERS_ROW = booleanPreferencesKey("form_pickers_row")
+        val FORM_PICKERS_ABOVE = booleanPreferencesKey("form_pickers_above")
+        val FORM_KEYPAD = booleanPreferencesKey("form_keypad")
+        val FORM_NOTES_ABOVE = booleanPreferencesKey("form_notes_above")
+        val REMINDER_ENABLED = booleanPreferencesKey("reminder_enabled")
+        val REMINDER_HOUR = intPreferencesKey("reminder_hour")
+        val REMINDER_MINUTE = intPreferencesKey("reminder_minute")
+        val AUTO_BACKUP_FREQUENCY = stringPreferencesKey("auto_backup_frequency")
+        val LAST_AUTO_BACKUP = longPreferencesKey("last_auto_backup_at")
+        val DISMISSED_ALERTS = stringSetPreferencesKey("dismissed_alert_ids")
     }
 
     val preferences: Flow<AppPreferences> = context.dataStore.data.map { prefs ->
@@ -124,7 +157,22 @@ class SettingsRepository @Inject constructor(
             tabOrder = parseTabOrder(prefs[Keys.TAB_ORDER]),
             hiddenTabs = prefs[Keys.HIDDEN_TABS]
                 ?.split(",")?.filter { it.isNotBlank() }?.toSet()
-                ?: if (prefs[Keys.SHOW_ACCOUNTS_IN_BAR] == true) emptySet() else setOf("accounts")
+                ?: if (prefs[Keys.SHOW_ACCOUNTS_IN_BAR] == true) emptySet() else setOf("accounts"),
+            displayCurrency = prefs[Keys.DISPLAY_CURRENCY] ?: "PKR",
+            showCurrencySymbol = prefs[Keys.SHOW_CURRENCY_SYMBOL] ?: true,
+            formSaveAtTop = prefs[Keys.FORM_SAVE_TOP] ?: false,
+            formPickersInRow = prefs[Keys.FORM_PICKERS_ROW] ?: false,
+            formPickersAboveAmount = prefs[Keys.FORM_PICKERS_ABOVE] ?: false,
+            formCustomKeypad = prefs[Keys.FORM_KEYPAD] ?: false,
+            formNotesAboveAmount = prefs[Keys.FORM_NOTES_ABOVE] ?: false,
+            reminderEnabled = prefs[Keys.REMINDER_ENABLED] ?: false,
+            reminderHour = prefs[Keys.REMINDER_HOUR] ?: 21,
+            reminderMinute = prefs[Keys.REMINDER_MINUTE] ?: 0,
+            autoBackupFrequency = prefs[Keys.AUTO_BACKUP_FREQUENCY]
+                ?.let { runCatching { BackupFrequency.valueOf(it) }.getOrNull() }
+                ?: BackupFrequency.OFF,
+            lastAutoBackupAt = prefs[Keys.LAST_AUTO_BACKUP] ?: 0L,
+            dismissedAlertIds = prefs[Keys.DISMISSED_ALERTS] ?: emptySet()
         )
     }
 
@@ -173,6 +221,33 @@ class SettingsRepository @Inject constructor(
     suspend fun setTabOrder(order: List<String>) = context.dataStore.edit { it[Keys.TAB_ORDER] = order.joinToString(",") }
 
     suspend fun setHiddenTabs(hidden: Set<String>) = context.dataStore.edit { it[Keys.HIDDEN_TABS] = hidden.joinToString(",") }
+
+    suspend fun setDisplayCurrency(code: String) = context.dataStore.edit { it[Keys.DISPLAY_CURRENCY] = code }
+
+    suspend fun setShowCurrencySymbol(show: Boolean) = context.dataStore.edit { it[Keys.SHOW_CURRENCY_SYMBOL] = show }
+
+    suspend fun setFormSaveAtTop(on: Boolean) = context.dataStore.edit { it[Keys.FORM_SAVE_TOP] = on }
+
+    suspend fun setFormPickersInRow(on: Boolean) = context.dataStore.edit { it[Keys.FORM_PICKERS_ROW] = on }
+
+    suspend fun setFormPickersAboveAmount(on: Boolean) = context.dataStore.edit { it[Keys.FORM_PICKERS_ABOVE] = on }
+
+    suspend fun setFormCustomKeypad(on: Boolean) = context.dataStore.edit { it[Keys.FORM_KEYPAD] = on }
+
+    suspend fun setFormNotesAboveAmount(on: Boolean) = context.dataStore.edit { it[Keys.FORM_NOTES_ABOVE] = on }
+
+    suspend fun setReminder(enabled: Boolean, hour: Int, minute: Int) = context.dataStore.edit {
+        it[Keys.REMINDER_ENABLED] = enabled
+        it[Keys.REMINDER_HOUR] = hour
+        it[Keys.REMINDER_MINUTE] = minute
+    }
+
+    suspend fun setAutoBackupFrequency(frequency: BackupFrequency) =
+        context.dataStore.edit { it[Keys.AUTO_BACKUP_FREQUENCY] = frequency.name }
+
+    suspend fun setLastAutoBackupAt(timeMillis: Long) = context.dataStore.edit { it[Keys.LAST_AUTO_BACKUP] = timeMillis }
+
+    suspend fun setDismissedAlertIds(ids: Set<String>) = context.dataStore.edit { it[Keys.DISMISSED_ALERTS] = ids }
 
     private fun parseTabOrder(raw: String?): List<String> {
         val saved = raw?.split(",")?.filter { it in DEFAULT_TAB_ORDER }?.distinct() ?: emptyList()

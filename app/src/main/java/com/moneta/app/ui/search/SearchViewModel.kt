@@ -66,7 +66,6 @@ private val SCREEN_SHORTCUTS = listOf(
     SearchHit("s-bills", "Bills", "Bills and due dates", "bills"),
     SearchHit("s-recurring", "Scheduled & recurring", "Repeating and future transactions", "recurring"),
     SearchHit("s-goals", "Goals", "Savings goals", "goals"),
-    SearchHit("s-insights", "Insights", "Spending insights", "insights"),
     SearchHit("s-notifications", "Notifications", "Budget, bill and schedule alerts", "notifications"),
     SearchHit("s-import", "Import", "Import transactions from a file", "import"),
     SearchHit("s-export", "Export", "Export to CSV or PDF", "export"),

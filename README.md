@@ -101,7 +101,7 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Accounts and categories named in the file but not in Moneta are created automatically (new accounts start at balance 0). A blank category goes to "Uncategorized"; a blank account uses your first account.
 - Nothing is saved until you review the summary (new accounts/categories, auto-fixes, skipped rows, totals, sample rows) and confirm.
 - Rows are skipped only if the date or amount is unusable, or a transfer has no/same destination account.
-- Not done: duplicate detection against existing records (importing the same file twice adds it twice).
+- Duplicates: rows matching an existing transaction (same date, amount, type and account) are skipped.
 
 ## v0.15.0 - overhaul
 
@@ -125,3 +125,22 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Settings > Advanced > Customization: show/hide and reorder the bottom-bar tabs.
 - Record rows show category > subcategory, account and notes; transfers are blue.
 - Cleaner whole-app search, and a new app icon.
+
+## v0.17.0 - settings, reports, import
+
+- Add transaction is customizable (Settings > Customization > Record form): save buttons on top, account and category in one row, pickers or notes above the amount, built-in calculator number pad.
+- Records: account tag and description look different, times only in the details pop-up (tap a record), compact one-row search/filter, new overview tile (Income, Expenses, Bal.), daily totals styled apart.
+- Plus buttons can be dragged and snap back; transaction and other (amber) plus buttons differ in colour. Home shows the last 5 records.
+- Budgets: new "Auto-set from <last month> spending" option. Insights removed.
+- Currency setting works (labels only) with a show/hide symbol switch.
+- Reports: Overview statement (opening, income, expenses, closing, budgeted-not-spent, expected closing) with tappable figures; category analysis pop-up in Spending; Trends tab and bar chart removed.
+- Category form is compact; each icon has its own colour.
+- Side-menu pages share one header with a back button. Notifications can be marked read/unread, deleted, or opened.
+- Import: Excel template, column matching for any file, duplicate detection, compact review. Export: Excel/PDF/CSV with your name and period in the file name.
+- Backup: "Download backup", automatic backups on this phone (daily/weekly, taken when the app is opened), restore from them.
+- Settings redesigned into areas. Daily reminder notification (inexact alarm; needs notification permission).
+
+## v0.17.1 - speed and size
+
+- Amount formatting is cached (it was rebuilding a number formatter for every amount on screen).
+- Release build: baseline profile for faster start, English-only library strings, trimmed packaging. CI now builds the release APK on every push; install that one (the debug APK is unshrunk and much slower).

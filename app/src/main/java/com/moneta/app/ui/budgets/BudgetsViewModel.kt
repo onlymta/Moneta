@@ -79,7 +79,10 @@ data class BudgetsUiState(
     val rolloverOn: Boolean = false,
     /** The latest earlier month that has budgets, offered as "copy from" when this month has none. */
     val copySourceMonth: LocalDate? = null,
-    val copySourceLabel: String? = null
+    val copySourceLabel: String? = null,
+    /** Last month's spending per top-level category (minor units), used to set budgets automatically. */
+    val prevMonthSpent: Map<Long, Long> = emptyMap(),
+    val prevMonthLabel: String = ""
 ) {
     val totalRemaining: Money get() = totalBudget - totalSpentOnBudgeted
     val hasAnyBudget: Boolean get() = lines.any { it.budgetId != null }
@@ -198,7 +201,9 @@ class BudgetsViewModel @Inject constructor(
                     spentOutsideBudgets = if (outside.isNegative) Money.zero(currency) else outside,
                     rolloverOn = prefs.rolloverBudgets,
                     copySourceMonth = copySource,
-                    copySourceLabel = copySource?.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
+                    copySourceLabel = copySource?.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
+                    prevMonthSpent = spentBefore.filter { it.value > 0L },
+                    prevMonthLabel = prevRange.start.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
                 )
             }
         }
@@ -234,6 +239,20 @@ class BudgetsViewModel @Inject constructor(
         val source = state.copySourceMonth ?: return
         val target = state.period.range().start
         viewModelScope.launch { budgetRepository.copyBudgets(source, target) }
+    }
+
+    /** Sets this month's budgets to what was actually spent in each category last month. */
+    fun autoSetFromPreviousSpending() {
+        val state = uiState.value
+        val target = state.period.range().start
+        val spent = state.prevMonthSpent
+        if (spent.isEmpty()) return
+        val currency = state.currencyCode
+        viewModelScope.launch {
+            spent.forEach { entry ->
+                budgetRepository.createCategoryBudgetForMonth(entry.key, Money(entry.value, currency), target)
+            }
+        }
     }
 
     /** Hands a category (and its subcategories) to Records so the user sees its transactions for this month. */

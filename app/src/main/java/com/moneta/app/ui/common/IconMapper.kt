@@ -175,4 +175,16 @@ object IconMapper {
         "favorite",
         "category",
     )
+
+    private val iconColors: List<String> = listOf(
+        "#E53935", "#FB8C00", "#F9A825", "#43A047", "#00897B", "#00ACC1",
+        "#1E88E5", "#3949AB", "#8E24AA", "#D81B60", "#6D4C41", "#546E7A"
+    )
+
+    /** Every icon has its own fixed, colorful tint, so categories need no separate color choice. */
+    fun colorFor(name: String): String {
+        val index = pickerNames.indexOf(name)
+        val safe = if (index >= 0) index else Math.abs(name.hashCode())
+        return iconColors[safe % iconColors.size]
+    }
 }

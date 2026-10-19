@@ -63,22 +63,22 @@ fun AddEditCategoryScreen(
         )
 
         Text("Icon", style = MaterialTheme.typography.labelMedium)
-        val selectedColor = Color(android.graphics.Color.parseColor(state.colorHex))
-        IconMapper.pickerNames.chunked(6).forEach { rowNames ->
+        IconMapper.pickerNames.chunked(7).forEach { rowNames ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 rowNames.forEach { name ->
                     val selected = state.icon == name
+                    val tint = Color(android.graphics.Color.parseColor(IconMapper.colorFor(name)))
                     Box(
                         modifier = Modifier
-                            .size(46.dp)
+                            .size(40.dp)
                             .clip(CircleShape)
-                            .background(if (selected) selectedColor.copy(alpha = 0.25f) else Color.Transparent)
+                            .background(if (selected) tint.copy(alpha = 0.28f) else tint.copy(alpha = 0.10f))
                             .border(
-                                width = if (selected) 2.dp else 1.dp,
-                                color = if (selected) selectedColor else MaterialTheme.colorScheme.outlineVariant,
+                                width = if (selected) 2.dp else 0.dp,
+                                color = if (selected) tint else Color.Transparent,
                                 shape = CircleShape
                             )
                             .clickable { viewModel.onIconChange(name) },
@@ -87,35 +87,13 @@ fun AddEditCategoryScreen(
                         Icon(
                             imageVector = IconMapper.iconFor(name),
                             contentDescription = name,
-                            tint = if (selected) selectedColor else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp)
+                            tint = tint,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
                 // Keep the last row's icons aligned with the rows above it.
-                repeat(6 - rowNames.size) { Spacer(Modifier.size(46.dp)) }
-            }
-        }
-
-        Text("Color", style = MaterialTheme.typography.labelMedium)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
-            items(categoryColorPalette) { colorHex ->
-                val color = Color(android.graphics.Color.parseColor(colorHex))
-                Column(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(color)
-                        .clickable { viewModel.onColorChange(colorHex) }
-                ) {
-                    if (state.colorHex == colorHex) {
-                        Text(
-                            "\u2713",
-                            color = Color.White,
-                            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp)
-                        )
-                    }
-                }
+                repeat(7 - rowNames.size) { Spacer(Modifier.size(40.dp)) }
             }
         }
 

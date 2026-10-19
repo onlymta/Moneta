@@ -30,6 +30,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.moneta.app.ui.common.FabStyle
+import com.moneta.app.ui.common.MovableFab
+import com.moneta.app.ui.common.SubPageHeader
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.moneta.app.data.local.entity.RecurrenceFrequency
@@ -43,17 +46,17 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 fun RecurringScreen(
+    onBack: (() -> Unit)?,
     onAdd: () -> Unit,
     viewModel: RecurringViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Scheduled & recurring") }) },
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
+        topBar = { SubPageHeader("Scheduled & recurring", onBack) },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAdd) {
-                Icon(Icons.Filled.Add, contentDescription = "Add recurring transaction")
-            }
+            MovableFab(onClick = onAdd, contentDescription = "Add recurring transaction", style = FabStyle.OTHER)
         }
     ) { padding ->
         if (!state.isLoading && state.items.isEmpty()) {

@@ -26,7 +26,7 @@ data class AddEditCategoryUiState(
     val type: CategoryType = CategoryType.EXPENSE,
     val name: String = "",
     val icon: String = DEFAULT_CATEGORY_ICON,
-    val colorHex: String = categoryColorPalette.first(),
+    val colorHex: String = com.moneta.app.ui.common.IconMapper.colorFor(DEFAULT_CATEGORY_ICON),
     /** Top-level categories of this type that could be this category's parent (Section 12 subcategories). */
     val availableParents: List<Category> = emptyList(),
     val selectedParentId: Long? = null,
@@ -82,7 +82,9 @@ class AddEditCategoryViewModel @Inject constructor(
 
     fun onNameChange(name: String) = _uiState.update { it.copy(name = name, nameError = null) }
 
-    fun onIconChange(icon: String) = _uiState.update { it.copy(icon = icon) }
+    fun onIconChange(icon: String) = _uiState.update {
+        it.copy(icon = icon, colorHex = com.moneta.app.ui.common.IconMapper.colorFor(icon))
+    }
 
     fun onColorChange(colorHex: String) = _uiState.update { it.copy(colorHex = colorHex) }
 

@@ -29,6 +29,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.moneta.app.ui.common.FabStyle
+import com.moneta.app.ui.common.MovableFab
+import com.moneta.app.ui.common.SubPageHeader
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.moneta.app.data.repository.Goal
@@ -39,6 +42,7 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 fun GoalsScreen(
+    onBack: (() -> Unit)?,
     onAddGoal: () -> Unit,
     onContribute: (Long) -> Unit,
     viewModel: GoalsViewModel = hiltViewModel()
@@ -46,11 +50,10 @@ fun GoalsScreen(
     val state by viewModel.uiState.collectAsState()
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Goals") }) },
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
+        topBar = { SubPageHeader("Goals", onBack) },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddGoal) {
-                Icon(Icons.Filled.Add, contentDescription = "Add goal")
-            }
+            MovableFab(onClick = onAddGoal, contentDescription = "Add goal", style = FabStyle.OTHER)
         }
     ) { padding ->
         if (!state.isLoading && state.goals.isEmpty()) {

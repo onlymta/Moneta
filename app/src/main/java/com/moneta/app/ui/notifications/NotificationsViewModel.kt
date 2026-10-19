@@ -46,7 +46,7 @@ class NotificationsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
-    val alerts: StateFlow<List<AppAlert>> = combine(
+    private val allAlerts: StateFlow<List<AppAlert>> = combine(
         budgetRepository.observeProgress(),
         billRepository.observeAll(),
         recurringRepository.observeActive()
@@ -138,14 +138,41 @@ class NotificationsViewModel @Inject constructor(
         .map { it.seenAlertIds }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
-    /** How many alerts the user hasn't looked at yet (drives the bell badge). */
+    private val dismissedIds: StateFlow<Set<String>> = settingsRepository.preferences
+        .map { it.dismissedAlertIds }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    /** Alerts the user has not deleted. */
+    val alerts: StateFlow<List<AppAlert>> = combine(allAlerts, dismissedIds) { list, dismissed ->
+        list.filter { it.id !in dismissed }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** How many alerts the user hasn't read yet (drives the bell badge). */
     val unseenCount: StateFlow<Int> = combine(alerts, seenIds) { list, seen ->
         list.count { it.id !in seen }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
-    fun markAllSeen() {
+    fun markRead(id: String) {
+        viewModelScope.launch { settingsRepository.markAlertsSeen(seenIds.value + id) }
+    }
+
+    fun markUnread(id: String) {
+        viewModelScope.launch { settingsRepository.markAlertsSeen(seenIds.value - id) }
+    }
+
+    fun markAllRead() {
         viewModelScope.launch {
-            settingsRepository.markAlertsSeen(alerts.value.map { it.id }.toSet())
+            settingsRepository.markAlertsSeen(seenIds.value + alerts.value.map { it.id })
+        }
+    }
+
+    fun delete(id: String) {
+        viewModelScope.launch { settingsRepository.setDismissedAlertIds(dismissedIds.value + id) }
+    }
+
+    fun clearAll() {
+        viewModelScope.launch {
+            settingsRepository.setDismissedAlertIds(dismissedIds.value + alerts.value.map { it.id })
         }
     }
 }

@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -25,7 +28,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -54,6 +60,8 @@ fun TransactionsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
+    var searchOpen by remember { mutableStateOf(false) }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.padding(horizontal = MonetaSpacing.screenHorizontal)) {
             PeriodBar(
@@ -61,19 +69,24 @@ fun TransactionsScreen(
                 onChange = viewModel::onPeriodChange,
                 modes = PeriodMode.entries
             )
-            OutlinedTextField(
-                value = state.query,
-                onValueChange = viewModel::onQueryChange,
-                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                placeholder = { Text("Search these records") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(MonetaSpacing.sm))
+            // One compact row: search icon, type filters, account filter.
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                item {
+                    IconButton(onClick = {
+                        searchOpen = !searchOpen
+                        if (!searchOpen) viewModel.onQueryChange("")
+                    }) {
+                        Icon(
+                            Icons.Outlined.Search,
+                            contentDescription = "Search records",
+                            tint = if (searchOpen || state.query.isNotEmpty()) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
                 state.categoryTitle?.let { title ->
                     item {
                         FilterChip(
@@ -121,6 +134,26 @@ fun TransactionsScreen(
                     }
                 }
             }
+            if (searchOpen || state.query.isNotEmpty()) {
+                TextField(
+                    value = state.query,
+                    onValueChange = viewModel::onQueryChange,
+                    placeholder = { Text("Search records") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(28.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                        errorIndicatorColor = Color.Transparent,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = MonetaSpacing.xs)
+                )
+            }
         }
 
         LazyColumn(
@@ -135,33 +168,21 @@ fun TransactionsScreen(
         ) {
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+                    Column(modifier = Modifier.padding(MonetaSpacing.md)) {
                         Text(
-                            "${state.count} transaction(s) · ${state.period.label()}",
-                            style = MaterialTheme.typography.labelLarge,
+                            state.period.label() + "  ·  " + state.count + " records",
+                            style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.height(MonetaSpacing.sm))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Column {
-                                Text("Income", style = MaterialTheme.typography.labelMedium)
-                                MoneyText(state.income, color = IncomeGreen)
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Expenses", style = MaterialTheme.typography.labelMedium)
-                                MoneyText(state.expense, color = ExpenseRed)
-                            }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text("Net", style = MaterialTheme.typography.labelMedium)
-                                MoneyText(state.net, color = if (state.net.isNegative) ExpenseRed else IncomeGreen)
-                            }
-                        }
-                        if (state.transferCount > 0) {
-                            Text(
-                                "Plus ${state.transferCount} transfer(s) between your accounts (not counted above).",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = MonetaSpacing.xs)
+                        Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                            SummaryTile("Income", state.income, IncomeGreen, Modifier.weight(1f))
+                            SummaryTile("Expenses", state.expense, ExpenseRed, Modifier.weight(1f))
+                            SummaryTile(
+                                "Bal.",
+                                state.net,
+                                if (state.net.isNegative) ExpenseRed else MaterialTheme.colorScheme.primary,
+                                Modifier.weight(1f)
                             )
                         }
                     }
@@ -199,6 +220,20 @@ fun TransactionsScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SummaryTile(label: String, amount: com.moneta.app.core.money.Money, color: Color, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = color.copy(alpha = 0.12f)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = color)
+            MoneyText(amount, color = color, modifier = Modifier)
         }
     }
 }

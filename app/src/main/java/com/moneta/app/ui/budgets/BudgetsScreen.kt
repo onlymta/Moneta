@@ -106,6 +106,15 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, viewModel: BudgetsViewModel = hiltV
                             }
                             Spacer(Modifier.height(MonetaSpacing.sm))
                         }
+                        if (state.prevMonthSpent.isNotEmpty()) {
+                            OutlinedButton(
+                                onClick = viewModel::autoSetFromPreviousSpending,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Auto-set from ${state.prevMonthLabel} spending")
+                            }
+                            Spacer(Modifier.height(MonetaSpacing.sm))
+                        }
                         OutlinedButton(onClick = { setupStarted = true }, modifier = Modifier.fillMaxWidth()) {
                             Text("Set this month's budgets")
                         }
