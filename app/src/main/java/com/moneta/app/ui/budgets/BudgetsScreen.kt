@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedButton
@@ -254,6 +255,12 @@ private fun SummaryCard(state: BudgetsUiState) {
                     Text("Spent", style = MaterialTheme.typography.labelMedium)
                     Text(state.totalSpentOnBudgeted.formatted(), style = MaterialTheme.typography.titleMedium)
                 }
+                Text(
+                    "${percent.toInt()}%",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
                 Column(horizontalAlignment = Alignment.End) {
                     Text(if (over) "Exceeded by" else "Remaining", style = MaterialTheme.typography.labelMedium)
                     Text(
@@ -263,6 +270,33 @@ private fun SummaryCard(state: BudgetsUiState) {
                         color = color
                     )
                 }
+            }
+            Spacer(Modifier.height(MonetaSpacing.sm))
+            Divider()
+            Spacer(Modifier.height(MonetaSpacing.sm))
+            val savings = if (state.isClosed) state.actualSavings else state.expectedSavings
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        if (state.isClosed) "Actual savings" else "Expected savings this month",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    Text(
+                        if (state.isClosed) "Income ${state.monthIncome.formatted()} \u2212 spent ${state.totalExpense.formatted()}"
+                        else "Income ${state.monthIncome.formatted()} \u2212 spent ${state.totalExpense.formatted()} \u2212 budgeted still to spend ${state.yetToSpend.formatted()}",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+                Text(
+                    savings.formatted(),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (savings.isNegative) ExpenseRed else IncomeGreen
+                )
             }
             if (!state.hasAnyBudget) {
                 Spacer(Modifier.height(MonetaSpacing.sm))
@@ -357,6 +391,12 @@ private fun CategoryBudgetCard(
                         Text("Spent", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         MoneyText(line.spent, color = color)
                     }
+                    Text(
+                        "${(line.percentUsed ?: 0.0).toInt()}%",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = color
+                    )
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
                             if (remaining.isNegative) "Exceeded by" else "Remaining",

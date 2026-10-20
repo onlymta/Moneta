@@ -33,7 +33,7 @@ sealed class MonetaDestination(val route: String, val icon: ImageVector, val lab
         // the first time it drew (every launch). A getter builds the list on demand,
         // after all five objects fully exist.
         val bottomBarItems: List<MonetaDestination>
-            get() = listOf(Home, Transactions, Budgets, Reports, Accounts)
+            get() = listOf(Home, Transactions, Budgets, Accounts, Reports)
     }
 }
 
@@ -57,6 +57,8 @@ const val TRANSACTION_DETAIL_ROUTE_PATTERN = "transaction_detail/{$TRANSACTION_I
 fun transactionDetailRoute(transactionId: Long) = "transaction_detail/$transactionId"
 
 const val ACCOUNTS_ROUTE = "accounts"
+const val CATEGORY_ANALYSIS_ROUTE_PATTERN = "category_analysis/{categoryId}/{monthStart}"
+fun categoryAnalysisRoute(categoryId: Long, monthStartEpochDay: Long) = "category_analysis/$categoryId/$monthStartEpochDay"
 const val SEARCH_ROUTE = "search"
 private const val HISTORY_ACCOUNT_ARG = "historyAccountId"
 const val ACCOUNT_HISTORY_ROUTE_PATTERN = "account_history/{$HISTORY_ACCOUNT_ARG}"

@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -40,6 +41,9 @@ data class MonthTrend(
     val expenseDeltaPercent: Double?,
     val isExpenseUp: Boolean
 )
+
+/** One account with an amount attached, used by the tap-to-expand breakdowns on Home. */
+data class AccountAmount(val account: Account, val amount: Money)
 
 data class HomeUiState(
     val isLoading: Boolean = true,
@@ -59,7 +63,10 @@ data class HomeUiState(
     val recentItems: List<TransactionListItem> = emptyList(),
     val spendingBreakdown: List<CategorySlice> = emptyList(),
     val trend: MonthTrend = MonthTrend(hasPriorMonthData = false, expenseDeltaPercent = null, isExpenseUp = false),
-    val topBudgets: List<BudgetProgress> = emptyList()
+    val topBudgets: List<BudgetProgress> = emptyList(),
+    val openingBreakdown: List<AccountAmount> = emptyList(),
+    val incomeBreakdown: List<AccountAmount> = emptyList(),
+    val currentBalance: Money = Money.zero("PKR")
 ) {
     /** Income minus expenses for the chosen month - a plain "net change", not "savings". */
     val netChange: Money get() = monthIncome - monthExpense
@@ -139,11 +146,20 @@ class HomeViewModel @Inject constructor(
         val currency = prefs.currencyCode
         val range = p.range()
         val breakdown = categoryBreakdownUseCase(rollUpToTopLevel(categoryTotals, categories), expense)
-        val opening: Money? = if (prefs.carryForwardBalance) {
-            netWorthTrendUseCase(listOf(range.start.minusDays(1)), currency).firstOrNull()?.netWorth
-        } else {
-            null
+        val dayBefore = range.start.minusDays(1)
+        val openingRows = accounts.filter { it.includeInNetWorth }.map { account ->
+            val effect = transactionRepository.getAccountNetEffectAsOf(account.id, dayBefore)
+            AccountAmount(account, Money(account.openingBalance.minorUnits + effect, currency))
         }
+        val opening: Money = Money(openingRows.sumOf { it.amount.minorUnits }, currency)
+        val monthTx = transactionRepository.observeInRange(range).first()
+        val incomeRows = monthTx.filter { it.type == TransactionType.INCOME }
+            .groupBy { it.accountId }
+            .mapNotNull { (accountId, list) ->
+                val acc = accounts.firstOrNull { it.id == accountId } ?: return@mapNotNull null
+                AccountAmount(acc, Money(list.sumOf { it.amount.minorUnits }, currency))
+            }
+            .sortedByDescending { it.amount.minorUnits }
         val counted = accounts.filter { it.includeInNetWorth }
         val savingsMinor = counted.filter { it.type == com.moneta.app.data.local.entity.AccountType.SAVINGS }
             .sumOf { it.currentBalance.minorUnits }
@@ -168,6 +184,9 @@ class HomeViewModel @Inject constructor(
             savingsSubtotal = Money(savingsMinor, currency),
             accounts = accounts,
             openingBalance = opening,
+            openingBreakdown = openingRows,
+            incomeBreakdown = incomeRows,
+            currentBalance = if (p.containsToday()) Money(allMinor, currency) else opening + income - expense,
             monthIncome = income,
             monthExpense = expense,
             recentItems = buildTransactionItems(transactions.take(5), accounts, categories),

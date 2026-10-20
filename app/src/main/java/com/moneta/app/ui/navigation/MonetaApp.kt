@@ -276,7 +276,23 @@ private fun MonetaAppContent(
                 BudgetsScreen(onOpenRecords = { navController.navigateToTab(MonetaDestination.Transactions.route) })
             }
             composable(MonetaDestination.Reports.route) {
-                ReportsScreen(onOpenBudgets = { navController.navigateToTab(MonetaDestination.Budgets.route) })
+                ReportsScreen(
+                    onOpenBudgets = { navController.navigateToTab(MonetaDestination.Budgets.route) },
+                    onOpenCategory = { id, monthStart -> navController.navigate(categoryAnalysisRoute(id, monthStart)) }
+                )
+            }
+
+            composable(
+                CATEGORY_ANALYSIS_ROUTE_PATTERN,
+                arguments = listOf(
+                    navArgument("categoryId") { type = NavType.LongType },
+                    navArgument("monthStart") { type = NavType.LongType }
+                )
+            ) {
+                com.moneta.app.ui.reports.CategoryAnalysisScreen(
+                    onBack = { navController.popBackStack() },
+                    onTransactionClick = { id -> detailId.value = id }
+                )
             }
 
             composable(SEARCH_ROUTE) {

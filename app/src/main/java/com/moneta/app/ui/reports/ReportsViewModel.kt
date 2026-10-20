@@ -37,8 +37,7 @@ import javax.inject.Inject
 enum class ReportTab(val label: String) {
     OVERVIEW("Overview"),
     SPENDING("Spending"),
-    INCOME("Income"),
-    ACCOUNTS("Accounts")
+    INCOME("Income")
 }
 
 /** A closer look at one spending category: pace, comparison with last period and the outlook. */

@@ -150,3 +150,10 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Settings: removed duplicates of side-menu items; About moved to the side menu.
 - Onboarding: "Restore from a backup file". Splash screen with app icon.
 - Balance scope (All / Current / Savings) on Home; Accounts grouped into Current and Savings.
+
+## v0.19.0
+- Home: hide/show balance eye, three-dots All/Current/Savings menu, tap-to-open breakdown (grouped Current vs Savings), four tiles (Opening, Income, Expenses, Current balance) with tap-through breakdowns.
+- Budgets: expected savings (actual savings for closed months) and percentage of each budget used.
+- Accounts: default 4th tab, dashboard of All/Current/Savings; removed from Reports.
+- Reports > Spending: tapping a category opens a full analysis page.
+- Records: group by day / week / category, or sort by amount.

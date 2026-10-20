@@ -98,6 +98,19 @@ fun AccountsScreen(
                 val savingsType = com.moneta.app.data.local.entity.AccountType.SAVINGS
                 val currentList = active.filter { it.type != savingsType }
                 val savingsList = active.filter { it.type == savingsType }
+                if (active.isNotEmpty()) {
+                    item(key = "dashboard") {
+                        val cur = active.filter { it.includeInNetWorth }
+                        val savMinor = cur.filter { it.type == savingsType }.sumOf { it.currentBalance.minorUnits }
+                        val allMinor = cur.sumOf { it.currentBalance.minorUnits }
+                        val code = active.first().currentBalance.currencyCode
+                        AccountsDashboard(
+                            all = com.moneta.app.core.money.Money(allMinor, code),
+                            current = com.moneta.app.core.money.Money(allMinor - savMinor, code),
+                            savings = com.moneta.app.core.money.Money(savMinor, code)
+                        )
+                    }
+                }
                 if (currentList.isNotEmpty()) {
                     item(key = "current-header") {
                         GroupHeader("Current accounts", currentList.sumOf { it.currentBalance.minorUnits }, currentList.first().currentBalance.currencyCode)
@@ -141,6 +154,38 @@ fun AccountsScreen(
                             onArchiveOrDelete = { viewModel.archiveOrDeleteAccount(account) }
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountsDashboard(
+    all: com.moneta.app.core.money.Money,
+    current: com.moneta.app.core.money.Money,
+    savings: com.moneta.app.core.money.Money
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+            Text("All accounts", style = MaterialTheme.typography.labelLarge)
+            Text(
+                all.formatted(),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+            )
+            Spacer(Modifier.height(MonetaSpacing.sm))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Text("Current", style = MaterialTheme.typography.labelMedium)
+                    Text(current.formatted(), style = MaterialTheme.typography.titleMedium)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("Savings", style = MaterialTheme.typography.labelMedium)
+                    Text(savings.formatted(), style = MaterialTheme.typography.titleMedium)
                 }
             }
         }

@@ -57,7 +57,10 @@ import com.moneta.app.ui.theme.MonetaSpacing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReportsScreen(onOpenBudgets: () -> Unit = {}, viewModel: ReportsViewModel = hiltViewModel()) {
+fun ReportsScreen(
+    onOpenBudgets: () -> Unit = {},
+    onOpenCategory: (Long, Long) -> Unit = { _, _ -> },
+    viewModel: ReportsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -79,9 +82,8 @@ fun ReportsScreen(onOpenBudgets: () -> Unit = {}, viewModel: ReportsViewModel = 
 
         when (state.tab) {
             ReportTab.OVERVIEW -> OverviewTab(state, viewModel::onTabSelected, onOpenBudgets)
-            ReportTab.SPENDING -> BreakdownTab(state.spendingSlices, "spending", state.period.label(), state)
-            ReportTab.INCOME -> BreakdownTab(state.incomeSlices, "income", state.period.label(), null)
-            ReportTab.ACCOUNTS -> AccountsTab(state)
+            ReportTab.SPENDING -> BreakdownTab(state.spendingSlices, "spending", state.period.label(), state, onOpenCategory)
+            ReportTab.INCOME -> BreakdownTab(state.incomeSlices, "income", state.period.label(), null, onOpenCategory)
         }
     }
 }
@@ -116,7 +118,7 @@ private fun OverviewTab(state: ReportsUiState, onGoTo: (ReportTab) -> Unit, onOp
                             closing,
                             if (closing.isNegative) ExpenseRed else Color.Unspecified,
                             null,
-                            { onGoTo(ReportTab.ACCOUNTS) },
+                            null,
                             bold = true
                         )
                     }
@@ -291,8 +293,10 @@ private fun SliceRow(slice: CategorySlice, showBar: Boolean) {
 }
 
 @Composable
-private fun BreakdownTab(slices: List<CategorySlice>, kind: String, periodLabel: String, spendingState: ReportsUiState?) {
-    var selectedId by remember { mutableStateOf<Long?>(null) }
+private fun BreakdownTab(slices: List<CategorySlice>, kind: String, periodLabel: String,
+    spendingState: ReportsUiState?,
+    onOpenCategory: (Long, Long) -> Unit
+) {
     if (slices.isEmpty()) {
         Column(modifier = Modifier
             .fillMaxSize()
@@ -319,7 +323,7 @@ private fun BreakdownTab(slices: List<CategorySlice>, kind: String, periodLabel:
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .let { if (canOpen) it.clickable { selectedId = sliceId } else it }
+                    .let { if (canOpen) it.clickable { sliceId?.let { id -> onOpenCategory(id, spendingState?.period?.range()?.start?.toEpochDay() ?: 0L) } } else it }
             ) {
                 Column(modifier = Modifier.padding(horizontal = MonetaSpacing.md, vertical = MonetaSpacing.sm)) {
                     SliceRow(slice, showBar = true)
@@ -335,10 +339,6 @@ private fun BreakdownTab(slices: List<CategorySlice>, kind: String, periodLabel:
                 )
             }
         }
-    }
-    val insight = selectedId?.let { spendingState?.insights?.get(it) }
-    if (insight != null && spendingState != null) {
-        InsightDialog(insight, spendingState.period.mode == PeriodMode.MONTH) { selectedId = null }
     }
 }
 

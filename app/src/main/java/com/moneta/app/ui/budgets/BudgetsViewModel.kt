@@ -82,8 +82,17 @@ data class BudgetsUiState(
     val copySourceLabel: String? = null,
     /** Last month's spending per top-level category (minor units), used to set budgets automatically. */
     val prevMonthSpent: Map<Long, Long> = emptyMap(),
-    val prevMonthLabel: String = ""
+    val prevMonthLabel: String = "",
+    val monthIncome: Money = Money.zero("PKR"),
+    val totalExpense: Money = Money.zero("PKR"),
+    /** Budgeted money not yet spent: for each budgeted category, what is left of its budget (never negative). */
+    val yetToSpend: Money = Money.zero("PKR"),
+    /** True when the month on screen has already ended, so the figure is actual savings rather than expected. */
+    val isClosed: Boolean = false
 ) {
+    /** Income minus everything spent so far minus budgeted money still to be spent. */
+    val expectedSavings: Money get() = monthIncome - totalExpense - yetToSpend
+    val actualSavings: Money get() = monthIncome - totalExpense
     val totalRemaining: Money get() = totalBudget - totalSpentOnBudgeted
     val hasAnyBudget: Boolean get() = lines.any { it.budgetId != null }
 }
@@ -111,6 +120,7 @@ class BudgetsViewModel @Inject constructor(
         .flatMapLatest { (p, prefs) ->
             val range = p.range()
             val prevRange = p.shift(-1).range()
+            val incomeFlow = transactionRepository.observeTotalForTypeInRange(TransactionType.INCOME, range, prefs.currencyCode)
             combine(
                 budgetsFlow,
                 categoriesFlow,
@@ -203,9 +213,15 @@ class BudgetsViewModel @Inject constructor(
                     copySourceMonth = copySource,
                     copySourceLabel = copySource?.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
                     prevMonthSpent = spentBefore.filter { it.value > 0L },
-                    prevMonthLabel = prevRange.start.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
+                    prevMonthLabel = prevRange.start.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
+                    totalExpense = totalExpense,
+                    yetToSpend = Money(
+                        budgeted.sumOf { line -> maxOf(0L, line.remaining?.minorUnits ?: 0L) },
+                        currency
+                    ),
+                    isClosed = !range.endExclusive.isAfter(LocalDate.now())
                 )
-            }
+            }.combine(incomeFlow) { st, inc -> st.copy(monthIncome = inc) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BudgetsUiState())
 

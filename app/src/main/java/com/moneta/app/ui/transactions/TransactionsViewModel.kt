@@ -31,6 +31,23 @@ enum class TypeFilter(val label: String) {
     TRANSFER("Transfers")
 }
 
+enum class GroupMode(val label: String) {
+    DAY("By day"),
+    WEEK("By week"),
+    CATEGORY("By category"),
+    AMOUNT("By amount")
+}
+
+/** A block of records under one header: a day, a week, a category, or (sorted by amount) one headerless block. */
+data class RecordGroup(
+    val key: String,
+    val title: String,
+    val date: LocalDate?,
+    val totalLabel: String,
+    val items: List<TransactionListItem>,
+    val net: Money
+)
+
 data class DayGroup(val date: LocalDate, val items: List<TransactionListItem>, val net: Money)
 
 data class TransactionsUiState(
@@ -41,7 +58,8 @@ data class TransactionsUiState(
     val accountFilterId: Long? = null,
     val categoryTitle: String? = null,
     val accounts: List<Account> = emptyList(),
-    val groups: List<DayGroup> = emptyList(),
+    val groupMode: GroupMode = GroupMode.DAY,
+    val groups: List<RecordGroup> = emptyList(),
     val currencyCode: String = "PKR",
     val income: Money = Money.zero("PKR"),
     val expense: Money = Money.zero("PKR"),
@@ -73,6 +91,7 @@ class TransactionsViewModel @Inject constructor(
     private val accountFilterFlow = MutableStateFlow<Long?>(null)
     private val categoryIdsFlow = MutableStateFlow<Set<Long>?>(null)
     private val categoryTitleFlow = MutableStateFlow<String?>(null)
+    private val groupModeFlow = MutableStateFlow(GroupMode.DAY)
     private val accountsFlow = accountRepository.observeAllAccounts()
     private val categoriesFlow = categoryRepository.observeAll()
     private val prefsFlow = settingsRepository.preferences
@@ -109,8 +128,9 @@ class TransactionsViewModel @Inject constructor(
             transactionRepository.observeFiltered(accountId = f.accountId, type = typeArg, range = f.period.range()),
             accountsFlow,
             categoriesFlow,
-            prefsFlow
-        ) { transactions, accounts, categories, prefs ->
+            prefsFlow,
+            groupModeFlow
+        ) { transactions, accounts, categories, prefs, mode ->
             val currency = prefs.currencyCode
             var items = buildTransactionItems(transactions, accounts, categories)
             val ids = f.categoryIds
@@ -132,11 +152,56 @@ class TransactionsViewModel @Inject constructor(
                 .sumOf { it.transaction.amount.minorUnits }
             val expenseMinor = items.filter { it.transaction.type == TransactionType.EXPENSE }
                 .sumOf { it.transaction.amount.minorUnits }
-            val groups = items.groupBy { it.transaction.date }.map { (date, list) ->
+            fun netOf(list: List<TransactionListItem>): Money {
                 val inc = list.filter { it.transaction.type == TransactionType.INCOME }.sumOf { it.transaction.amount.minorUnits }
                 val exp = list.filter { it.transaction.type == TransactionType.EXPENSE }.sumOf { it.transaction.amount.minorUnits }
-                DayGroup(date, list, Money(inc - exp, currency))
-            }.sortedByDescending { it.date }
+                return Money(inc - exp, currency)
+            }
+            val dateFmt = java.time.format.DateTimeFormatter.ofPattern("d MMM")
+            val groups: List<RecordGroup> = when (mode) {
+                GroupMode.DAY -> items.groupBy { it.transaction.date }.map { (date, list) ->
+                    RecordGroup("day-$date", date.toString(), date, "Day", list, netOf(list))
+                }.sortedByDescending { it.date }
+                GroupMode.WEEK -> items.groupBy {
+                    it.transaction.date.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+                }.map { (monday, list) ->
+                    val sunday = monday.plusDays(6)
+                    RecordGroup(
+                        "week-$monday",
+                        monday.format(dateFmt) + " - " + sunday.format(dateFmt) + " " + sunday.year,
+                        null,
+                        "Week",
+                        list.sortedByDescending { it.transaction.date },
+                        netOf(list)
+                    )
+                }.sortedByDescending { it.key }
+                GroupMode.CATEGORY -> {
+                    val nameOf = categories.associate { it.id to it.name }
+                    items.groupBy { item ->
+                        val cid = item.transaction.categoryId
+                        if (cid == null) "Transfers" else (nameOf[cid] ?: "Uncategorised")
+                    }.map { (name, list) ->
+                        RecordGroup(
+                            "cat-$name",
+                            name,
+                            null,
+                            "Total",
+                            list.sortedByDescending { it.transaction.date },
+                            netOf(list)
+                        )
+                    }.sortedByDescending { g -> g.items.sumOf { it.transaction.amount.minorUnits } }
+                }
+                GroupMode.AMOUNT -> if (items.isEmpty()) emptyList() else listOf(
+                    RecordGroup(
+                        "amount-all",
+                        "",
+                        null,
+                        "Total",
+                        items.sortedByDescending { it.transaction.amount.minorUnits },
+                        netOf(items)
+                    )
+                )
+            }
             TransactionsUiState(
                 isLoading = false,
                 period = f.period,
@@ -145,6 +210,7 @@ class TransactionsViewModel @Inject constructor(
                 accountFilterId = f.accountId,
                 categoryTitle = if (f.categoryIds != null) categoryTitleFlow.value else null,
                 accounts = accounts.filter { !it.isArchived },
+                groupMode = mode,
                 groups = groups,
                 currencyCode = currency,
                 income = Money(incomeMinor, currency),
@@ -165,6 +231,10 @@ class TransactionsViewModel @Inject constructor(
 
     fun onTypeFilterChange(filter: TypeFilter) {
         typeFlow.value = filter
+    }
+
+    fun onGroupModeChange(mode: GroupMode) {
+        groupModeFlow.value = mode
     }
 
     fun clearCategoryFilter() {

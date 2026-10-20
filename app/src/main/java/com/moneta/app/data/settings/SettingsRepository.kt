@@ -71,7 +71,7 @@ data class AppPreferences(
     /** Left-to-right order of the main tabs, as keys: home, transactions, budgets, reports, accounts. */
     val tabOrder: List<String> = DEFAULT_TAB_ORDER,
     /** Tabs switched off in the bottom bar (they stay reachable from the side menu). */
-    val hiddenTabs: Set<String> = setOf("accounts"),
+    val hiddenTabs: Set<String> = emptySet(),
     /** Currency shown on screen. (The stored amounts do not change; this only changes how they are labelled.) */
     val displayCurrency: String = "PKR",
     val showCurrencySymbol: Boolean = true,
@@ -92,7 +92,7 @@ data class AppPreferences(
     val dismissedAlertIds: Set<String> = emptySet()
 )
 
-val DEFAULT_TAB_ORDER = listOf("home", "transactions", "budgets", "reports", "accounts")
+val DEFAULT_TAB_ORDER = listOf("home", "transactions", "budgets", "accounts", "reports")
 
 private val Context.dataStore by preferencesDataStore(name = "moneta_settings")
 
@@ -118,8 +118,8 @@ class SettingsRepository @Inject constructor(
         val SHOW_ACCOUNTS_IN_BAR = booleanPreferencesKey("show_accounts_in_bar")
         val PICKER_STYLE = stringPreferencesKey("picker_style")
         val SEEN_ALERTS = stringSetPreferencesKey("seen_alert_ids")
-        val TAB_ORDER = stringPreferencesKey("tab_order")
-        val HIDDEN_TABS = stringPreferencesKey("hidden_tabs")
+        val TAB_ORDER = stringPreferencesKey("tab_order_v2")
+        val HIDDEN_TABS = stringPreferencesKey("hidden_tabs_v2")
         val DISPLAY_CURRENCY = stringPreferencesKey("display_currency")
         val SHOW_CURRENCY_SYMBOL = booleanPreferencesKey("show_currency_symbol")
         val FORM_SAVE_TOP = booleanPreferencesKey("form_save_top")
@@ -164,7 +164,7 @@ class SettingsRepository @Inject constructor(
             tabOrder = parseTabOrder(prefs[Keys.TAB_ORDER]),
             hiddenTabs = prefs[Keys.HIDDEN_TABS]
                 ?.split(",")?.filter { it.isNotBlank() }?.toSet()
-                ?: if (prefs[Keys.SHOW_ACCOUNTS_IN_BAR] == true) emptySet() else setOf("accounts"),
+                ?: emptySet(),
             displayCurrency = prefs[Keys.DISPLAY_CURRENCY] ?: "PKR",
             showCurrencySymbol = prefs[Keys.SHOW_CURRENCY_SYMBOL] ?: true,
             formSaveAtTop = prefs[Keys.FORM_SAVE_TOP] ?: false,

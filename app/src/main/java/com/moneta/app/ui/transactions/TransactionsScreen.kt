@@ -97,6 +97,32 @@ fun TransactionsScreen(
                         )
                     }
                 }
+                item {
+                    var groupMenu by remember { mutableStateOf(false) }
+                    Box {
+                        AssistChip(
+                            onClick = { groupMenu = true },
+                            label = { Text(state.groupMode.label) },
+                            trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = "Group or sort records") }
+                        )
+                        DropdownMenu(expanded = groupMenu, onDismissRequest = { groupMenu = false }) {
+                            GroupMode.entries.forEach { mode ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            mode.label,
+                                            fontWeight = if (mode == state.groupMode) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    onClick = {
+                                        groupMenu = false
+                                        viewModel.onGroupModeChange(mode)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
                 items(TypeFilter.entries.toList()) { filter ->
                     FilterChip(
                         selected = state.typeFilter == filter,
@@ -209,8 +235,13 @@ fun TransactionsScreen(
             }
 
             state.groups.forEach { group ->
-                item(key = "day-${group.date}") {
-                    DayHeader(date = group.date, net = group.net)
+                item(key = group.key) {
+                    val groupDate = group.date
+                    if (groupDate != null) {
+                        DayHeader(date = groupDate, net = group.net)
+                    } else if (group.title.isNotEmpty()) {
+                        GroupHeader(group.title, group.totalLabel, group.net)
+                    }
                 }
                 items(group.items, key = { it.transaction.id }) { entry ->
                     TransactionRowCard(
@@ -219,6 +250,35 @@ fun TransactionsScreen(
                         onClick = { onTransactionClick(entry.transaction.id) }
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GroupHeader(title: String, totalLabel: String, net: com.moneta.app.core.money.Money) {
+    val tint = if (net.isNegative) ExpenseRed else IncomeGreen
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = MonetaSpacing.md, bottom = MonetaSpacing.xs),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+            maxLines = 1
+        )
+        Surface(shape = RoundedCornerShape(50), color = tint.copy(alpha = 0.14f)) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(totalLabel + " ", style = MaterialTheme.typography.labelSmall, color = tint)
+                MoneyText(net, color = tint)
             }
         }
     }

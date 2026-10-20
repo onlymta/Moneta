@@ -1,8 +1,21 @@
 package com.moneta.app.ui.dashboard
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.moneta.app.data.local.entity.AccountType
+import com.moneta.app.data.repository.Account
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.mutableStateOf
@@ -144,6 +157,33 @@ private fun HomeContent(
     onSeeAll: () -> Unit,
     onOpenRecords: (TypeFilter?) -> Unit
 ) {
+    var dialog by remember { mutableStateOf(HomeDialog.NONE) }
+    when (dialog) {
+        HomeDialog.OPENING -> BreakdownDialog(
+            title = "Opening balance",
+            rows = state.openingBreakdown,
+            total = state.openingBalance ?: Money.zero(state.currencyCode),
+            onDismiss = { dialog = HomeDialog.NONE },
+            onOpenAccount = onOpenAccount
+        )
+        HomeDialog.INCOME -> BreakdownDialog(
+            title = "Income by account",
+            rows = state.incomeBreakdown,
+            total = state.monthIncome,
+            onDismiss = { dialog = HomeDialog.NONE },
+            onOpenAccount = onOpenAccount,
+            footerAction = "See income records" to { dialog = HomeDialog.NONE; onOpenRecords(TypeFilter.INCOME) }
+        )
+        HomeDialog.BALANCE -> BreakdownDialog(
+            title = "Current accounts and savings",
+            rows = state.accounts.filter { it.includeInNetWorth }.map { AccountAmount(it, it.currentBalance) },
+            total = Money(state.currentSubtotal.minorUnits + state.savingsSubtotal.minorUnits, state.currencyCode),
+            onDismiss = { dialog = HomeDialog.NONE },
+            onOpenAccount = onOpenAccount,
+            groupSavings = true
+        )
+        HomeDialog.NONE -> Unit
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -168,31 +208,42 @@ private fun HomeContent(
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
                 FigureTile(
+                    label = if (state.isCurrentMonth) "Opening (B/F)" else "Opening",
+                    amount = state.openingBalance ?: Money.zero(state.currencyCode),
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                    caption = "Tap for accounts",
+                    onClick = { dialog = HomeDialog.OPENING }
+                )
+                FigureTile(
                     label = "Income",
                     amount = state.monthIncome,
                     color = IncomeGreen,
                     modifier = Modifier.weight(1f),
-                    onClick = { onOpenRecords(TypeFilter.INCOME) }
+                    caption = "Tap for sources",
+                    onClick = { dialog = HomeDialog.INCOME }
                 )
+            }
+        }
+        item {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
                 FigureTile(
                     label = "Expenses",
                     amount = state.monthExpense,
                     color = ExpenseRed,
                     modifier = Modifier.weight(1f),
+                    caption = "Tap for records",
                     onClick = { onOpenRecords(TypeFilter.EXPENSE) }
                 )
+                FigureTile(
+                    label = if (state.isCurrentMonth) "Current balance" else "Closing balance",
+                    amount = state.currentBalance,
+                    color = if (state.currentBalance.isNegative) ExpenseRed else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                    caption = "Tap for accounts",
+                    onClick = { dialog = HomeDialog.BALANCE }
+                )
             }
-        }
-        item {
-            val net = state.netChange
-            FigureTile(
-                label = if (state.isCurrentMonth) "Net change so far" else "Net change",
-                amount = net,
-                color = if (net.isNegative) ExpenseRed else IncomeGreen,
-                modifier = Modifier.fillMaxWidth(),
-                caption = state.openingBalance?.let { "Opening " + it.formatted() + "  →  Closing " + (it + net).formatted() },
-                onClick = { onOpenRecords(null) }
-            )
         }
         item {
             Row(
@@ -224,6 +275,8 @@ private fun HomeContent(
     }
 }
 
+private enum class HomeDialog { NONE, OPENING, INCOME, BALANCE }
+
 @Composable
 private fun FigureTile(
     label: String,
@@ -233,21 +286,123 @@ private fun FigureTile(
     caption: String? = null,
     onClick: () -> Unit
 ) {
-    Card(modifier = modifier.clickable(onClick = onClick)) {
-        Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
-            Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(MonetaSpacing.xs))
-            MoneyText(amount, color = color)
-            caption?.let {
+    Card(
+        modifier = modifier.clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.12f))
+    ) {
+        Row(modifier = Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .width(5.dp)
+                    .fillMaxSize()
+                    .background(color)
+            )
+            Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+                Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(MonetaSpacing.xs))
-                Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                MoneyText(amount, color = color)
+                caption?.let {
+                    Spacer(Modifier.height(MonetaSpacing.xs))
+                    Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }
 }
 
-/** Total balance: just the figure by default; tap to see each account (tap an account for its history). */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+/** Modal list of accounts with amounts; optionally split into Current and Savings groups. */
+@Composable
+private fun BreakdownDialog(
+    title: String,
+    rows: List<AccountAmount>,
+    total: Money,
+    onDismiss: () -> Unit,
+    onOpenAccount: (Long) -> Unit,
+    groupSavings: Boolean = false,
+    footerAction: Pair<String, () -> Unit>? = null
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                if (rows.isEmpty()) {
+                    Text("Nothing to show for this month.", style = MaterialTheme.typography.bodyMedium)
+                }
+                if (groupSavings) {
+                    val savings = rows.filter { it.account.type == AccountType.SAVINGS }
+                    val current = rows.filter { it.account.type != AccountType.SAVINGS }
+                    BreakdownGroup("Current accounts", current, onOpenAccount, onDismiss)
+                    BreakdownGroup("Savings accounts", savings, onOpenAccount, onDismiss)
+                } else {
+                    rows.forEach { BreakdownRow(it, onOpenAccount, onDismiss) }
+                }
+                Spacer(Modifier.height(MonetaSpacing.sm))
+                Divider()
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = MonetaSpacing.sm),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Total", fontWeight = FontWeight.Bold)
+                    MoneyText(total, color = Color.Unspecified)
+                }
+            }
+        },
+        confirmButton = {
+            if (footerAction != null) {
+                TextButton(onClick = footerAction.second) { Text(footerAction.first) }
+            } else {
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        },
+        dismissButton = {
+            if (footerAction != null) {
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        }
+    )
+}
+
+@Composable
+private fun BreakdownGroup(
+    title: String,
+    rows: List<AccountAmount>,
+    onOpenAccount: (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (rows.isEmpty()) return
+    val sum = rows.sumOf { it.amount.minorUnits }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = MonetaSpacing.sm),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+        Text(Money(sum, rows.first().amount.currencyCode).formatted(), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+    }
+    Divider()
+    rows.forEach { BreakdownRow(it, onOpenAccount, onDismiss) }
+}
+
+@Composable
+private fun BreakdownRow(row: AccountAmount, onOpenAccount: (Long) -> Unit, onDismiss: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onDismiss(); onOpenAccount(row.account.id) }
+            .padding(vertical = MonetaSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconBadge(iconName = row.account.icon, colorHex = row.account.colorHex, size = 28.dp)
+        Spacer(Modifier.width(MonetaSpacing.md))
+        Text(row.account.name, modifier = Modifier.weight(1f), maxLines = 1)
+        MoneyText(row.amount, color = if (row.amount.isNegative) ExpenseRed else Color.Unspecified)
+    }
+}
+
+/**
+ * Balance card: tap it to open the accounts that make up the selected scope. The eye hides the figure,
+ * the three-dots menu chooses All / Current / Savings.
+ */
 @Composable
 private fun BalanceCard(
     state: HomeUiState,
@@ -255,6 +410,14 @@ private fun BalanceCard(
     onScopeChange: (com.moneta.app.data.settings.BalanceScope) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var hidden by rememberSaveable { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+    val scope = state.balanceScope
+    val savingsType = AccountType.SAVINGS
+    val counted = state.accounts.filter { it.includeInNetWorth }
+    val currentAccounts = counted.filter { it.type != savingsType }
+    val savingsAccounts = counted.filter { it.type == savingsType }
+    val mask = "\u2022\u2022\u2022\u2022\u2022\u2022"
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -268,7 +431,7 @@ private fun BalanceCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        when (state.balanceScope) {
+                        when (scope) {
                             com.moneta.app.data.settings.BalanceScope.ALL -> "Total balance"
                             com.moneta.app.data.settings.BalanceScope.CURRENT -> "Current accounts balance"
                             com.moneta.app.data.settings.BalanceScope.SAVINGS -> "Savings balance"
@@ -276,68 +439,102 @@ private fun BalanceCard(
                         style = MaterialTheme.typography.labelLarge
                     )
                     Text(
-                        state.totalBalance.formatted(),
+                        if (hidden) mask else state.totalBalance.formatted(),
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        if (expanded) "Tap to hide accounts" else "Tap to see ${state.accounts.size} account(s)",
+                        if (expanded) "Tap to hide accounts" else "Tap to see accounts",
                         style = MaterialTheme.typography.labelMedium
                     )
                 }
-                Icon(
-                    if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                    contentDescription = null
-                )
-            }
-            Spacer(Modifier.height(MonetaSpacing.sm))
-            Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
-                com.moneta.app.data.settings.BalanceScope.values().forEach { sc ->
-                    androidx.compose.material3.FilterChip(
-                        selected = state.balanceScope == sc,
-                        onClick = { onScopeChange(sc) },
-                        label = {
-                            Text(
-                                when (sc) {
-                                    com.moneta.app.data.settings.BalanceScope.ALL -> "All"
-                                    com.moneta.app.data.settings.BalanceScope.CURRENT -> "Current"
-                                    com.moneta.app.data.settings.BalanceScope.SAVINGS -> "Savings"
-                                }
-                            )
-                        }
+                IconButton(onClick = { hidden = !hidden }) {
+                    Icon(
+                        if (hidden) Icons.Filled.VisibilityOff
+                        else Icons.Filled.Visibility,
+                        contentDescription = if (hidden) "Show balance" else "Hide balance"
                     )
                 }
-            }
-            Text(
-                "Current " + state.currentSubtotal.formatted() + "  ·  Savings " + state.savingsSubtotal.formatted(),
-                style = MaterialTheme.typography.labelMedium
-            )
-            if (expanded) {
-                Spacer(Modifier.height(MonetaSpacing.sm))
-                Divider()
-                state.accounts.forEach { account ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onOpenAccount(account.id) }
-                            .padding(top = MonetaSpacing.sm),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconBadge(iconName = account.icon, colorHex = account.colorHex, size = 32.dp)
-                        Spacer(Modifier.width(MonetaSpacing.md))
-                        Text(
-                            account.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1
-                        )
-                        MoneyText(
-                            account.currentBalance,
-                            color = if (account.currentBalance.isNegative) ExpenseRed else Color.Unspecified
-                        )
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "Choose which balance to show")
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        com.moneta.app.data.settings.BalanceScope.values().forEach { sc ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        when (sc) {
+                                            com.moneta.app.data.settings.BalanceScope.ALL -> "All accounts"
+                                            com.moneta.app.data.settings.BalanceScope.CURRENT -> "Current accounts only"
+                                            com.moneta.app.data.settings.BalanceScope.SAVINGS -> "Savings only"
+                                        },
+                                        fontWeight = if (sc == scope) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                onClick = { menuOpen = false; onScopeChange(sc) }
+                            )
+                        }
                     }
                 }
             }
+            if (expanded) {
+                Spacer(Modifier.height(MonetaSpacing.sm))
+                Divider()
+                val showCurrent = scope != com.moneta.app.data.settings.BalanceScope.SAVINGS
+                val showSavings = scope != com.moneta.app.data.settings.BalanceScope.CURRENT
+                if (showCurrent) {
+                    BalanceGroupHeader(
+                        "Current accounts",
+                        if (hidden) mask else state.currentSubtotal.formatted(),
+                        MaterialTheme.colorScheme.primary
+                    )
+                    currentAccounts.forEach { BalanceAccountRow(it, hidden, mask, onOpenAccount) }
+                }
+                if (showSavings) {
+                    BalanceGroupHeader(
+                        "Savings accounts",
+                        if (hidden) mask else state.savingsSubtotal.formatted(),
+                        IncomeGreen
+                    )
+                    savingsAccounts.forEach { BalanceAccountRow(it, hidden, mask, onOpenAccount) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BalanceGroupHeader(title: String, amountText: String, color: Color) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = MonetaSpacing.md)
+            .background(color.copy(alpha = 0.15f), androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+            .padding(horizontal = MonetaSpacing.sm, vertical = MonetaSpacing.xs),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Text(amountText, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun BalanceAccountRow(account: Account, hidden: Boolean, mask: String, onOpenAccount: (Long) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpenAccount(account.id) }
+            .padding(top = MonetaSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconBadge(iconName = account.icon, colorHex = account.colorHex, size = 32.dp)
+        Spacer(Modifier.width(MonetaSpacing.md))
+        Text(account.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1)
+        if (hidden) {
+            Text(mask)
+        } else {
+            MoneyText(account.currentBalance, color = if (account.currentBalance.isNegative) ExpenseRed else Color.Unspecified)
         }
     }
 }
