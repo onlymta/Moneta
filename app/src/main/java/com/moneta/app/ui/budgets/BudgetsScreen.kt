@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -72,6 +74,18 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, vie
     val monthKey = state.period.range().start
     var setupStarted by remember(monthKey) { mutableStateOf(false) }
     val showSetup = state.hasAnyBudget || setupStarted
+    var expandedIds by remember { mutableStateOf(setOf<Long>()) }
+    // A line is visible when every ancestor above it is expanded (lines arrive in tree order).
+    val visibleLines = remember(state.lines, expandedIds) {
+        val out = ArrayList<BudgetLine>()
+        val openAtDepth = HashMap<Int, Boolean>()
+        state.lines.forEach { line ->
+            val parentsOpen = (0 until line.depth).all { openAtDepth[it] == true }
+            if (parentsOpen) out.add(line)
+            openAtDepth[line.depth] = parentsOpen && line.category.id in expandedIds
+        }
+        out
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -170,7 +184,7 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, vie
                 modifier = Modifier.padding(top = MonetaSpacing.sm)
             )
             Text(
-                "Tap a category with a budget to see its transactions. Press and hold it to open its report.",
+                "Tap a category to see its transactions, or to expand it if it has sub-categories. Press and hold to open its report.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -186,9 +200,14 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, vie
         }
 
         if (showSetup) {
-            items(state.lines, key = { it.category.id }) { line ->
+            items(visibleLines, key = { it.category.id }) { line ->
                 CategoryBudgetCard(
                     line = line,
+                    expanded = line.category.id in expandedIds,
+                    onToggle = {
+                        val id = line.category.id
+                        expandedIds = if (id in expandedIds) expandedIds - id else expandedIds + id
+                    },
                     onOpen = { editing = line },
                     onDelete = { deleting = line },
                     onSeeTransactions = {
@@ -295,22 +314,13 @@ private fun SummaryCard(state: BudgetsUiState) {
                 )
             }
             Spacer(Modifier.height(MonetaSpacing.sm))
-            Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
-                OutlookTile(
-                    "Yet to spend",
-                    state.yetToSpend,
-                    WarningAmber,
-                    Modifier.weight(1f),
-                    note = "Budgeted, not spent"
-                )
-                OutlookTile(
-                    if (state.isClosed) "Total spent" else "Expected spend",
-                    state.projectedSpend,
-                    MaterialTheme.colorScheme.primary,
-                    Modifier.weight(1f),
-                    note = if (state.isClosed) "Final for the month" else "At the pace so far"
-                )
-            }
+            OutlookTile(
+                "Yet to spend",
+                state.yetToSpend,
+                WarningAmber,
+                Modifier.fillMaxWidth(),
+                note = "Budgeted, not spent"
+            )
             if (state.hasAnyBudget) {
                 Spacer(Modifier.height(MonetaSpacing.md))
                 androidx.compose.material3.Surface(
@@ -324,33 +334,22 @@ private fun SummaryCard(state: BudgetsUiState) {
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                if (state.isClosed) "Result" else "Expected result",
+                                if (state.isClosed) "Deviation" else "Expected Deviation",
                                 style = MaterialTheme.typography.labelLarge
                             )
                             Text(
-                                if (variance.minorUnits > 0L) {
-                                    if (state.isClosed) "Went over budget" else "Likely to go over budget"
-                                } else if (variance.minorUnits < 0L) {
-                                    if (state.isClosed) "Finished under budget" else "Likely to stay under budget"
-                                } else {
-                                    "Right on budget"
-                                },
+                                if (variance.minorUnits > 0L) "Excess over budget" else "Within budget",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
                         Text(
-                            variance.abs().formatted(),
+                            (if (variance.minorUnits > 0L) "-" else "") + variance.abs().formatted(),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.ExtraBold,
                             color = verdictColor
                         )
                     }
                 }
-                Text(
-                    "Based on budgeted categories only. Income is not counted.",
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
             }
             if (!state.hasAnyBudget) {
                 Spacer(Modifier.height(MonetaSpacing.sm))
@@ -373,6 +372,8 @@ private fun SummaryCard(state: BudgetsUiState) {
 @Composable
 private fun CategoryBudgetCard(
     line: BudgetLine,
+    expanded: Boolean,
+    onToggle: () -> Unit,
     onOpen: () -> Unit,
     onDelete: () -> Unit,
     onSeeTransactions: () -> Unit,
@@ -382,8 +383,13 @@ private fun CategoryBudgetCard(
     var menuOpen by remember { mutableStateOf(false) }
     Card(modifier = Modifier
         .fillMaxWidth()
+        .padding(start = (line.depth * 18).dp)
         .combinedClickable(
-            onClick = if (budget == null) onOpen else onSeeTransactions,
+            onClick = when {
+                line.hasChildren -> onToggle
+                budget == null -> onOpen
+                else -> onSeeTransactions
+            },
             onLongClick = onOpenReport
         )) {
         Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
@@ -394,20 +400,27 @@ private fun CategoryBudgetCard(
                     Text(line.label, style = MaterialTheme.typography.titleMedium)
                     if (budget == null) {
                         Text(
-                            if (line.spent.isZero) "No budget set" else "Spent ${line.spent.formatted()} · no budget set",
+                            if (line.hasChildren) {
+                                "Total of its sub-categories" + if (line.spent.isZero) "" else " · spent ${line.spent.formatted()}"
+                            } else if (line.spent.isZero) "No budget set" else "Spent ${line.spent.formatted()} · no budget set",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
                         Text(
-                            "Budget ${budget.formatted()}" +
+                            (if (line.derived) "Total budget " else "Budget ") + budget.formatted() +
                                 (if (!line.carriedOver.isZero) " (incl. ${line.carriedOver.formatted()} carried over)" else ""),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
-                if (budget == null) {
+                if (line.hasChildren) {
+                    Icon(
+                        if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                        contentDescription = if (expanded) "Collapse" else "Expand"
+                    )
+                } else if (budget == null) {
                     TextButton(onClick = onOpen) { Text("Set budget") }
                 } else {
                     Box {

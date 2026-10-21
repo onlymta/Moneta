@@ -156,6 +156,9 @@ fun QuickAddScreen(
     val isTransfer = state.type == TransactionType.TRANSFER
     val dropdown = state.pickerStyle == PickerStyle.DROPDOWN
     val inRow = state.pickersInRow && dropdown
+    // When a sub-category row appears under the pickers, shrink the amount box and keypad so the notes keep their room.
+    val tight = state.categoryLevels.size > 1 && state.customKeypad
+    val amountMinHeight = if (tight) 72.dp else 104.dp
 
     Scaffold(
         // Insets are applied once, on the Column below.
@@ -216,7 +219,8 @@ fun QuickAddScreen(
                 AmountDisplay(
                     expression = state.amountInput,
                     accent = accent,
-                    error = state.amountError
+                    error = state.amountError,
+                    minHeight = amountMinHeight
                 )
             } else {
                 OutlinedTextField(
@@ -233,7 +237,7 @@ fun QuickAddScreen(
                     supportingText = state.amountError?.let { message -> { Text(message) } },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 104.dp)
+                        .heightIn(min = amountMinHeight)
                 )
             }
             state.savedMessage?.let { message ->
@@ -297,11 +301,13 @@ fun QuickAddScreen(
                 value = state.notes,
                 onValueChange = viewModel::onNotesChange,
                 placeholder = { Text("Notes or description (optional)") },
+                minLines = 2,
                 modifier = if (dropdown) {
+                    // Roomy but capped, so the box never stretches all the way down the screen.
                     Modifier
                         .fillMaxWidth()
-                        .weight(1f)
-                        .heightIn(min = 72.dp)
+                        .weight(1f, fill = false)
+                        .heightIn(min = 76.dp, max = 132.dp)
                 } else {
                     Modifier
                         .fillMaxWidth()
@@ -362,6 +368,7 @@ fun QuickAddScreen(
 
             if (state.customKeypad) {
                 CalculatorKeypad(
+                    keyHeight = if (tight) 42.dp else 52.dp,
                     onKey = { key ->
                         dropFocus()
                         viewModel.onAmountExpressionChange(applyKeypadKey(state.amountInput, key))
@@ -863,17 +870,17 @@ private fun NewAccountDialog(onDismiss: () -> Unit, onCreate: (String, AccountTy
 
 /** Shows the typed amount (or calculation) big, with the running result underneath. */
 @Composable
-private fun AmountDisplay(expression: String, accent: Color, error: String?) {
+private fun AmountDisplay(expression: String, accent: Color, error: String?, minHeight: androidx.compose.ui.unit.Dp) {
     val result = if (AmountCalculator.hasOperator(expression)) AmountCalculator.evaluateToPlainString(expression) else null
     Surface(
         shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 104.dp)
+            .heightIn(min = minHeight)
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = MonetaSpacing.md, vertical = MonetaSpacing.md),
+            modifier = Modifier.padding(horizontal = MonetaSpacing.md, vertical = MonetaSpacing.sm),
             verticalArrangement = Arrangement.Center
         ) {
             Text(
@@ -924,7 +931,7 @@ private fun applyKeypadKey(current: String, key: String): String {
 }
 
 @Composable
-private fun CalculatorKeypad(onKey: (String) -> Unit) {
+private fun CalculatorKeypad(keyHeight: androidx.compose.ui.unit.Dp, onKey: (String) -> Unit) {
     val rows = listOf(
         listOf("7", "8", "9", "÷"),
         listOf("4", "5", "6", "×"),
@@ -941,20 +948,20 @@ private fun CalculatorKeypad(onKey: (String) -> Unit) {
             rows.forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     row.forEach { key ->
-                        KeypadKey(key, Modifier.weight(1f), onKey)
+                        KeypadKey(key, Modifier.weight(1f), keyHeight, onKey)
                     }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                KeypadKey("C", Modifier.weight(1f), onKey)
-                KeypadKey("=", Modifier.weight(3f), onKey)
+                KeypadKey("C", Modifier.weight(1f), keyHeight, onKey)
+                KeypadKey("=", Modifier.weight(3f), keyHeight, onKey)
             }
         }
     }
 }
 
 @Composable
-private fun KeypadKey(key: String, modifier: Modifier, onKey: (String) -> Unit) {
+private fun KeypadKey(key: String, modifier: Modifier, keyHeight: androidx.compose.ui.unit.Dp, onKey: (String) -> Unit) {
     val isOp = key in listOf("÷", "×", "-", "+", "=")
     val label = when (key) {
         "<" -> "⌫"
@@ -965,7 +972,7 @@ private fun KeypadKey(key: String, modifier: Modifier, onKey: (String) -> Unit) 
         onClick = { onKey(key) },
         shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
         color = if (isOp) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
-        modifier = modifier.height(52.dp)
+        modifier = modifier.height(keyHeight)
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(label, style = MaterialTheme.typography.headlineSmall)

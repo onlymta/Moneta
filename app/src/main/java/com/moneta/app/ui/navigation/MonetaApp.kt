@@ -238,8 +238,7 @@ private fun MonetaAppContent(
             // recording a transaction, so showing this one there produced two
             // overlapping plus buttons in the same corner (bug fix).
             val showQuickAddFab = currentRoute == MonetaDestination.Home.route ||
-                currentRoute == MonetaDestination.Transactions.route ||
-                currentRoute == MonetaDestination.Reports.route
+                currentRoute == MonetaDestination.Transactions.route
             if (showQuickAddFab) {
                 QuickAddFab(navController, currentRoute)
             }
@@ -278,26 +277,26 @@ private fun MonetaAppContent(
                     navController,
                     userName = prefs.userName,
                     onTransactionClick = { detailId.value = it },
-                    onOpenBudgets = { navController.navigateToTab(MonetaDestination.Budgets.route) }
+                    onOpenBudgets = { navController.openTabForward(MonetaDestination.Budgets.route) }
                 )
             }
 
             composable(MonetaDestination.Transactions.route) {
                 TransactionsScreen(
                     onTransactionClick = { id -> detailId.value = id },
-                    onOpenReports = { navController.navigateToTab(MonetaDestination.Reports.route) }
+                    onOpenReports = { navController.openTabForward(MonetaDestination.Reports.route) }
                 )
             }
 
             composable(MonetaDestination.Budgets.route) {
                 BudgetsScreen(
-                    onOpenRecords = { navController.navigateToTab(MonetaDestination.Transactions.route) },
-                    onOpenReports = { navController.navigateToTab(MonetaDestination.Reports.route) }
+                    onOpenRecords = { navController.openTabForward(MonetaDestination.Transactions.route) },
+                    onOpenReports = { navController.openTabForward(MonetaDestination.Reports.route) }
                 )
             }
             composable(MonetaDestination.Reports.route) {
                 ReportsScreen(
-                    onOpenBudgets = { navController.navigateToTab(MonetaDestination.Budgets.route) },
+                    onOpenBudgets = { navController.openTabForward(MonetaDestination.Budgets.route) },
                     onTransactionClick = { id -> detailId.value = id }
                 )
             }
@@ -530,6 +529,12 @@ private fun MonetaBottomBar(navController: NavHostController, tabs: List<MonetaD
  * you're already on is ignored). Every screen reloads its data from the
  * database, so nothing the user entered is lost by not saving tab state.
  */
+/** Opens a tab as a step forward from the current screen, so Back returns to where the user came from. */
+private fun NavHostController.openTabForward(route: String) {
+    if (currentBackStackEntry?.destination?.route == route) return
+    navigate(route) { launchSingleTop = true }
+}
+
 private fun NavHostController.navigateToTab(route: String) {
     if (currentBackStackEntry?.destination?.route == route) return
     navigate(route) {

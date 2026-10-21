@@ -44,7 +44,11 @@ data class BudgetLine(
     /** This category plus its subcategories, used to open its transactions. */
     val categoryIds: Set<Long> = emptySet(),
     /** Name to show: the plain name, or "Parent > Child" when sub-categories are on. */
-    val label: String = category.name
+    val label: String = category.name,
+    val depth: Int = 0,
+    val hasChildren: Boolean = false,
+    /** True for a parent category: its budget is the total of its sub-categories, not set directly. */
+    val derived: Boolean = false
 ) {
     val effectiveBudget: Money? get() = baseBudget?.let { it + carriedOver }
     val remaining: Money? get() = effectiveBudget?.let { it - spent }
@@ -165,50 +169,80 @@ class BudgetsViewModel @Inject constructor(
                     .filter { it.scope == BudgetScope.CATEGORY && it.categoryId != null }
                     .associateBy { it.categoryId }
 
-                val lines = categories
-                    .filter { subs || it.parentCategoryId == null }
-                    .map { category ->
-                        val budget = categoryBudgets[category.id]
-                        val base = budget?.let { Money(it.amount.minorUnits, currency) }
-                        val prevBase = prevCategoryBudgets[category.id]?.amount?.minorUnits
-                        val carried = if (prefs.rolloverBudgets && base != null && prevBase != null) {
-                            val left = prevBase - (spentBefore[category.id] ?: 0L)
-                            Money(if (left > 0) left else 0L, currency)
-                        } else {
-                            Money.zero(currency)
-                        }
-                        BudgetLine(
-                            category = category,
-                            budgetId = budget?.id,
-                            alertThresholdPercent = budget?.alertThresholdPercent ?: 90,
-                            baseBudget = base,
-                            carriedOver = carried,
-                            spent = Money(spentNow[category.id] ?: 0L, currency),
-                            categoryIds = countedMap.filter { it.value == category.id }.keys + category.id,
-                            label = labelOf(category)
-                        )
-                    }
-                    .sortedWith(
-                        compareByDescending<BudgetLine> { it.budgetId != null }
-                            .thenByDescending { it.percentUsed ?: 0.0 }
-                            .thenByDescending { it.spent.minorUnits }
-                    )
+                val kids = if (subs) com.moneta.app.domain.usecase.childIndex(categories) else emptyMap()
+                val ownBase = categories.associate { it.id to (categoryBudgets[it.id]?.amount?.minorUnits ?: 0L) }
+                val carriedOwn = categories.associate { c ->
+                    val base = categoryBudgets[c.id]
+                    val prevBase = prevCategoryBudgets[c.id]?.amount?.minorUnits
+                    val left = if (prefs.rolloverBudgets && base != null && prevBase != null) {
+                        prevBase - (spentBefore[c.id] ?: 0L)
+                    } else 0L
+                    c.id to (if (left > 0L) left else 0L)
+                }
+                val aggBudget = if (subs) com.moneta.app.domain.usecase.treeTotals(categories, ownBase, true) else ownBase
+                val aggCarried = if (subs) com.moneta.app.domain.usecase.treeTotals(categories, carriedOwn, true) else carriedOwn
+                val aggSpent = if (subs) com.moneta.app.domain.usecase.treeTotals(categories, spentNow, false) else spentNow
 
-                val budgeted = lines.filter { it.budgetId != null }
-                val totalBudget = Money(budgeted.sumOf { it.effectiveBudget?.minorUnits ?: 0L }, currency)
-                val spentOnBudgeted = Money(budgeted.sumOf { it.spent.minorUnits }, currency)
+                fun makeLine(category: Category, depth: Int): BudgetLine {
+                    val hasKids = subs && !kids[category.id].isNullOrEmpty()
+                    val budget = if (hasKids) null else categoryBudgets[category.id]
+                    val baseMinor: Long? = when {
+                        hasKids -> (aggBudget[category.id] ?: 0L).takeIf { it > 0L }
+                        budget != null -> budget.amount.minorUnits
+                        else -> null
+                    }
+                    return BudgetLine(
+                        category = category,
+                        budgetId = budget?.id,
+                        alertThresholdPercent = budget?.alertThresholdPercent ?: 90,
+                        baseBudget = baseMinor?.let { Money(it, currency) },
+                        carriedOver = Money(if (baseMinor != null) (aggCarried[category.id] ?: 0L) else 0L, currency),
+                        spent = Money(aggSpent[category.id] ?: 0L, currency),
+                        categoryIds = if (subs) {
+                            com.moneta.app.domain.usecase.descendantIds(categories, category.id) + category.id
+                        } else {
+                            countedMap.filter { it.value == category.id }.keys + category.id
+                        },
+                        label = category.name,
+                        depth = depth,
+                        hasChildren = hasKids,
+                        derived = hasKids
+                    )
+                }
+                val lineOrder = compareByDescending<BudgetLine> { it.baseBudget != null }
+                    .thenByDescending { it.percentUsed ?: 0.0 }
+                    .thenByDescending { it.spent.minorUnits }
+                val lines = ArrayList<BudgetLine>()
+                fun emit(list: List<Category>, depth: Int) {
+                    list.map { makeLine(it, depth) }.sortedWith(lineOrder).forEach { line ->
+                        lines.add(line)
+                        if (subs && depth < 12) {
+                            emit(categories.filter { it.parentCategoryId == line.category.id }, depth + 1)
+                        }
+                    }
+                }
+                emit(categories.filter { it.parentCategoryId == null }, 0)
+
+                val ownEffective = categories.mapNotNull { c ->
+                    categoryBudgets[c.id]?.let { c.id to (it.amount.minorUnits + (carriedOwn[c.id] ?: 0L)) }
+                }.toMap()
+                val (unitBudgets, unitSpent) = com.moneta.app.domain.usecase.budgetUnits(
+                    categories, ownEffective, totals, subs
+                )
+                val summary = com.moneta.app.domain.usecase.summarizeBudgets(
+                    budgets = unitBudgets,
+                    spent = unitSpent,
+                    daysElapsed = run {
+                        val t = LocalDate.now()
+                        if (!t.isBefore(range.start) && t.isBefore(range.endExclusive)) t.dayOfMonth else range.start.lengthOfMonth()
+                    },
+                    totalDays = range.start.lengthOfMonth(),
+                    isCurrentMonth = LocalDate.now().let { !it.isBefore(range.start) && it.isBefore(range.endExclusive) }
+                )
+                val totalBudget = Money(summary.totalBudget, currency)
+                val spentOnBudgeted = Money(summary.spent, currency)
                 val outside = totalExpense - spentOnBudgeted
                 val overallBudget = budgets.firstOrNull { it.scope == BudgetScope.OVERALL }
-                val today = LocalDate.now()
-                val isCurrentMonth = !today.isBefore(range.start) && today.isBefore(range.endExclusive)
-                val summary = com.moneta.app.domain.usecase.summarizeBudgets(
-                    budgets = budgeted.associate { it.category.id to (it.effectiveBudget?.minorUnits ?: 0L) },
-                    spent = budgeted.associate { it.category.id to it.spent.minorUnits },
-                    daysElapsed = if (isCurrentMonth) today.dayOfMonth else range.start.lengthOfMonth(),
-                    totalDays = range.start.lengthOfMonth(),
-                    isCurrentMonth = isCurrentMonth
-                )
-
                 BudgetsUiState(
                     isLoading = false,
                     period = p,
@@ -226,7 +260,7 @@ class BudgetsViewModel @Inject constructor(
                     prevMonthSpent = spentBefore.filter { it.value > 0L },
                     prevMonthLabel = prevRange.start.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
                     projectedSpend = Money(summary.projectedSpend, currency),
-                    expectedVariance = Money(summary.expectedVariance, currency),
+                    expectedVariance = Money(summary.spent + summary.yetToSpend - summary.totalBudget, currency),
                     yetToSpend = Money(summary.yetToSpend, currency),
                     isClosed = !range.endExclusive.isAfter(LocalDate.now())
                 )

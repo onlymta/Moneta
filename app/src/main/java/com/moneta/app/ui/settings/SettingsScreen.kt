@@ -126,7 +126,7 @@ fun SettingsScreen(
                     SettingsArea.APPEARANCE -> AppearanceArea(prefs.themeMode, viewModel)
                     SettingsArea.BUDGETS -> BudgetsArea(prefs.carryForwardBalance, prefs.rolloverBudgets, viewModel)
                     SettingsArea.MODULES -> ModulesArea(prefs.budgetsEnabled, prefs.goalsEnabled, prefs.billsEnabled, prefs.subcategoriesEnabled, viewModel)
-                    SettingsArea.DASHBOARD -> DashboardArea(prefs.hiddenHomeCards, viewModel)
+                    SettingsArea.DASHBOARD -> DashboardArea(prefs.hiddenHomeCards, prefs.homeCardOrder, viewModel)
                     SettingsArea.CUSTOMIZE -> CustomizeArea(prefs, viewModel)
                     SettingsArea.REMINDERS -> RemindersArea(prefs.reminderEnabled, prefs.reminderHour, prefs.reminderMinute, viewModel)
                 }
@@ -387,15 +387,40 @@ private fun ModulesArea(budgets: Boolean, goals: Boolean, bills: Boolean, subcat
 }
 
 @Composable
-private fun DashboardArea(hidden: Set<String>, viewModel: SettingsViewModel) {
+private fun DashboardArea(hidden: Set<String>, order: List<String>, viewModel: SettingsViewModel) {
     Text(
-        "Choose which cards appear on the Home page.",
+        "Choose which cards appear on the Home page and move them up or down.",
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
-    com.moneta.app.data.settings.HomeCard.entries.forEach { card ->
-        ToggleRow(card.label, "", card.name !in hidden) { on ->
-            viewModel.setHiddenHomeCards(if (on) hidden - card.name else hidden + card.name)
+    order.forEachIndexed { index, key ->
+        val card = com.moneta.app.data.settings.HomeCard.entries.firstOrNull { it.name == key } ?: return@forEachIndexed
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(card.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            TextButton(
+                enabled = index > 0,
+                onClick = {
+                    val list = order.toMutableList()
+                    list.removeAt(index)
+                    list.add(index - 1, key)
+                    viewModel.setHomeCardOrder(list)
+                }
+            ) { Text("Up") }
+            TextButton(
+                enabled = index < order.size - 1,
+                onClick = {
+                    val list = order.toMutableList()
+                    list.removeAt(index)
+                    list.add(index + 1, key)
+                    viewModel.setHomeCardOrder(list)
+                }
+            ) { Text("Down") }
+            Switch(
+                checked = card.name !in hidden,
+                onCheckedChange = { on ->
+                    viewModel.setHiddenHomeCards(if (on) hidden - card.name else hidden + card.name)
+                }
+            )
         }
     }
 }

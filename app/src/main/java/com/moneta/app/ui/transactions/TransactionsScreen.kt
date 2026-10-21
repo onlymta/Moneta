@@ -20,6 +20,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
@@ -83,7 +85,8 @@ fun TransactionsScreen(
             PeriodBar(
                 selection = state.period,
                 onChange = viewModel::onPeriodChange,
-                modes = PeriodMode.entries
+                modes = PeriodMode.entries,
+                calendarPick = true
             )
             // Three small controls under the period: filter, sort / view, and (far right) search.
             Row(
@@ -110,8 +113,8 @@ fun TransactionsScreen(
                     IconButton(onClick = { sortOpen = true }) {
                         Icon(
                             Icons.Filled.SwapVert,
-                            contentDescription = "Sort and view",
-                            tint = if (state.sortMode != SortMode.DATE_DESC || state.groupMode != GroupMode.DAY)
+                            contentDescription = "Sort records",
+                            tint = if (state.sortMode != SortMode.DATE_DESC)
                                 MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -133,25 +136,17 @@ fun TransactionsScreen(
                                 onClick = { sortOpen = false; viewModel.onSortModeChange(mode) }
                             )
                         }
-                        Divider()
-                        Text(
-                            "View as",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                        )
-                        GroupMode.entries.forEach { mode ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        (if (mode == state.groupMode) "\u2713  " else "     ") + mode.label,
-                                        fontWeight = if (mode == state.groupMode) FontWeight.Bold else FontWeight.Normal
-                                    )
-                                },
-                                onClick = { sortOpen = false; viewModel.onGroupModeChange(mode) }
-                            )
-                        }
                     }
+                }
+                val totalsView = state.groupMode == GroupMode.CATEGORY_TOTALS
+                IconButton(onClick = {
+                    viewModel.onGroupModeChange(if (totalsView) GroupMode.DAY else GroupMode.CATEGORY_TOTALS)
+                }) {
+                    Icon(
+                        if (totalsView) Icons.Filled.PieChart else Icons.Filled.ViewList,
+                        contentDescription = if (totalsView) "Showing category totals. Tap for individual records" else "Showing individual records. Tap for category totals",
+                        tint = if (totalsView) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = {

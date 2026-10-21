@@ -12,6 +12,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.outlined.ChevronLeft
@@ -95,6 +96,15 @@ data class PeriodSelection(
     /** True when this selection contains today (used to decide things like "this month" wording). */
     fun containsToday(): Boolean = LocalDate.now() in range()
 
+    /** A short tag for chart axes: "Oct 26", "6 Oct", "2026". */
+    fun shortLabel(): String = when (mode) {
+        PeriodMode.DAY, PeriodMode.WEEK -> range().start.format(DateTimeFormatter.ofPattern("d MMM"))
+        PeriodMode.MONTH -> anchor.format(DateTimeFormatter.ofPattern("MMM yy"))
+        PeriodMode.YEAR -> anchor.format(DateTimeFormatter.ofPattern("yyyy"))
+        PeriodMode.ALL -> "All"
+        PeriodMode.CUSTOM -> "Range"
+    }
+
     fun label(): String {
         val r = range()
         val last = r.endExclusive.minusDays(1)
@@ -125,12 +135,38 @@ fun PeriodBar(
     selection: PeriodSelection,
     onChange: (PeriodSelection) -> Unit,
     modifier: Modifier = Modifier,
-    modes: List<PeriodMode> = PeriodMode.entries
+    modes: List<PeriodMode> = PeriodMode.entries,
+    /**
+     * When true, tapping the period label opens a calendar to jump to any day/week/month/year, and a small
+     * separate button next to the arrows chooses the kind of period (day, week, month, year, all time, custom).
+     */
+    calendarPick: Boolean = false
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    var calendarOpen by remember { mutableStateOf(false) }
     var pickStart by remember { mutableStateOf(false) }
     var pickEnd by remember { mutableStateOf(false) }
     var pendingStart by remember { mutableStateOf(selection.customStart) }
+
+    val modeMenu: @Composable () -> Unit = {
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            modes.forEach { mode ->
+                DropdownMenuItem(
+                    text = { Text(mode.label) },
+                    onClick = {
+                        menuOpen = false
+                        if (mode == PeriodMode.CUSTOM) {
+                            pickStart = true
+                        } else {
+                            // Keep the day you were looking at when switching between day/week/month/year.
+                            val anchor = if (selection.mode == PeriodMode.CUSTOM) selection.customEnd else selection.anchor
+                            onChange(selection.copy(mode = mode, anchor = anchor))
+                        }
+                    }
+                )
+            }
+        }
+    }
 
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -147,7 +183,9 @@ fun PeriodBar(
             Surface(
                 shape = RoundedCornerShape(50),
                 color = if (isNow) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                modifier = Modifier.clickable(enabled = modes.size > 1) { menuOpen = true }
+                modifier = Modifier.clickable(enabled = modes.size > 1 || calendarPick) {
+                    if (calendarPick && selection.canShift) calendarOpen = true else menuOpen = true
+                }
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
@@ -170,31 +208,59 @@ fun PeriodBar(
                             )
                         }
                     }
-                    if (modes.size > 1) {
+                    if (modes.size > 1 && !calendarPick) {
                         Icon(Icons.Filled.ArrowDropDown, contentDescription = "Change period type")
                     }
                 }
             }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                modes.forEach { mode ->
-                    DropdownMenuItem(
-                        text = { Text(mode.label) },
-                        onClick = {
-                            menuOpen = false
-                            if (mode == PeriodMode.CUSTOM) {
-                                pickStart = true
-                            } else {
-                                // Keep the day you were looking at when switching between day/week/month/year.
-                                val anchor = if (selection.mode == PeriodMode.CUSTOM) selection.customEnd else selection.anchor
-                                onChange(selection.copy(mode = mode, anchor = anchor))
-                            }
-                        }
-                    )
-                }
-            }
+            if (!calendarPick) modeMenu()
         }
         IconButton(onClick = { onChange(selection.shift(1)) }, enabled = selection.canShift) {
             Icon(Icons.Outlined.ChevronRight, contentDescription = "Next")
+        }
+        if (calendarPick) {
+            Box {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.clickable { menuOpen = true }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            when (selection.mode) {
+                                PeriodMode.DAY -> "Day"
+                                PeriodMode.WEEK -> "Week"
+                                PeriodMode.MONTH -> "Month"
+                                PeriodMode.YEAR -> "Year"
+                                PeriodMode.ALL -> "All"
+                                PeriodMode.CUSTOM -> "Custom"
+                            },
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "Change period type", modifier = Modifier.size(18.dp))
+                    }
+                }
+                modeMenu()
+            }
+        }
+    }
+
+    if (calendarOpen) {
+        val state = rememberDatePickerState(initialSelectedDateMillis = millisOf(selection.anchor))
+        DatePickerDialog(
+            onDismissRequest = { calendarOpen = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { onChange(selection.copy(anchor = dateOf(it))) }
+                    calendarOpen = false
+                }) { Text("Go") }
+            },
+            dismissButton = { TextButton(onClick = { calendarOpen = false }) { Text("Cancel") } }
+        ) {
+            DatePicker(state = state, title = { Text("  Jump to a date") })
         }
     }
 

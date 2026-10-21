@@ -44,6 +44,9 @@ data class MonthTrend(
 /** One account with an amount attached, used by the tap-to-expand breakdowns on Home. */
 data class AccountAmount(val account: Account, val amount: Money)
 
+/** One budgeted category with money still to spend. */
+data class YetToSpendLine(val name: String, val icon: String, val amount: Money)
+
 data class HomeUiState(
     val isLoading: Boolean = true,
     val hasAnyAccounts: Boolean = false,
@@ -72,6 +75,9 @@ data class HomeUiState(
     /** Balance expected at the end of the month: today's balance less budgeted money still to be spent. */
     val expectedClosing: Money = Money.zero("PKR"),
     val hiddenCards: Set<String> = emptySet(),
+    val cardOrder: List<String> = emptyList(),
+    /** Budgeted money still to spend, category by category (largest first). */
+    val yetToSpendLines: List<YetToSpendLine> = emptyList(),
     val hideBalance: Boolean = false
 ) {
     /** Income minus expenses for the chosen month - a plain "net change", not "savings". */
@@ -202,13 +208,35 @@ class HomeViewModel @Inject constructor(
             lastMonthSpent = prevSpent,
             rollover = prefs.rolloverBudgets
         )
+        val (unitBudgets, unitSpent) = com.moneta.app.domain.usecase.budgetUnits(
+            categories, effective, categoryTotals, prefs.subcategoriesEnabled
+        )
         val budgetSummary = com.moneta.app.domain.usecase.summarizeBudgets(
-            budgets = effective,
-            spent = com.moneta.app.domain.usecase.spentMap(categoryTotals, categories, prefs.subcategoriesEnabled),
+            budgets = unitBudgets,
+            spent = unitSpent,
             daysElapsed = java.time.LocalDate.now().dayOfMonth,
             totalDays = range.start.lengthOfMonth(),
             isCurrentMonth = p.containsToday()
         )
+        val byIdAll = categories.associateBy { it.id }
+        fun pathName(c: Category): String {
+            if (!prefs.subcategoriesEnabled) return c.name
+            val parts = ArrayList<String>()
+            var cur: Category? = c
+            var guard = 0
+            while (cur != null && guard < 20) {
+                parts.add(0, cur.name)
+                cur = cur.parentCategoryId?.let { byIdAll[it] }
+                guard++
+            }
+            return parts.joinToString(" > ")
+        }
+        val yetLines = unitBudgets.mapNotNull { (id, budget) ->
+            val left = budget - (unitSpent[id] ?: 0L)
+            val cat = byIdAll[id]
+            if (cat == null || budget <= 0L || left <= 0L) null
+            else YetToSpendLine(pathName(cat), cat.icon, Money(left, currency))
+        }.sortedByDescending { it.amount.minorUnits }
         val currentBalanceNow = if (p.containsToday()) Money(allMinor, currency) else opening + income - expense
         return HomeUiState(
             isLoading = false,
@@ -234,6 +262,8 @@ class HomeViewModel @Inject constructor(
                 currentBalanceNow
             },
             hiddenCards = prefs.hiddenHomeCards,
+            cardOrder = prefs.homeCardOrder,
+            yetToSpendLines = yetLines,
             hideBalance = prefs.hideBalance,
             monthIncome = income,
             monthExpense = expense,

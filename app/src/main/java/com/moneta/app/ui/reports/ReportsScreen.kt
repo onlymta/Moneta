@@ -2,6 +2,7 @@ package com.moneta.app.ui.reports
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Surface
@@ -36,6 +37,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.moneta.app.ui.common.TransactionRowCard
@@ -55,6 +58,10 @@ import com.moneta.app.domain.usecase.CategorySlice
 import com.moneta.app.ui.common.CategoryPieChart
 import com.moneta.app.ui.common.IconBadge
 import com.moneta.app.ui.common.PeriodBar
+import com.moneta.app.ui.common.BarGroup
+import com.moneta.app.ui.common.BarValue
+import com.moneta.app.ui.common.ChartLegend
+import com.moneta.app.ui.common.GroupedBarChart
 import com.moneta.app.ui.common.TrendBarChart
 import com.moneta.app.ui.common.parseColorOrGray
 import com.moneta.app.ui.theme.ExpenseRed
@@ -75,6 +82,8 @@ fun ReportsScreen(
 
     // Arriving from a long-press on a budget (or a category row in Records): open that category's analysis.
     LaunchedEffect(Unit) { viewModel.applyLaunch() }
+    // The system back button closes an open category analysis first, instead of leaving Reports.
+    androidx.activity.compose.BackHandler(enabled = selectedId != null) { viewModel.selectCategory(null) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         PeriodBar(
@@ -113,7 +122,10 @@ fun ReportsScreen(
                 } else {
                     BreakdownTab(
                         slices = if (isIncome) state.incomeSlices else state.spendingSlices,
-                        kind = if (isIncome) "income" else "expenses",
+                        tree = if (isIncome) state.incomeTree else state.spendingTree,
+                        trend = state.trend,
+                        isIncome = isIncome,
+                        total = if (isIncome) state.income else state.expense,
                         periodLabel = state.period.label(),
                         onSelect = { id -> viewModel.selectCategory(id) }
                     )
@@ -167,53 +179,46 @@ private fun OverviewTab(state: ReportsUiState, onGoTo: (ReportTab) -> Unit, onOp
                         )
                     }
                     state.expectedClosing?.let { expected ->
-                        Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = MonetaSpacing.sm, vertical = MonetaSpacing.xs)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = MonetaSpacing.md, vertical = MonetaSpacing.sm),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        if (state.pendingBudget.isZero) "Closing balance" else "Expected closing",
-                                        style = MaterialTheme.typography.titleSmall
-                                    )
-                                    Text(
-                                        if (state.pendingBudget.isZero) "Nothing left to spend from budgets" else "After spending the rest of your budgets",
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
-                                }
-                                MoneyText(expected, color = if (expected.isNegative) ExpenseRed else IncomeGreen)
-                            }
-                        }
+                        StatementRow(
+                            if (state.pendingBudget.isZero) "Closing balance" else "Expected closing",
+                            expected,
+                            if (expected.isNegative) ExpenseRed else IncomeGreen,
+                            null,
+                            null,
+                            bold = true,
+                            container = MaterialTheme.colorScheme.primaryContainer,
+                            subtitle = if (state.pendingBudget.isZero) "Nothing left to spend from budgets" else "After spending the rest of your budgets"
+                        )
                     }
-                    Text(
-                        "${state.transactionCount} transaction(s). Tap a figure to see its details.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = MonetaSpacing.cardPadding, vertical = MonetaSpacing.xs)
-                    )
                 }
             }
         }
-        if (state.spendingSlices.isNotEmpty()) {
-            item { Text("Where the money went", style = MaterialTheme.typography.titleMedium) }
+        if (state.trend.isNotEmpty() && state.trend.any { !it.income.isZero || !it.expense.isZero }) {
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(MonetaSpacing.cardPadding),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        CategoryPieChart(state.spendingSlices, modifier = Modifier.size(150.dp))
+                    Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+                        Text("Income vs expenses", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Last " + state.trend.size + " period(s). The percentage is how much of that period's income was spent.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(MonetaSpacing.sm))
+                        ChartLegend(listOf("Income" to IncomeGreen, "Expenses" to ExpenseRed))
                         Spacer(Modifier.height(MonetaSpacing.md))
-                        state.spendingSlices.take(5).forEach { SliceRow(it, showBar = false) }
+                        GroupedBarChart(
+                            groups = state.trend.map { stat ->
+                                BarGroup(
+                                    label = stat.label,
+                                    bars = listOf(
+                                        BarValue(stat.income.minorUnits, IncomeGreen),
+                                        BarValue(stat.expense.minorUnits, ExpenseRed)
+                                    ),
+                                    notes = listOf(stat.expensePercentOfIncome?.let { percentText(it) } ?: "-"),
+                                    highlight = stat.isSelected
+                                )
+                            }
+                        )
                     }
                 }
             }
@@ -240,19 +245,28 @@ private fun StatementRow(
     color: Color,
     sign: String?,
     onClick: (() -> Unit)?,
-    bold: Boolean = false
+    bold: Boolean = false,
+    container: Color? = null,
+    subtitle: String? = null
 ) {
+    // A highlighted row sits inside a rounded block; its padding is trimmed so the figures still line up with the rows above.
+    val inset = if (container != null) MonetaSpacing.sm else 0.dp
     val base = Modifier
         .fillMaxWidth()
         .let { if (onClick != null) it.clickable(onClick = onClick) else it }
-        .padding(horizontal = MonetaSpacing.cardPadding, vertical = 12.dp)
+        .padding(horizontal = MonetaSpacing.cardPadding - inset, vertical = 12.dp)
+    val rowContent: @Composable () -> Unit = {
     Row(modifier = base, verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium,
-            modifier = Modifier.weight(1f)
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium
+            )
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         Box(modifier = Modifier.width(20.dp), contentAlignment = Alignment.Center) {
             if (sign != null) Text(sign, style = MaterialTheme.typography.titleMedium, color = color, fontWeight = FontWeight.Bold)
         }
@@ -270,6 +284,18 @@ private fun StatementRow(
                 Text("\u203A", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+    }
+    if (container != null) {
+        Surface(
+            color = container,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = inset, vertical = MonetaSpacing.xs)
+        ) { rowContent() }
+    } else {
+        rowContent()
     }
 }
 
@@ -336,48 +362,156 @@ private fun SliceRow(slice: CategorySlice, showBar: Boolean) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun BreakdownTab(
     slices: List<CategorySlice>,
-    kind: String,
+    tree: List<TreeRow>,
+    trend: List<PeriodStat>,
+    isIncome: Boolean,
+    total: Money,
     periodLabel: String,
     onSelect: (Long) -> Unit
 ) {
-    if (slices.isEmpty()) {
-        Column(modifier = Modifier
-            .fillMaxSize()
-            .padding(MonetaSpacing.xl), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("No $kind in $periodLabel", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(MonetaSpacing.xs))
-            Text(
-                "Record some $kind or pick another period to see the breakdown.",
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
+    val kind = if (isIncome) "income" else "expenses"
+    val accent = if (isIncome) IncomeGreen else ExpenseRed
+    var expandedIds by remember { mutableStateOf(setOf<Long>()) }
+    val visibleRows = remember(tree, expandedIds) {
+        val out = ArrayList<TreeRow>()
+        val openAtDepth = HashMap<Int, Boolean>()
+        tree.forEach { row ->
+            val parentsOpen = (0 until row.depth).all { openAtDepth[it] == true }
+            if (parentsOpen) out.add(row)
+            val id = row.categoryId
+            openAtDepth[row.depth] = parentsOpen && id != null && id in expandedIds
         }
-        return
+        out
     }
     LazyColumn(contentPadding = reportPadding, verticalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
         item {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                CategoryPieChart(slices, modifier = Modifier.size(200.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = accent.copy(alpha = 0.12f))
+            ) {
+                Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+                    Text(
+                        (if (isIncome) "Total income" else "Total expenses") + " in " + periodLabel,
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        androidx.compose.material3.LocalTextStyle provides MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold)
+                    ) {
+                        MoneyText(total, color = accent)
+                    }
+                }
             }
         }
-        items(slices, key = { "slice-${it.categoryId}-${it.name}" }) { slice ->
-            val sliceId = slice.categoryId
+        if (trend.size > 1) {
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+                        Text(
+                            (if (isIncome) "Income" else "Expenses") + ", last " + trend.size + " periods",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(Modifier.height(MonetaSpacing.md))
+                        GroupedBarChart(
+                            groups = trend.map { stat ->
+                                val amount = if (isIncome) stat.income else stat.expense
+                                BarGroup(
+                                    label = stat.label,
+                                    bars = listOf(BarValue(amount.minorUnits, accent)),
+                                    highlight = stat.isSelected
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        if (slices.isEmpty()) {
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(MonetaSpacing.xl),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("No $kind in $periodLabel", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(MonetaSpacing.xs))
+                    Text(
+                        "Record some $kind or pick another period to see the breakdown.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
+            return@LazyColumn
+        }
+        item {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                CategoryPieChart(slices, modifier = Modifier.size(180.dp))
+            }
+        }
+        items(visibleRows, key = { "row-${it.categoryId}-${it.name}-${it.depth}" }) { row ->
+            val rowId = row.categoryId
+            val rowColor = parseColorOrGray(row.colorHex)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .let { if (sliceId != null) it.clickable { onSelect(sliceId) } else it }
+                    .padding(start = (row.depth * 18).dp)
+                    .let {
+                        if (rowId != null) {
+                            it.combinedClickable(
+                                onClick = {
+                                    if (row.hasChildren) {
+                                        expandedIds = if (rowId in expandedIds) expandedIds - rowId else expandedIds + rowId
+                                    } else {
+                                        onSelect(rowId)
+                                    }
+                                },
+                                onLongClick = { onSelect(rowId) }
+                            )
+                        } else it
+                    }
             ) {
                 Column(modifier = Modifier.padding(horizontal = MonetaSpacing.md, vertical = MonetaSpacing.sm)) {
-                    SliceRow(slice, showBar = true)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier
+                            .size(10.dp)
+                            .background(rowColor, CircleShape))
+                        Spacer(Modifier.width(MonetaSpacing.sm))
+                        Text(row.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1)
+                        MoneyText(row.amount)
+                        Spacer(Modifier.width(MonetaSpacing.sm))
+                        Text(
+                            "%.0f%%".format(row.percentOfTotal),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (row.hasChildren) {
+                            Icon(
+                                if (rowId != null && rowId in expandedIds) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                contentDescription = null
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress = { (row.percentOfTotal / 100.0).toFloat().coerceIn(0f, 1f) },
+                        color = rowColor,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
         item {
             Text(
-                "Tap a category for a closer look.",
+                if (tree.any { it.hasChildren }) {
+                    "Tap a category with sub-categories to expand it. Tap a sub-category, or press and hold any category, for its analysis."
+                } else {
+                    "Tap a category for a closer look."
+                },
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -514,47 +648,48 @@ private fun CategoryDetail(analysis: CategoryAnalysis, onBack: () -> Unit, onTra
                 }
             }
         }
-        if (analysis.history.isNotEmpty()) {
+        if (analysis.bars.isNotEmpty()) {
             item {
+                val actualColor = if (analysis.isIncome) IncomeGreen else ExpenseRed
+                val budgetColor = MaterialTheme.colorScheme.tertiary
+                val showBudget = !analysis.isIncome && analysis.bars.any { it.budget != null }
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
                         Text(
-                            if (analysis.isIncome) "Earlier periods" else "Earlier periods: spent vs budget",
+                            analysis.name + ", last " + analysis.bars.size + " periods",
                             style = MaterialTheme.typography.titleMedium
                         )
                         Spacer(Modifier.height(MonetaSpacing.sm))
-                        analysis.history.forEachIndexed { index, row ->
-                            if (index > 0) Divider(modifier = Modifier.padding(vertical = 6.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(row.label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                                Text(row.amount.formatted(), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        ChartLegend(
+                            buildList {
+                                if (showBudget) add("Budget" to budgetColor)
+                                add((if (analysis.isIncome) "Income" else "Spent") to actualColor)
                             }
-                            val budget = row.budget
-                            if (!analysis.isIncome) {
-                                if (budget == null) {
-                                    Text("No budget", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                } else {
-                                    val excess = row.excess ?: Money.zero(budget.currencyCode)
-                                    val over = excess.minorUnits > 0L
-                                    Text(
-                                        "Budget " + budget.formatted() + "  \u00B7  " + percentText(row.percentUsed ?: 0.0) + " used  \u00B7  " +
-                                            (if (over) "over by " else "unused ") + excess.abs().formatted(),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = if (over) ExpenseRed else IncomeGreen
-                                    )
-                                }
-                            } else {
-                                val newer = if (index == 0) analysis.amount else analysis.history[index - 1].amount
-                                if (row.amount.minorUnits > 0L) {
-                                    val change = (newer.minorUnits - row.amount.minorUnits) * 100.0 / row.amount.minorUnits
-                                    Text(
-                                        "Next period " + (if (change >= 0) "+" else "") + percentText(change) + " vs this one",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                        )
+                        Spacer(Modifier.height(MonetaSpacing.md))
+                        GroupedBarChart(
+                            groups = analysis.bars.map { bar ->
+                                BarGroup(
+                                    label = bar.label,
+                                    bars = buildList {
+                                        if (showBudget) add(BarValue(bar.budget?.minorUnits ?: 0L, budgetColor))
+                                        add(BarValue(bar.amount.minorUnits, actualColor))
+                                    },
+                                    notes = buildList {
+                                        if (!analysis.isIncome) add("bud " + (bar.percentOfBudget?.let { percentText(it) } ?: "-"))
+                                        add("tot " + percentText(bar.percentOfTotal))
+                                    },
+                                    highlight = bar.isSelected
+                                )
                             }
-                        }
+                        )
+                        Text(
+                            (if (analysis.isIncome) "" else "bud = share of the budget used. ") +
+                                "tot = share of all " + (if (analysis.isIncome) "income" else "expenses") + " in that period.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
                     }
                 }
             }

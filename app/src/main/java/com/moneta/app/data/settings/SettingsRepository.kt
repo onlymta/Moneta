@@ -30,7 +30,6 @@ enum class HomeCard(val label: String) {
     EXPENSES("Expenses"),
     EXPECTED_CLOSING("Expected closing balance"),
     BUDGETED("Budgeted amount"),
-    BUDGET_SPENT("Spent (in budgeted categories)"),
     YET_TO_SPEND("Yet to spend (budgeted, not spent)")
 }
 
@@ -88,11 +87,11 @@ data class AppPreferences(
     val displayCurrency: String = "PKR",
     val showCurrencySymbol: Boolean = true,
     // --- Record form customization ---
-    val formSaveAtTop: Boolean = false,
-    val formPickersInRow: Boolean = false,
-    val formPickersAboveAmount: Boolean = false,
+    val formSaveAtTop: Boolean = true,
+    val formPickersInRow: Boolean = true,
+    val formPickersAboveAmount: Boolean = true,
     val formCustomKeypad: Boolean = false,
-    val formNotesAboveAmount: Boolean = false,
+    val formNotesAboveAmount: Boolean = true,
     val formDateBelowKeypad: Boolean = false,
     val balanceScope: BalanceScope = BalanceScope.ALL,
     /** How many decimals amounts show: 0, 1 or 2. */
@@ -101,6 +100,8 @@ data class AppPreferences(
     val hideBalance: Boolean = false,
     /** Home dashboard cards the user switched off (keys from HomeCard). */
     val hiddenHomeCards: Set<String> = emptySet(),
+    /** Order of the Home dashboard cards (keys from HomeCard). */
+    val homeCardOrder: List<String> = HomeCard.entries.map { it.name },
     /** When on, sub-categories can be created and each has its own budget and analysis. */
     val subcategoriesEnabled: Boolean = false,
     // --- Reminders and backups ---
@@ -152,6 +153,7 @@ class SettingsRepository @Inject constructor(
         val DECIMALS = intPreferencesKey("display_decimals")
         val HIDE_BALANCE = booleanPreferencesKey("hide_balance")
         val HIDDEN_HOME_CARDS = stringSetPreferencesKey("hidden_home_cards")
+        val HOME_CARD_ORDER = stringPreferencesKey("home_card_order")
         val SUBCATEGORIES = booleanPreferencesKey("subcategories_enabled")
         val REMINDER_ENABLED = booleanPreferencesKey("reminder_enabled")
         val REMINDER_HOUR = intPreferencesKey("reminder_hour")
@@ -191,11 +193,11 @@ class SettingsRepository @Inject constructor(
                 ?: emptySet(),
             displayCurrency = prefs[Keys.DISPLAY_CURRENCY] ?: "PKR",
             showCurrencySymbol = prefs[Keys.SHOW_CURRENCY_SYMBOL] ?: true,
-            formSaveAtTop = prefs[Keys.FORM_SAVE_TOP] ?: false,
-            formPickersInRow = prefs[Keys.FORM_PICKERS_ROW] ?: false,
-            formPickersAboveAmount = prefs[Keys.FORM_PICKERS_ABOVE] ?: false,
+            formSaveAtTop = prefs[Keys.FORM_SAVE_TOP] ?: true,
+            formPickersInRow = prefs[Keys.FORM_PICKERS_ROW] ?: true,
+            formPickersAboveAmount = prefs[Keys.FORM_PICKERS_ABOVE] ?: true,
             formCustomKeypad = prefs[Keys.FORM_KEYPAD] ?: false,
-            formNotesAboveAmount = prefs[Keys.FORM_NOTES_ABOVE] ?: false,
+            formNotesAboveAmount = prefs[Keys.FORM_NOTES_ABOVE] ?: true,
             formDateBelowKeypad = prefs[Keys.FORM_DATE_BELOW] ?: false,
             balanceScope = prefs[Keys.BALANCE_SCOPE]
                 ?.let { name -> BalanceScope.entries.firstOrNull { it.name == name } }
@@ -203,6 +205,7 @@ class SettingsRepository @Inject constructor(
             decimals = (prefs[Keys.DECIMALS] ?: 2).coerceIn(0, 2),
             hideBalance = prefs[Keys.HIDE_BALANCE] ?: false,
             hiddenHomeCards = prefs[Keys.HIDDEN_HOME_CARDS] ?: emptySet(),
+            homeCardOrder = parseHomeCardOrder(prefs[Keys.HOME_CARD_ORDER]),
             subcategoriesEnabled = prefs[Keys.SUBCATEGORIES] ?: false,
             reminderEnabled = prefs[Keys.REMINDER_ENABLED] ?: false,
             reminderHour = prefs[Keys.REMINDER_HOUR] ?: 21,
@@ -281,6 +284,8 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setHiddenHomeCards(keys: Set<String>) = context.dataStore.edit { it[Keys.HIDDEN_HOME_CARDS] = keys }
 
+    suspend fun setHomeCardOrder(order: List<String>) = context.dataStore.edit { it[Keys.HOME_CARD_ORDER] = order.joinToString(",") }
+
     suspend fun setSubcategoriesEnabled(on: Boolean) = context.dataStore.edit { it[Keys.SUBCATEGORIES] = on }
 
     /**
@@ -346,6 +351,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setLastAutoBackupAt(timeMillis: Long) = context.dataStore.edit { it[Keys.LAST_AUTO_BACKUP] = timeMillis }
 
     suspend fun setDismissedAlertIds(ids: Set<String>) = context.dataStore.edit { it[Keys.DISMISSED_ALERTS] = ids }
+
+    private fun parseHomeCardOrder(raw: String?): List<String> {
+        val all = HomeCard.entries.map { it.name }
+        val saved = raw?.split(",")?.filter { it in all }?.distinct() ?: emptyList()
+        return saved + all.filter { it !in saved }
+    }
 
     private fun parseTabOrder(raw: String?): List<String> {
         val saved = raw?.split(",")?.filter { it in DEFAULT_TAB_ORDER }?.distinct() ?: emptyList()

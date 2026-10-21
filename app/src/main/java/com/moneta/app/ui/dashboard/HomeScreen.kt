@@ -99,14 +99,12 @@ fun HomeScreen(
             onSeeAll = {
                 viewModel.prepareRecordsAll()
                 navController.navigate(MonetaDestination.Transactions.route) {
-                    popUpTo(MonetaDestination.Home.route) { inclusive = false }
                     launchSingleTop = true
                 }
             },
             onOpenRecords = { type ->
                 viewModel.prepareRecords(type)
                 navController.navigate(MonetaDestination.Transactions.route) {
-                    popUpTo(MonetaDestination.Home.route) { inclusive = false }
                     launchSingleTop = true
                 }
             }
@@ -191,6 +189,12 @@ private fun HomeContent(
                     "  =  expected closing " + state.expectedClosing.formatted()
             } else null
         )
+        HomeDialog.YET -> YetToSpendDialog(
+            lines = state.yetToSpendLines,
+            total = state.yetToSpend,
+            onDismiss = { dialog = HomeDialog.NONE },
+            onOpenBudgets = { dialog = HomeDialog.NONE; onOpenBudgets() }
+        )
         HomeDialog.NONE -> Unit
     }
     LazyColumn(
@@ -215,9 +219,11 @@ private fun HomeContent(
             )
         }
         val hasBudgets = !state.budgetTotal.isZero
-        val cards = com.moneta.app.data.settings.HomeCard.entries.filter { card ->
+        val orderedCards = state.cardOrder.mapNotNull { key ->
+            com.moneta.app.data.settings.HomeCard.entries.firstOrNull { it.name == key }
+        }.ifEmpty { com.moneta.app.data.settings.HomeCard.entries.toList() }
+        val cards = orderedCards.filter { card ->
             card.name !in state.hiddenCards && (hasBudgets || (card != com.moneta.app.data.settings.HomeCard.BUDGETED &&
-                card != com.moneta.app.data.settings.HomeCard.BUDGET_SPENT &&
                 card != com.moneta.app.data.settings.HomeCard.YET_TO_SPEND))
         }
         items(cards.chunked(2), key = { row -> row.first().name }) { row ->
@@ -264,21 +270,13 @@ private fun HomeContent(
                             caption = "Tap for budgets",
                             onClick = onOpenBudgets
                         )
-                        com.moneta.app.data.settings.HomeCard.BUDGET_SPENT -> FigureTile(
-                            label = "Spent (budgeted)",
-                            amount = state.budgetSpent,
-                            color = ExpenseRed,
-                            modifier = Modifier.weight(1f),
-                            caption = "Tap for budgets",
-                            onClick = onOpenBudgets
-                        )
                         com.moneta.app.data.settings.HomeCard.YET_TO_SPEND -> FigureTile(
                             label = "Yet to spend",
                             amount = state.yetToSpend,
                             color = WarningAmber,
                             modifier = Modifier.weight(1f),
-                            caption = "Budgeted, not spent",
-                            onClick = onOpenBudgets
+                            caption = "Tap for breakdown",
+                            onClick = { dialog = HomeDialog.YET }
                         )
                     }
                 }
@@ -315,7 +313,7 @@ private fun HomeContent(
     }
 }
 
-private enum class HomeDialog { NONE, OPENING, INCOME, BALANCE }
+private enum class HomeDialog { NONE, OPENING, INCOME, BALANCE, YET }
 
 @Composable
 private fun FigureTile(
@@ -352,6 +350,69 @@ private fun FigureTile(
             }
         }
     }
+}
+
+/** Compact list of budgeted categories with what is still to spend, each with a small share bar. */
+@Composable
+private fun YetToSpendDialog(
+    lines: List<YetToSpendLine>,
+    total: Money,
+    onDismiss: () -> Unit,
+    onOpenBudgets: () -> Unit
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Yet to spend") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
+            ) {
+                if (lines.isEmpty()) {
+                    Text("Every budget is fully spent.", style = MaterialTheme.typography.bodyMedium)
+                }
+                val biggest = (lines.maxOfOrNull { it.amount.minorUnits } ?: 1L).coerceAtLeast(1L)
+                lines.forEach { line ->
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconBadge(
+                                iconName = line.icon,
+                                colorHex = com.moneta.app.ui.common.IconMapper.colorFor(line.icon),
+                                size = 26.dp
+                            )
+                            Spacer(Modifier.width(MonetaSpacing.sm))
+                            Text(
+                                line.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            MoneyText(line.amount, color = WarningAmber)
+                        }
+                        Spacer(Modifier.height(3.dp))
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { line.amount.minorUnits.toFloat() / biggest.toFloat() },
+                            color = WarningAmber,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                        )
+                    }
+                }
+                Divider()
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Total", fontWeight = FontWeight.Bold)
+                    MoneyText(total, color = Color.Unspecified)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onOpenBudgets) { Text("Open budgets") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
+    )
 }
 
 /** Modal list of accounts with amounts; optionally split into Current and Savings groups. */

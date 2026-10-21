@@ -19,7 +19,11 @@ import com.moneta.app.data.settings.SettingsRepository
 import com.moneta.app.domain.usecase.CategoryBreakdownUseCase
 import com.moneta.app.domain.usecase.CategorySlice
 import com.moneta.app.domain.usecase.NetWorthTrendUseCase
+import com.moneta.app.domain.usecase.budgetUnits
+import com.moneta.app.domain.usecase.childIndex
 import com.moneta.app.domain.usecase.countedUnder
+import com.moneta.app.domain.usecase.descendantIds
+import com.moneta.app.domain.usecase.treeTotals
 import com.moneta.app.domain.usecase.rollUp
 import com.moneta.app.ui.common.PeriodMode
 import com.moneta.app.ui.common.PeriodSelection
@@ -57,6 +61,34 @@ data class PeriodRow(
     val excess: Money? get() = budget?.let { Money(amount.minorUnits - it.minorUnits, it.currencyCode) }
 }
 
+/** Income and expenses of one period, for the six-period charts. */
+data class PeriodStat(val label: String, val income: Money, val expense: Money, val isSelected: Boolean) {
+    /** What share of that period's income was spent. */
+    val expensePercentOfIncome: Double? get() =
+        if (income.minorUnits > 0L) expense.minorUnits * 100.0 / income.minorUnits else null
+}
+
+/** One bar of a category's six-period chart. */
+data class CategoryBar(
+    val label: String,
+    val amount: Money,
+    val budget: Money?,
+    val percentOfBudget: Double?,
+    val percentOfTotal: Double,
+    val isSelected: Boolean
+)
+
+/** One row of the category list: with sub-categories on, parents come first and children follow, indented. */
+data class TreeRow(
+    val categoryId: Long?,
+    val name: String,
+    val colorHex: String,
+    val amount: Money,
+    val percentOfTotal: Double,
+    val depth: Int,
+    val hasChildren: Boolean
+)
+
 /** Everything the category detail view shows, for the category and period chosen in Reports. */
 data class CategoryAnalysis(
     val categoryId: Long,
@@ -72,6 +104,7 @@ data class CategoryAnalysis(
     val budget: Money?,
     val budgetIsProRated: Boolean,
     val history: List<PeriodRow>,
+    val bars: List<CategoryBar>,
     val txCount: Int,
     val lowest: Money,
     val highest: Money,
@@ -97,6 +130,10 @@ data class ReportsUiState(
     val transactionCount: Int = 0,
     val spendingSlices: List<CategorySlice> = emptyList(),
     val incomeSlices: List<CategorySlice> = emptyList(),
+    val spendingTree: List<TreeRow> = emptyList(),
+    val incomeTree: List<TreeRow> = emptyList(),
+    /** Up to six periods ending with the one on screen, oldest first. */
+    val trend: List<PeriodStat> = emptyList(),
     val openingBalance: Money? = null,
     /** Budgeted money that has not been spent yet (only for a period that has not ended). */
     val pendingBudget: Money = Money.zero("PKR")
@@ -134,17 +171,26 @@ class ReportsViewModel @Inject constructor(
     private data class Sources(
         val transactions: List<Transaction>,
         val categories: List<com.moneta.app.data.repository.Category>,
-        val budgets: List<Budget>
+        val budgets: List<Budget>,
+        val wide: List<Transaction>,
+        val trendRanges: List<DateRange>
     )
 
     val uiState: StateFlow<ReportsUiState> = controls.flatMapLatest { c ->
+        val trendRanges: List<DateRange> = if (c.period.canShift) {
+            (0..5).map { c.period.shift(-it).range() }.reversed()
+        } else {
+            listOf(c.period.range())
+        }
+        val whole = DateRange(trendRanges.first().start, trendRanges.last().endExclusive)
         combine(
             transactionRepository.observeFiltered(range = c.period.range()),
             categoriesFlow,
             budgetsFlow,
-            prefsFlow
-        ) { transactions, categories, budgets, prefs ->
-            build(c, Sources(transactions, categories, budgets), prefs.currencyCode, prefs.subcategoriesEnabled)
+            prefsFlow,
+            transactionRepository.observeInRange(whole)
+        ) { transactions, categories, budgets, prefs, wide ->
+            build(c, Sources(transactions, categories, budgets, wide, trendRanges), prefs.currencyCode, prefs.subcategoriesEnabled)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReportsUiState())
 
@@ -193,8 +239,15 @@ class ReportsViewModel @Inject constructor(
         ) { all, categories, accounts, budgets, prefs ->
             val currency = prefs.currencyCode
             val type = if (isIncome) TransactionType.INCOME else TransactionType.EXPENSE
-            val counted = countedUnder(categories, prefs.subcategoriesEnabled)
-            val ids = counted.filter { it.value == categoryId }.keys + categoryId
+            val subs = prefs.subcategoriesEnabled
+            val counted = countedUnder(categories, subs)
+            val kidsIndex = childIndex(categories)
+            // A parent category is analysed as the total of everything beneath it.
+            val ids: Set<Long> = if (subs) {
+                descendantIds(categories, categoryId) + categoryId
+            } else {
+                counted.filter { it.value == categoryId }.keys + categoryId
+            }
             val category = categories.firstOrNull { it.id == categoryId } ?: return@combine null
             val typed = all.filter { it.type == type }
             fun inRange(list: List<Transaction>, r: DateRange) = list.filter { it.date in r }
@@ -208,7 +261,11 @@ class ReportsViewModel @Inject constructor(
             val monthlyBudgets = budgets.filter {
                 !isIncome && it.isEnabled && it.scope == BudgetScope.CATEGORY && it.categoryId != null &&
                     it.period == BudgetPeriod.CUSTOM && it.customPeriodStart != null &&
-                    (counted[it.categoryId] ?: it.categoryId) == categoryId
+                    (if (subs) {
+                        it.categoryId in ids && kidsIndex[it.categoryId].isNullOrEmpty()
+                    } else {
+                        (counted[it.categoryId] ?: it.categoryId) == categoryId
+                    })
             }
             // Months and years add up the monthly budgets inside them; a day or a week takes its share of the month.
             val proRated = p.mode == PeriodMode.DAY || p.mode == PeriodMode.WEEK
@@ -235,6 +292,21 @@ class ReportsViewModel @Inject constructor(
                 }
             } else {
                 emptyList()
+            }
+
+            val barRanges = ranges.take(6).reversed()
+            val bars = barRanges.mapIndexed { index, r ->
+                val amountHere = inRange(mine, r).sumOf { it.amount.minorUnits }
+                val totalHere = inRange(typed, r).sumOf { it.amount.minorUnits }
+                val budgetHere = budgetFor(r)
+                CategoryBar(
+                    label = PeriodSelection(p.mode, r.start, r.start, r.endExclusive.minusDays(1)).shortLabel(),
+                    amount = Money(amountHere, currency),
+                    budget = budgetHere?.let { Money(it, currency) },
+                    percentOfBudget = if (budgetHere != null && budgetHere > 0L) amountHere * 100.0 / budgetHere else null,
+                    percentOfTotal = if (totalHere > 0L) amountHere * 100.0 / totalHere else 0.0,
+                    isSelected = index == barRanges.lastIndex
+                )
             }
 
             val today = LocalDate.now()
@@ -275,6 +347,7 @@ class ReportsViewModel @Inject constructor(
                 budget = budgetFor(currentRange)?.let { Money(it, currency) },
                 budgetIsProRated = proRated,
                 history = history,
+                bars = bars,
                 txCount = currentTx.size,
                 lowest = Money(amounts.minOrNull() ?: 0L, currency),
                 highest = Money(amounts.maxOrNull() ?: 0L, currency),
@@ -302,8 +375,63 @@ class ReportsViewModel @Inject constructor(
         fun totalsOf(list: List<Transaction>): List<CategoryTotal> =
             list.groupBy { it.categoryId }.map { (id, rows) -> CategoryTotal(id, rows.sumOf { it.amount.minorUnits }) }
 
-        val spendingSlices = categoryBreakdownUseCase(rollUp(totalsOf(expenseTx), categories, subs), expense)
-        val incomeSlices = categoryBreakdownUseCase(rollUp(totalsOf(incomeTx), categories, subs), income)
+        fun treeOf(totals: List<CategoryTotal>, typeTotal: Money): List<TreeRow> {
+            val direct = totals.mapNotNull { row -> row.categoryId?.let { it to row.totalMinor } }.toMap()
+            val agg = treeTotals(categories, direct, false)
+            val kids = childIndex(categories)
+            val rows = ArrayList<TreeRow>()
+            fun emit(parentId: Long?, depth: Int) {
+                categories
+                    .filter { it.parentCategoryId == parentId && (agg[it.id] ?: 0L) > 0L }
+                    .sortedByDescending { agg[it.id] ?: 0L }
+                    .forEach { c ->
+                        val amountHere = agg[c.id] ?: 0L
+                        rows.add(
+                            TreeRow(
+                                categoryId = c.id,
+                                name = c.name,
+                                colorHex = c.colorHex,
+                                amount = Money(amountHere, currency),
+                                percentOfTotal = if (typeTotal.minorUnits > 0L) amountHere * 100.0 / typeTotal.minorUnits else 0.0,
+                                depth = depth,
+                                hasChildren = kids[c.id].orEmpty().any { (agg[it] ?: 0L) > 0L }
+                            )
+                        )
+                        if (depth < 12) emit(c.id, depth + 1)
+                    }
+            }
+            emit(null, 0)
+            return rows
+        }
+        fun slicesOf(tree: List<TreeRow>): List<CategorySlice> = tree.filter { it.depth == 0 }.map {
+            CategorySlice(it.categoryId, it.name, it.colorHex, it.amount, it.percentOfTotal)
+        }
+
+        val spendingSlices: List<CategorySlice>
+        val incomeSlices: List<CategorySlice>
+        val spendingTree: List<TreeRow>
+        val incomeTree: List<TreeRow>
+        if (subs) {
+            spendingTree = treeOf(totalsOf(expenseTx), expense)
+            incomeTree = treeOf(totalsOf(incomeTx), income)
+            spendingSlices = slicesOf(spendingTree)
+            incomeSlices = slicesOf(incomeTree)
+        } else {
+            spendingSlices = categoryBreakdownUseCase(rollUp(totalsOf(expenseTx), categories, false), expense)
+            incomeSlices = categoryBreakdownUseCase(rollUp(totalsOf(incomeTx), categories, false), income)
+            spendingTree = spendingSlices.map { TreeRow(it.categoryId, it.name, it.colorHex, it.amount, it.percentOfTotal, 0, false) }
+            incomeTree = incomeSlices.map { TreeRow(it.categoryId, it.name, it.colorHex, it.amount, it.percentOfTotal, 0, false) }
+        }
+
+        val trend = src.trendRanges.mapIndexed { index, r ->
+            val inRangeTx = src.wide.filter { it.date in r }
+            PeriodStat(
+                label = PeriodSelection(c.period.mode, r.start, r.start, r.endExclusive.minusDays(1)).shortLabel(),
+                income = Money(inRangeTx.filter { it.type == TransactionType.INCOME }.sumOf { it.amount.minorUnits }, currency),
+                expense = Money(inRangeTx.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount.minorUnits }, currency),
+                isSelected = index == src.trendRanges.lastIndex
+            )
+        }
 
         val opening: Money? = if (c.period.mode != PeriodMode.ALL) {
             netWorthTrendUseCase(listOf(range.start.minusDays(1)), currency).firstOrNull()?.netWorth
@@ -326,16 +454,12 @@ class ReportsViewModel @Inject constructor(
                 categoryBudgetByTop[top] = (categoryBudgetByTop[top] ?: 0L) + b.amount.minorUnits
             }
         }
-        val spentByTop = HashMap<Long, Long>()
-        spendingSlices.forEach { slice ->
-            val id = slice.categoryId
-            if (id != null) spentByTop[id] = slice.amount.minorUnits
-        }
         var pendingMinor = 0L
         if (!periodEnded && c.period.mode != PeriodMode.ALL) {
             if (categoryBudgetByTop.isNotEmpty()) {
-                categoryBudgetByTop.forEach { entry ->
-                    val left = entry.value - (spentByTop[entry.key] ?: 0L)
+                val (unitBudgets, unitSpent) = budgetUnits(categories, categoryBudgetByTop, totalsOf(expenseTx), subs)
+                unitBudgets.forEach { entry ->
+                    val left = entry.value - (unitSpent[entry.key] ?: 0L)
                     if (left > 0L) pendingMinor += left
                 }
             } else {
@@ -355,6 +479,9 @@ class ReportsViewModel @Inject constructor(
             transactionCount = transactions.size,
             spendingSlices = spendingSlices,
             incomeSlices = incomeSlices,
+            spendingTree = spendingTree,
+            incomeTree = incomeTree,
+            trend = trend,
             openingBalance = opening,
             pendingBudget = Money(pendingMinor, currency)
         )

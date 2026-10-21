@@ -170,3 +170,11 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 
 ## v0.20.1
 - Build fix: experimental-API opt-in for the scrolling header.
+
+## v0.21.0
+- Transaction form: save row at top, type, account + category in one line, description, amount, date/time, keypad. Description is capped (no longer stretches); amount/keypad shrink when a sub-category row appears.
+- Home: removed "Spent (budgeted)" card; all cards can be reordered/hidden in Settings; Yet to spend opens a compact breakdown.
+- Records: separate "view as" button (records / category totals); period label opens a calendar, a small button picks day/week/month/year/all/custom.
+- Budgets: no "Expected spend" tile; "Expected Deviation" (excess in red); parent categories show the total of their sub-categories and expand to show them.
+- Reports: aligned overview, six-period income vs expenses chart, expenses/income tabs with totals and six-period bars, category analysis bar chart (budget, actual, % of budget, % of total), parent/sub-category tree; no "+" button.
+- Back button: opening Budgets/Reports/Records from another screen now steps forward so Back returns; Reports closes an open category first.
