@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.moneta.app.ui.navigation
 
 import androidx.compose.foundation.background

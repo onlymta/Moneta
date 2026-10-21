@@ -167,3 +167,6 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Optional sub-categories (Settings > Modules), nestable, each with own budget and analysis.
 - Quick Add: keyboard only opens on tapping a field, bigger amount, cancel button, "+ New" account/category pop-ups, multi-level category pickers.
 - Header bar scrolls away while scrolling.
+
+## v0.20.1
+- Build fix: experimental-API opt-in for the scrolling header.
