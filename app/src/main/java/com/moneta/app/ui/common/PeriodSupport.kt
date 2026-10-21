@@ -5,7 +5,11 @@ package com.moneta.app.ui.common
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -137,19 +141,38 @@ fun PeriodBar(
             Icon(Icons.Outlined.ChevronLeft, contentDescription = "Previous")
         }
         Box {
-            Row(
-                modifier = Modifier
-                    .clickable(enabled = modes.size > 1) { menuOpen = true }
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            val showNow = selection.mode != PeriodMode.ALL && selection.mode != PeriodMode.CUSTOM
+            val isNow = showNow && selection.containsToday()
+            val isPast = showNow && !isNow && selection.range().endExclusive.isBefore(LocalDate.now().plusDays(1))
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = if (isNow) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                modifier = Modifier.clickable(enabled = modes.size > 1) { menuOpen = true }
             ) {
-                Text(
-                    selection.label(),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                if (modes.size > 1) {
-                    Icon(Icons.Filled.ArrowDropDown, contentDescription = "Change period type")
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            selection.label(),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = if (isNow) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isNow) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (showNow) {
+                            Text(
+                                if (isNow) "\u25CF Current" else if (isPast) "Past" else "Upcoming",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isNow) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
+                    if (modes.size > 1) {
+                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "Change period type")
+                    }
                 }
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {

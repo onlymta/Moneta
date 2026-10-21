@@ -100,13 +100,13 @@ fun AddEditCategoryScreen(
         // Section 12: subcategories - optional, one level deep. "None" (the default)
         // means this stays a top-level category; picking one nests it underneath.
         if (state.availableParents.isNotEmpty()) {
-            Text("Parent category (optional)", style = MaterialTheme.typography.labelMedium)
+            Text("Inside another category (optional)", style = MaterialTheme.typography.labelMedium)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
                 items(state.availableParents, key = { it.id }) { parent ->
                     FilterChip(
                         selected = state.selectedParentId == parent.id,
                         onClick = { viewModel.onParentSelected(parent.id) },
-                        label = { Text(parent.name) }
+                        label = { Text(parent.label) }
                     )
                 }
             }
@@ -114,7 +114,7 @@ fun AddEditCategoryScreen(
                 if (state.selectedParentId == null) {
                     "This will be a top-level category."
                 } else {
-                    "This will show nested under \"${state.availableParents.first { it.id == state.selectedParentId }.name}\"."
+                    "This will show nested under \"${state.availableParents.firstOrNull { it.id == state.selectedParentId }?.label ?: "its parent"}\"."
                 },
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant

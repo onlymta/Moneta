@@ -59,6 +59,14 @@ class SettingsViewModel @Inject constructor(
 
     fun setHiddenTabs(hidden: Set<String>) = viewModelScope.launch { settingsRepository.setHiddenTabs(hidden) }
 
+    fun setDecimals(value: Int) = viewModelScope.launch { settingsRepository.setDecimals(value) }
+
+    fun setHideBalance(hidden: Boolean) = viewModelScope.launch { settingsRepository.setHideBalance(hidden) }
+
+    fun setHiddenHomeCards(keys: Set<String>) = viewModelScope.launch { settingsRepository.setHiddenHomeCards(keys) }
+
+    fun setSubcategoriesEnabled(on: Boolean) = viewModelScope.launch { settingsRepository.setSubcategoriesEnabled(on) }
+
     fun setDisplayCurrency(code: String) = viewModelScope.launch { settingsRepository.setDisplayCurrency(code) }
 
     fun setShowCurrencySymbol(show: Boolean) = viewModelScope.launch { settingsRepository.setShowCurrencySymbol(show) }

@@ -79,6 +79,7 @@ fun HomeScreen(
     navController: NavHostController,
     userName: String = "",
     onTransactionClick: (Long) -> Unit = {},
+    onOpenBudgets: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -91,6 +92,8 @@ fun HomeScreen(
             userName = userName,
             onPeriodChange = viewModel::onPeriodChange,
             onScopeChange = { sc -> viewModel.setBalanceScope(sc) },
+            onToggleHide = { viewModel.toggleHideBalance() },
+            onOpenBudgets = onOpenBudgets,
             onOpenAccount = { id -> navController.navigate(accountHistoryRoute(id)) },
             onTransactionClick = onTransactionClick,
             onSeeAll = {
@@ -155,7 +158,9 @@ private fun HomeContent(
     onOpenAccount: (Long) -> Unit,
     onTransactionClick: (Long) -> Unit,
     onSeeAll: () -> Unit,
-    onOpenRecords: (TypeFilter?) -> Unit
+    onOpenRecords: (TypeFilter?) -> Unit,
+    onOpenBudgets: () -> Unit,
+    onToggleHide: () -> Unit
 ) {
     var dialog by remember { mutableStateOf(HomeDialog.NONE) }
     when (dialog) {
@@ -180,7 +185,11 @@ private fun HomeContent(
             total = Money(state.currentSubtotal.minorUnits + state.savingsSubtotal.minorUnits, state.currencyCode),
             onDismiss = { dialog = HomeDialog.NONE },
             onOpenAccount = onOpenAccount,
-            groupSavings = true
+            groupSavings = true,
+            note = if (state.isCurrentMonth && !state.yetToSpend.isZero) {
+                "Less budgeted money still to spend " + state.yetToSpend.formatted() +
+                    "  =  expected closing " + state.expectedClosing.formatted()
+            } else null
         )
         HomeDialog.NONE -> Unit
     }
@@ -197,7 +206,7 @@ private fun HomeContent(
         if (userName.isNotBlank()) {
             item { Text("Hello, $userName", style = MaterialTheme.typography.headlineSmall) }
         }
-        item { BalanceCard(state, onOpenAccount, onScopeChange) }
+        item { BalanceCard(state, onOpenAccount, onScopeChange, onToggleHide) }
         item {
             PeriodBar(
                 selection = state.period,
@@ -205,44 +214,75 @@ private fun HomeContent(
                 modes = listOf(PeriodMode.MONTH)
             )
         }
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
-                FigureTile(
-                    label = if (state.isCurrentMonth) "Opening (B/F)" else "Opening",
-                    amount = state.openingBalance ?: Money.zero(state.currencyCode),
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f),
-                    caption = "Tap for accounts",
-                    onClick = { dialog = HomeDialog.OPENING }
-                )
-                FigureTile(
-                    label = "Income",
-                    amount = state.monthIncome,
-                    color = IncomeGreen,
-                    modifier = Modifier.weight(1f),
-                    caption = "Tap for sources",
-                    onClick = { dialog = HomeDialog.INCOME }
-                )
-            }
+        val hasBudgets = !state.budgetTotal.isZero
+        val cards = com.moneta.app.data.settings.HomeCard.entries.filter { card ->
+            card.name !in state.hiddenCards && (hasBudgets || (card != com.moneta.app.data.settings.HomeCard.BUDGETED &&
+                card != com.moneta.app.data.settings.HomeCard.BUDGET_SPENT &&
+                card != com.moneta.app.data.settings.HomeCard.YET_TO_SPEND))
         }
-        item {
+        items(cards.chunked(2), key = { row -> row.first().name }) { row ->
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
-                FigureTile(
-                    label = "Expenses",
-                    amount = state.monthExpense,
-                    color = ExpenseRed,
-                    modifier = Modifier.weight(1f),
-                    caption = "Tap for records",
-                    onClick = { onOpenRecords(TypeFilter.EXPENSE) }
-                )
-                FigureTile(
-                    label = if (state.isCurrentMonth) "Current balance" else "Closing balance",
-                    amount = state.currentBalance,
-                    color = if (state.currentBalance.isNegative) ExpenseRed else MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f),
-                    caption = "Tap for accounts",
-                    onClick = { dialog = HomeDialog.BALANCE }
-                )
+                row.forEach { card ->
+                    when (card) {
+                        com.moneta.app.data.settings.HomeCard.OPENING -> FigureTile(
+                            label = if (state.isCurrentMonth) "Opening (B/F)" else "Opening",
+                            amount = state.openingBalance ?: Money.zero(state.currencyCode),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f),
+                            caption = "Tap for accounts",
+                            onClick = { dialog = HomeDialog.OPENING }
+                        )
+                        com.moneta.app.data.settings.HomeCard.INCOME -> FigureTile(
+                            label = "Income",
+                            amount = state.monthIncome,
+                            color = IncomeGreen,
+                            modifier = Modifier.weight(1f),
+                            caption = "Tap for sources",
+                            onClick = { dialog = HomeDialog.INCOME }
+                        )
+                        com.moneta.app.data.settings.HomeCard.EXPENSES -> FigureTile(
+                            label = "Expenses",
+                            amount = state.monthExpense,
+                            color = ExpenseRed,
+                            modifier = Modifier.weight(1f),
+                            caption = "Tap for records",
+                            onClick = { onOpenRecords(TypeFilter.EXPENSE) }
+                        )
+                        com.moneta.app.data.settings.HomeCard.EXPECTED_CLOSING -> FigureTile(
+                            label = if (state.isCurrentMonth) "Expected closing" else "Closing balance",
+                            amount = state.expectedClosing,
+                            color = if (state.expectedClosing.isNegative) ExpenseRed else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f),
+                            caption = if (state.isCurrentMonth) "Balance less budget still to spend" else "Tap for accounts",
+                            onClick = { dialog = HomeDialog.BALANCE }
+                        )
+                        com.moneta.app.data.settings.HomeCard.BUDGETED -> FigureTile(
+                            label = "Budgeted",
+                            amount = state.budgetTotal,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.weight(1f),
+                            caption = "Tap for budgets",
+                            onClick = onOpenBudgets
+                        )
+                        com.moneta.app.data.settings.HomeCard.BUDGET_SPENT -> FigureTile(
+                            label = "Spent (budgeted)",
+                            amount = state.budgetSpent,
+                            color = ExpenseRed,
+                            modifier = Modifier.weight(1f),
+                            caption = "Tap for budgets",
+                            onClick = onOpenBudgets
+                        )
+                        com.moneta.app.data.settings.HomeCard.YET_TO_SPEND -> FigureTile(
+                            label = "Yet to spend",
+                            amount = state.yetToSpend,
+                            color = WarningAmber,
+                            modifier = Modifier.weight(1f),
+                            caption = "Budgeted, not spent",
+                            onClick = onOpenBudgets
+                        )
+                    }
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
         item {
@@ -297,10 +337,14 @@ private fun FigureTile(
                     .fillMaxSize()
                     .background(color)
             )
-            Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
-                Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(MonetaSpacing.xs))
-                MoneyText(amount, color = color)
+            Column(modifier = Modifier.padding(horizontal = MonetaSpacing.cardPadding, vertical = 18.dp)) {
+                Text(label, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(MonetaSpacing.sm))
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.material3.LocalTextStyle provides MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold)
+                ) {
+                    MoneyText(amount, color = color)
+                }
                 caption?.let {
                     Spacer(Modifier.height(MonetaSpacing.xs))
                     Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -319,6 +363,7 @@ private fun BreakdownDialog(
     onDismiss: () -> Unit,
     onOpenAccount: (Long) -> Unit,
     groupSavings: Boolean = false,
+    note: String? = null,
     footerAction: Pair<String, () -> Unit>? = null
 ) {
     androidx.compose.material3.AlertDialog(
@@ -345,6 +390,10 @@ private fun BreakdownDialog(
                 ) {
                     Text("Total", fontWeight = FontWeight.Bold)
                     MoneyText(total, color = Color.Unspecified)
+                }
+                if (note != null) {
+                    Spacer(Modifier.height(MonetaSpacing.sm))
+                    Text(note, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         },
@@ -407,10 +456,11 @@ private fun BreakdownRow(row: AccountAmount, onOpenAccount: (Long) -> Unit, onDi
 private fun BalanceCard(
     state: HomeUiState,
     onOpenAccount: (Long) -> Unit,
-    onScopeChange: (com.moneta.app.data.settings.BalanceScope) -> Unit
+    onScopeChange: (com.moneta.app.data.settings.BalanceScope) -> Unit,
+    onToggleHide: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    var hidden by rememberSaveable { mutableStateOf(false) }
+    val hidden = state.hideBalance
     var menuOpen by remember { mutableStateOf(false) }
     val scope = state.balanceScope
     val savingsType = AccountType.SAVINGS
@@ -422,7 +472,7 @@ private fun BalanceCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
-        Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+        Column(modifier = Modifier.padding(horizontal = MonetaSpacing.cardPadding, vertical = 20.dp)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -440,15 +490,15 @@ private fun BalanceCard(
                     )
                     Text(
                         if (hidden) mask else state.totalBalance.formatted(),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.ExtraBold
                     )
                     Text(
                         if (expanded) "Tap to hide accounts" else "Tap to see accounts",
                         style = MaterialTheme.typography.labelMedium
                     )
                 }
-                IconButton(onClick = { hidden = !hidden }) {
+                IconButton(onClick = onToggleHide) {
                     Icon(
                         if (hidden) Icons.Filled.VisibilityOff
                         else Icons.Filled.Visibility,

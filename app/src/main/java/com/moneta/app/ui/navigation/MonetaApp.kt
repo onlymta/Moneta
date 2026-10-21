@@ -51,6 +51,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -65,6 +66,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -116,6 +118,7 @@ import com.moneta.app.ui.transactions.TransactionsScreen
  * Section 26 module toggles without every downstream screen needing to know
  * about Settings.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MonetaApp(startupViewModel: StartupViewModel = hiltViewModel()) {
     val startRoute by startupViewModel.startRoute.collectAsState()
@@ -140,6 +143,7 @@ private fun MonetaAppContent(
     SideEffect {
         com.moneta.app.core.money.DisplayCurrency.code = prefs.displayCurrency
         com.moneta.app.core.money.DisplayCurrency.showSymbol = prefs.showCurrencySymbol
+        com.moneta.app.core.money.DisplayCurrency.decimals = prefs.decimals
     }
     val reminderContext = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(prefs.reminderEnabled, prefs.reminderHour, prefs.reminderMinute) {
@@ -184,6 +188,9 @@ private fun MonetaAppContent(
         currentRoute == SEARCH_ROUTE ||
         currentRoute.startsWith(QUICK_ADD_ROUTE)
 
+    // The header slides away while scrolling down and returns when scrolling back up.
+    val topBarScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         gesturesEnabled = isMainTab,
@@ -201,12 +208,14 @@ private fun MonetaAppContent(
         }
     ) {
     Scaffold(
+        modifier = Modifier.nestedScroll(topBarScroll.nestedScrollConnection),
         contentWindowInsets = if (fullScreen) WindowInsets(0.dp, 0.dp, 0.dp, 0.dp) else ScaffoldDefaults.contentWindowInsets,
         topBar = {
             if (isMainTab) {
                 MonetaTopBar(
                     navController = navController,
                     alertCount = alertCount,
+                    scrollBehavior = topBarScroll,
                     onMenu = { drawerScope.launch { drawerState.open() } }
                 )
             }
@@ -263,34 +272,30 @@ private fun MonetaAppContent(
             }
 
             composable(MonetaDestination.Home.route) {
-                HomeScreen(navController, userName = prefs.userName, onTransactionClick = { detailId.value = it })
+                HomeScreen(
+                    navController,
+                    userName = prefs.userName,
+                    onTransactionClick = { detailId.value = it },
+                    onOpenBudgets = { navController.navigateToTab(MonetaDestination.Budgets.route) }
+                )
             }
 
             composable(MonetaDestination.Transactions.route) {
                 TransactionsScreen(
-                    onTransactionClick = { id -> detailId.value = id }
+                    onTransactionClick = { id -> detailId.value = id },
+                    onOpenReports = { navController.navigateToTab(MonetaDestination.Reports.route) }
                 )
             }
 
             composable(MonetaDestination.Budgets.route) {
-                BudgetsScreen(onOpenRecords = { navController.navigateToTab(MonetaDestination.Transactions.route) })
+                BudgetsScreen(
+                    onOpenRecords = { navController.navigateToTab(MonetaDestination.Transactions.route) },
+                    onOpenReports = { navController.navigateToTab(MonetaDestination.Reports.route) }
+                )
             }
             composable(MonetaDestination.Reports.route) {
                 ReportsScreen(
                     onOpenBudgets = { navController.navigateToTab(MonetaDestination.Budgets.route) },
-                    onOpenCategory = { id, monthStart -> navController.navigate(categoryAnalysisRoute(id, monthStart)) }
-                )
-            }
-
-            composable(
-                CATEGORY_ANALYSIS_ROUTE_PATTERN,
-                arguments = listOf(
-                    navArgument("categoryId") { type = NavType.LongType },
-                    navArgument("monthStart") { type = NavType.LongType }
-                )
-            ) {
-                com.moneta.app.ui.reports.CategoryAnalysisScreen(
-                    onBack = { navController.popBackStack() },
                     onTransactionClick = { id -> detailId.value = id }
                 )
             }
@@ -537,8 +542,14 @@ private fun NavHostController.navigateToTab(route: String) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MonetaTopBar(navController: NavHostController, alertCount: Int, onMenu: () -> Unit) {
+private fun MonetaTopBar(
+    navController: NavHostController,
+    alertCount: Int,
+    scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior,
+    onMenu: () -> Unit
+) {
     TopAppBar(
+        scrollBehavior = scrollBehavior,
         navigationIcon = {
             IconButton(onClick = onMenu) {
                 Icon(Icons.Outlined.Menu, contentDescription = "Open menu")

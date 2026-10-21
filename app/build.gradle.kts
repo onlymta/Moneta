@@ -14,8 +14,8 @@ android {
         applicationId = "com.moneta.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 24
-        versionName = "0.19.0-home"
+        versionCode = 25
+        versionName = "0.20.0-dashboard"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

@@ -31,7 +31,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.moneta.app.ui.common.TransactionRowCard
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,9 +66,15 @@ import com.moneta.app.ui.theme.MonetaSpacing
 @Composable
 fun ReportsScreen(
     onOpenBudgets: () -> Unit = {},
-    onOpenCategory: (Long, Long) -> Unit = { _, _ -> },
-    viewModel: ReportsViewModel = hiltViewModel()) {
+    onTransactionClick: (Long) -> Unit = {},
+    viewModel: ReportsViewModel = hiltViewModel()
+) {
     val state by viewModel.uiState.collectAsState()
+    val analysis by viewModel.analysis.collectAsState()
+    val selectedId by viewModel.selectedCategoryId.collectAsState()
+
+    // Arriving from a long-press on a budget (or a category row in Records): open that category's analysis.
+    LaunchedEffect(Unit) { viewModel.applyLaunch() }
 
     Column(modifier = Modifier.fillMaxSize()) {
         PeriodBar(
@@ -70,20 +83,42 @@ fun ReportsScreen(
             modifier = Modifier.padding(horizontal = MonetaSpacing.screenHorizontal)
         )
         val tabs = ReportTab.entries
-        ScrollableTabRow(selectedTabIndex = tabs.indexOf(state.tab), edgePadding = 8.dp) {
+        TabRow(selectedTabIndex = tabs.indexOf(state.tab)) {
             tabs.forEach { tab ->
                 Tab(
                     selected = tab == state.tab,
                     onClick = { viewModel.onTabSelected(tab) },
-                    text = { Text(tab.label) }
+                    text = { Text(tab.label, maxLines = 1) }
                 )
             }
         }
 
         when (state.tab) {
             ReportTab.OVERVIEW -> OverviewTab(state, viewModel::onTabSelected, onOpenBudgets)
-            ReportTab.SPENDING -> BreakdownTab(state.spendingSlices, "spending", state.period.label(), state, onOpenCategory)
-            ReportTab.INCOME -> BreakdownTab(state.incomeSlices, "income", state.period.label(), null, onOpenCategory)
+            ReportTab.SPENDING, ReportTab.INCOME -> {
+                val isIncome = state.tab == ReportTab.INCOME
+                if (selectedId != null) {
+                    val detail = analysis
+                    if (detail == null) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            androidx.compose.material3.CircularProgressIndicator()
+                        }
+                    } else {
+                        CategoryDetail(
+                            analysis = detail,
+                            onBack = { viewModel.selectCategory(null) },
+                            onTransactionClick = onTransactionClick
+                        )
+                    }
+                } else {
+                    BreakdownTab(
+                        slices = if (isIncome) state.incomeSlices else state.spendingSlices,
+                        kind = if (isIncome) "income" else "expenses",
+                        periodLabel = state.period.label(),
+                        onSelect = { id -> viewModel.selectCategory(id) }
+                    )
+                }
+            }
         }
     }
 }
@@ -194,7 +229,10 @@ private fun OverviewTab(state: ReportsUiState, onGoTo: (ReportTab) -> Unit, onOp
     }
 }
 
-/** One line of the summary statement; tappable when [onClick] is given. */
+/**
+ * One line of the summary statement; tappable when [onClick] is given. The sign, the figure and the arrow
+ * each sit in their own fixed-width column so every row lines up with the one above it.
+ */
 @Composable
 private fun StatementRow(
     label: String,
@@ -207,24 +245,30 @@ private fun StatementRow(
     val base = Modifier
         .fillMaxWidth()
         .let { if (onClick != null) it.clickable(onClick = onClick) else it }
-        .padding(horizontal = MonetaSpacing.cardPadding, vertical = 10.dp)
+        .padding(horizontal = MonetaSpacing.cardPadding, vertical = 12.dp)
     Row(modifier = base, verticalAlignment = Alignment.CenterVertically) {
         Text(
             label,
             style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal,
+            fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium,
             modifier = Modifier.weight(1f)
         )
-        if (sign != null) {
-            Text(sign + " ", style = MaterialTheme.typography.bodyLarge, color = color)
+        Box(modifier = Modifier.width(20.dp), contentAlignment = Alignment.Center) {
+            if (sign != null) Text(sign, style = MaterialTheme.typography.titleMedium, color = color, fontWeight = FontWeight.Bold)
         }
-        MoneyText(amount, color = color)
-        if (onClick != null) {
-            Text(
-                "  ›",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Box(modifier = Modifier.width(132.dp), contentAlignment = Alignment.CenterEnd) {
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.material3.LocalTextStyle provides MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.Bold
+                )
+            ) {
+                MoneyText(amount, color = color)
+            }
+        }
+        Box(modifier = Modifier.width(22.dp), contentAlignment = Alignment.CenterEnd) {
+            if (onClick != null) {
+                Text("\u203A", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
@@ -293,9 +337,11 @@ private fun SliceRow(slice: CategorySlice, showBar: Boolean) {
 }
 
 @Composable
-private fun BreakdownTab(slices: List<CategorySlice>, kind: String, periodLabel: String,
-    spendingState: ReportsUiState?,
-    onOpenCategory: (Long, Long) -> Unit
+private fun BreakdownTab(
+    slices: List<CategorySlice>,
+    kind: String,
+    periodLabel: String,
+    onSelect: (Long) -> Unit
 ) {
     if (slices.isEmpty()) {
         Column(modifier = Modifier
@@ -319,154 +365,222 @@ private fun BreakdownTab(slices: List<CategorySlice>, kind: String, periodLabel:
         }
         items(slices, key = { "slice-${it.categoryId}-${it.name}" }) { slice ->
             val sliceId = slice.categoryId
-            val canOpen = spendingState != null && sliceId != null
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .let { if (canOpen) it.clickable { sliceId?.let { id -> onOpenCategory(id, spendingState?.period?.range()?.start?.toEpochDay() ?: 0L) } } else it }
+                    .let { if (sliceId != null) it.clickable { onSelect(sliceId) } else it }
             ) {
                 Column(modifier = Modifier.padding(horizontal = MonetaSpacing.md, vertical = MonetaSpacing.sm)) {
                     SliceRow(slice, showBar = true)
                 }
             }
         }
-        if (spendingState != null) {
-            item {
+        item {
+            Text(
+                "Tap a category for a closer look.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun DetailLine(label: String, value: String, valueColor: Color = Color.Unspecified, bold: Boolean = false) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.SemiBold,
+            color = valueColor
+        )
+    }
+}
+
+private fun percentText(value: Double): String = "%.0f%%".format(value)
+
+/**
+ * One category's analysis for the period chosen above: amount and share, budget used or left, earlier
+ * periods side by side, a few key figures, and (tap the amount) every transaction behind the number.
+ */
+@Composable
+private fun CategoryDetail(analysis: CategoryAnalysis, onBack: () -> Unit, onTransactionClick: (Long) -> Unit) {
+    var showTransactions by rememberSaveable(analysis.categoryId) { mutableStateOf(false) }
+    val accent = parseColorOrGray(analysis.colorHex)
+    val kind = if (analysis.isIncome) "Income" else "Spent"
+    LazyColumn(contentPadding = reportPadding, verticalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Filled.ArrowBack, contentDescription = "Back to all categories")
+                }
+                Box(modifier = Modifier.size(12.dp).background(accent, CircleShape))
+                Spacer(Modifier.width(MonetaSpacing.sm))
                 Text(
-                    "Tap a category for a closer look.",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    analysis.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun InsightDialog(insight: CategoryInsight, monthMode: Boolean, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-        title = { Text(insight.name) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
-                InsightLine("Spent", insight.spent.formatted())
-                InsightLine("Average per day", insight.avgPerDay.formatted() + "  (" + insight.daysElapsed + " day(s))")
-                val prev = insight.prevSpent
-                if (prev != null) {
-                    InsightLine("Previous period", prev.formatted())
-                    val diff = insight.spent.minorUnits - prev.minorUnits
-                    val text = when {
-                        prev.minorUnits == 0L && diff > 0L -> "Nothing spent here last period"
-                        prev.minorUnits == 0L -> "No change"
-                        diff > 0L -> "Up " + (diff * 100 / prev.minorUnits) + "% on last period"
-                        diff < 0L -> "Down " + (-diff * 100 / prev.minorUnits) + "% on last period"
-                        else -> "Same as last period"
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = accent.copy(alpha = 0.14f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showTransactions = !showTransactions }
+                        .padding(MonetaSpacing.cardPadding)
+                ) {
+                    Text(
+                        kind + " in " + analysis.periodLabel + (if (analysis.isCurrent) "  (current)" else ""),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        androidx.compose.material3.LocalTextStyle provides MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold)
+                    ) {
+                        MoneyText(analysis.amount, color = if (analysis.isIncome) IncomeGreen else ExpenseRed)
                     }
                     Text(
-                        text,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (diff > 0L) ExpenseRed else IncomeGreen
+                        percentText(analysis.sharePercent) + " of all " + (if (analysis.isIncome) "income" else "expenses") +
+                            " (" + analysis.typeTotal.formatted() + ")",
+                        style = MaterialTheme.typography.bodyMedium
                     )
-                }
-                Divider()
-                if (insight.isCurrent) {
-                    InsightLine(
-                        if (monthMode) "Expected next month (same pace)" else "Projected for this period",
-                        insight.projected.formatted()
-                    )
-                }
-                val budget = insight.budget
-                if (budget != null) {
-                    InsightLine("Budget", budget.formatted())
-                    val gap = budget.minorUnits - insight.projected.minorUnits
-                    val verdict = when {
-                        !insight.isCurrent && insight.spent.minorUnits > budget.minorUnits ->
-                            "Went over budget by " + Money(insight.spent.minorUnits - budget.minorUnits, budget.currencyCode).formatted()
-                        !insight.isCurrent ->
-                            "Stayed within budget, saved " + Money(gap, budget.currencyCode).formatted()
-                        gap < 0L ->
-                            "At this pace you will exceed the budget by " + Money(-gap, budget.currencyCode).formatted()
-                        else ->
-                            "At this pace you will save " + Money(gap, budget.currencyCode).formatted()
-                    }
                     Text(
-                        verdict,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (verdict.contains("exceed") || verdict.contains("over")) ExpenseRed else IncomeGreen
-                    )
-                } else {
-                    Text(
-                        "No budget set for this category in this period.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        if (showTransactions) "Tap to hide the transactions" else "Tap to see each transaction (" + analysis.txCount + ")",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 6.dp)
                     )
                 }
             }
         }
-    )
-}
-
-@Composable
-private fun InsightLine(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-private fun AccountsTab(state: ReportsUiState) {
-    LazyColumn(contentPadding = reportPadding, verticalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
+        if (showTransactions) {
+            if (analysis.items.isEmpty()) {
+                item { Text("Nothing recorded in this period.", style = MaterialTheme.typography.bodyMedium) }
+            } else {
+                items(analysis.items, key = { "tx-${it.transaction.id}" }) { entry ->
+                    TransactionRowCard(
+                        item = entry,
+                        showDate = true,
+                        onClick = { onTransactionClick(entry.transaction.id) }
+                    )
+                }
+            }
+        }
+        if (!analysis.isIncome) {
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+                        Text("Budget", style = MaterialTheme.typography.titleMedium)
+                        val budget = analysis.budget
+                        if (budget == null) {
+                            Text(
+                                "No budget was set for this category in this period.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            val pct = analysis.percentUsed ?: 0.0
+                            val excess = analysis.excess ?: Money.zero(budget.currencyCode)
+                            val over = excess.minorUnits > 0L
+                            val tint = if (over) ExpenseRed else IncomeGreen
+                            DetailLine("Budgeted", budget.formatted() + (if (analysis.budgetIsProRated) " (share of the month)" else ""))
+                            DetailLine("Used", analysis.amount.formatted() + "  (" + percentText(pct) + ")")
+                            LinearProgressIndicator(
+                                progress = { (pct / 100.0).toFloat().coerceIn(0f, 1f) },
+                                color = tint,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            )
+                            DetailLine(
+                                if (over) "Over budget by" else "Remaining",
+                                excess.abs().formatted() + "  (" + percentText(if (budget.minorUnits > 0L) kotlin.math.abs(excess.minorUnits) * 100.0 / budget.minorUnits else 0.0) + ")",
+                                valueColor = tint,
+                                bold = true
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        if (analysis.history.isNotEmpty()) {
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+                        Text(
+                            if (analysis.isIncome) "Earlier periods" else "Earlier periods: spent vs budget",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(Modifier.height(MonetaSpacing.sm))
+                        analysis.history.forEachIndexed { index, row ->
+                            if (index > 0) Divider(modifier = Modifier.padding(vertical = 6.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(row.label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                                Text(row.amount.formatted(), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            }
+                            val budget = row.budget
+                            if (!analysis.isIncome) {
+                                if (budget == null) {
+                                    Text("No budget", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                } else {
+                                    val excess = row.excess ?: Money.zero(budget.currencyCode)
+                                    val over = excess.minorUnits > 0L
+                                    Text(
+                                        "Budget " + budget.formatted() + "  \u00B7  " + percentText(row.percentUsed ?: 0.0) + " used  \u00B7  " +
+                                            (if (over) "over by " else "unused ") + excess.abs().formatted(),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = if (over) ExpenseRed else IncomeGreen
+                                    )
+                                }
+                            } else {
+                                val newer = if (index == 0) analysis.amount else analysis.history[index - 1].amount
+                                if (row.amount.minorUnits > 0L) {
+                                    val change = (newer.minorUnits - row.amount.minorUnits) * 100.0 / row.amount.minorUnits
+                                    Text(
+                                        "Next period " + (if (change >= 0) "+" else "") + percentText(change) + " vs this one",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
-                    Text("Net worth today", style = MaterialTheme.typography.labelMedium)
-                    Text(
-                        state.netWorth.formatted(),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "The total of all your accounts that are counted in your net worth.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-        items(state.accounts, key = { it.id }) { account ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconBadge(iconName = account.icon, colorHex = account.colorHex)
-                        Spacer(Modifier.width(MonetaSpacing.md))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(account.name, style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                account.type.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() },
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                    Text("Key figures", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(MonetaSpacing.xs))
+                    DetailLine("Transactions", analysis.txCount.toString())
+                    if (analysis.txCount > 0) {
+                        DetailLine("Highest transaction", analysis.highest.formatted())
+                        DetailLine("Lowest transaction", analysis.lowest.formatted())
+                        DetailLine("Average transaction", analysis.averagePerTransaction.formatted())
+                        if (analysis.activeDays * 2 >= analysis.periodDays) {
+                            DetailLine("Average per day", analysis.averagePerDay.formatted())
+                        } else {
+                            DetailLine("Days with activity", analysis.activeDays.toString() + " of " + analysis.periodDays)
                         }
-                        MoneyText(
-                            account.currentBalance,
-                            color = if (account.currentBalance.isNegative) ExpenseRed else Color.Unspecified
-                        )
                     }
-                    val share = if (state.netWorth.isPositive && account.currentBalance.isPositive) {
-                        account.currentBalance.percentOf(state.netWorth) ?: 0.0
-                    } else 0.0
-                    if (share > 0.0) {
-                        Spacer(Modifier.height(MonetaSpacing.sm))
-                        LinearProgressIndicator(
-                            progress = { (share / 100.0).toFloat().coerceIn(0f, 1f) },
-                            color = parseColorOrGray(account.colorHex),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                    val suggested = analysis.suggested
+                    if (suggested != null) {
+                        Divider(modifier = Modifier.padding(vertical = 6.dp))
+                        DetailLine("Suggested budget", suggested.formatted(), valueColor = MaterialTheme.colorScheme.primary, bold = true)
                         Text(
-                            "%.0f%% of your total".format(share),
+                            analysis.suggestedNote,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

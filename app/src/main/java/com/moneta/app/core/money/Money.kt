@@ -90,7 +90,8 @@ data class Money(
         // currency, symbol setting or language changes (lists format many amounts per frame).
         val code = DisplayCurrency.code
         val showSymbol = DisplayCurrency.showSymbol
-        val key = locale.toString() + "|" + code + "|" + showSymbol
+        val decimals = DisplayCurrency.decimals
+        val key = locale.toString() + "|" + code + "|" + showSymbol + "|" + decimals
         val holder = formatCache.get() ?: FormatHolder().also { formatCache.set(it) }
         if (holder.key != key || holder.format == null) {
             val currency = runCatching { Currency.getInstance(code) }.getOrNull()
@@ -98,12 +99,14 @@ data class Money(
             holder.divisor = Math.pow(10.0, fractionDigits.toDouble())
             holder.format = if (!showSymbol) {
                 NumberFormat.getNumberInstance(locale).apply {
-                    minimumFractionDigits = fractionDigits
-                    maximumFractionDigits = fractionDigits
+                    minimumFractionDigits = decimals
+                    maximumFractionDigits = decimals
                 }
             } else {
                 NumberFormat.getCurrencyInstance(locale).apply {
                     if (currency != null) setCurrency(currency)
+                    minimumFractionDigits = decimals
+                    maximumFractionDigits = decimals
                 }
             }
             holder.key = key

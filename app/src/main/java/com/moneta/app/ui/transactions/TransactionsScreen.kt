@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -17,10 +18,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Divider
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyListScope
+import com.moneta.app.ui.common.IconBadge
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -56,11 +65,18 @@ import com.moneta.app.ui.theme.MonetaSpacing
 @Composable
 fun TransactionsScreen(
     onTransactionClick: (Long) -> Unit,
+    onOpenReports: () -> Unit = {},
     viewModel: TransactionsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
 
     var searchOpen by remember { mutableStateOf(false) }
+    var filterOpen by remember { mutableStateOf(false) }
+    var sortOpen by remember { mutableStateOf(false) }
+
+    if (filterOpen) {
+        FilterDialog(state, viewModel) { filterOpen = false }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.padding(horizontal = MonetaSpacing.screenHorizontal)) {
@@ -69,93 +85,120 @@ fun TransactionsScreen(
                 onChange = viewModel::onPeriodChange,
                 modes = PeriodMode.entries
             )
-            // One compact row: search icon, type filters, account filter.
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm),
+            // Three small controls under the period: filter, sort / view, and (far right) search.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                item {
-                    IconButton(onClick = {
-                        searchOpen = !searchOpen
-                        if (!searchOpen) viewModel.onQueryChange("")
-                    }) {
+                IconButton(onClick = { filterOpen = true }) {
+                    Icon(
+                        Icons.Filled.FilterList,
+                        contentDescription = "Filter records",
+                        tint = if (state.activeFilterCount > 0) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (state.activeFilterCount > 0) {
+                    Text(
+                        state.activeFilterCount.toString(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Box {
+                    IconButton(onClick = { sortOpen = true }) {
                         Icon(
-                            Icons.Outlined.Search,
-                            contentDescription = "Search records",
-                            tint = if (searchOpen || state.query.isNotEmpty()) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
+                            Icons.Filled.SwapVert,
+                            contentDescription = "Sort and view",
+                            tint = if (state.sortMode != SortMode.DATE_DESC || state.groupMode != GroupMode.DAY)
+                                MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                }
-                state.categoryTitle?.let { title ->
-                    item {
-                        FilterChip(
-                            selected = true,
-                            onClick = { viewModel.clearCategoryFilter() },
-                            label = { Text(title) },
-                            trailingIcon = { Icon(Icons.Outlined.Close, contentDescription = "Clear category filter") }
+                    DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
+                        Text(
+                            "Sort by",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                         )
-                    }
-                }
-                item {
-                    var groupMenu by remember { mutableStateOf(false) }
-                    Box {
-                        AssistChip(
-                            onClick = { groupMenu = true },
-                            label = { Text(state.groupMode.label) },
-                            trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = "Group or sort records") }
+                        SortMode.entries.forEach { mode ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        (if (mode == state.sortMode) "\u2713  " else "     ") + mode.label,
+                                        fontWeight = if (mode == state.sortMode) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                onClick = { sortOpen = false; viewModel.onSortModeChange(mode) }
+                            )
+                        }
+                        Divider()
+                        Text(
+                            "View as",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                         )
-                        DropdownMenu(expanded = groupMenu, onDismissRequest = { groupMenu = false }) {
-                            GroupMode.entries.forEach { mode ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            mode.label,
-                                            fontWeight = if (mode == state.groupMode) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    },
-                                    onClick = {
-                                        groupMenu = false
-                                        viewModel.onGroupModeChange(mode)
-                                    }
-                                )
-                            }
+                        GroupMode.entries.forEach { mode ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        (if (mode == state.groupMode) "\u2713  " else "     ") + mode.label,
+                                        fontWeight = if (mode == state.groupMode) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                onClick = { sortOpen = false; viewModel.onGroupModeChange(mode) }
+                            )
                         }
                     }
                 }
-                items(TypeFilter.entries.toList()) { filter ->
-                    FilterChip(
-                        selected = state.typeFilter == filter,
-                        onClick = { viewModel.onTypeFilterChange(filter) },
-                        label = { Text(filter.label) }
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = {
+                    searchOpen = !searchOpen
+                    if (!searchOpen) viewModel.onQueryChange("")
+                }) {
+                    Icon(
+                        Icons.Outlined.Search,
+                        contentDescription = "Search records",
+                        tint = if (searchOpen || state.query.isNotEmpty()) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                item {
-                    var menuOpen by remember { mutableStateOf(false) }
-                    val selected = state.accounts.firstOrNull { it.id == state.accountFilterId }
-                    Box {
-                        AssistChip(
-                            onClick = { menuOpen = true },
-                            label = { Text(selected?.name ?: "All accounts") },
-                            trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) }
-                        )
-                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            DropdownMenuItem(
-                                text = { Text("All accounts") },
-                                onClick = {
-                                    menuOpen = false
-                                    viewModel.onAccountFilterChange(null)
-                                }
+            }
+            if (state.activeFilterCount > 0) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (state.typeFilter != TypeFilter.ALL) {
+                        item {
+                            FilterChip(
+                                selected = true,
+                                onClick = { viewModel.onTypeFilterChange(TypeFilter.ALL) },
+                                label = { Text(state.typeFilter.label) },
+                                trailingIcon = { Icon(Icons.Outlined.Close, contentDescription = "Clear type filter") }
                             )
-                            state.accounts.forEach { account ->
-                                DropdownMenuItem(
-                                    text = { Text(account.name) },
-                                    onClick = {
-                                        menuOpen = false
-                                        viewModel.onAccountFilterChange(account.id)
-                                    }
-                                )
-                            }
+                        }
+                    }
+                    state.accounts.firstOrNull { it.id == state.accountFilterId }?.let { account ->
+                        item {
+                            FilterChip(
+                                selected = true,
+                                onClick = { viewModel.onAccountFilterChange(null) },
+                                label = { Text(account.name) },
+                                trailingIcon = { Icon(Icons.Outlined.Close, contentDescription = "Clear account filter") }
+                            )
+                        }
+                    }
+                    state.categoryTitle?.let { title ->
+                        item {
+                            FilterChip(
+                                selected = true,
+                                onClick = { viewModel.clearCategoryFilter() },
+                                label = { Text(title) },
+                                trailingIcon = { Icon(Icons.Outlined.Close, contentDescription = "Clear category filter") }
+                            )
                         }
                     }
                 }
@@ -215,7 +258,7 @@ fun TransactionsScreen(
                 }
             }
 
-            if (!state.isLoading && state.groups.isEmpty()) {
+            if (!state.isLoading && state.groups.isEmpty() && state.groupMode != GroupMode.CATEGORY_TOTALS) {
                 item {
                     Column(
                         modifier = Modifier
@@ -234,6 +277,23 @@ fun TransactionsScreen(
                 }
             }
 
+            if (state.groupMode == GroupMode.CATEGORY_TOTALS) {
+                if (!state.isLoading && state.categoryTotals.isEmpty()) {
+                    item {
+                        Text(
+                            "No categorised records match this period and filter.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(MonetaSpacing.md)
+                        )
+                    }
+                }
+                items(state.categoryTotals, key = { "cat-${it.categoryId}" }) { row ->
+                    CategoryTotalCard(row) {
+                        viewModel.prepareReports(row.categoryId, row.isIncome)
+                        onOpenReports()
+                    }
+                }
+            }
             state.groups.forEach { group ->
                 item(key = group.key) {
                     val groupDate = group.date
@@ -296,4 +356,143 @@ private fun SummaryTile(label: String, amount: com.moneta.app.core.money.Money, 
             MoneyText(amount, color = color, modifier = Modifier)
         }
     }
+}
+
+@Composable
+private fun CategoryTotalCard(row: CategoryTotalRow, onClick: () -> Unit) {
+    val tint = if (row.isIncome) IncomeGreen else ExpenseRed
+    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(MonetaSpacing.cardPadding),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconBadge(iconName = row.icon, colorHex = row.colorHex)
+            Spacer(Modifier.width(MonetaSpacing.md))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(row.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1)
+                Text(
+                    row.count.toString() + (if (row.count == 1) " record" else " records"),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.material3.LocalTextStyle provides MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+            ) {
+                MoneyText(row.total, color = tint)
+            }
+        }
+    }
+}
+
+/** "Parent > Child" style names so categories at any depth can be told apart in a list. */
+private fun categoryPaths(categories: List<com.moneta.app.data.repository.Category>): List<Pair<com.moneta.app.data.repository.Category, String>> {
+    val byId = categories.associateBy { it.id }
+    fun path(c: com.moneta.app.data.repository.Category): String {
+        val parts = ArrayList<String>()
+        var current: com.moneta.app.data.repository.Category? = c
+        var guard = 0
+        while (current != null && guard < 20) {
+            parts.add(0, current.name)
+            current = current.parentCategoryId?.let { byId[it] }
+            guard++
+        }
+        return parts.joinToString(" > ")
+    }
+    return categories.map { it to path(it) }.sortedBy { it.second.lowercase() }
+}
+
+private fun descendantIds(
+    id: Long,
+    categories: List<com.moneta.app.data.repository.Category>
+): Set<Long> {
+    val result = HashSet<Long>()
+    result.add(id)
+    var added = true
+    while (added) {
+        added = false
+        categories.forEach { c ->
+            val parent = c.parentCategoryId
+            if (parent != null && parent in result && result.add(c.id)) added = true
+        }
+    }
+    return result
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FilterDialog(state: TransactionsUiState, viewModel: TransactionsViewModel, onDismiss: () -> Unit) {
+    var accountMenu by remember { mutableStateOf(false) }
+    var categoryMenu by remember { mutableStateOf(false) }
+    val wantedType = when (state.typeFilter) {
+        TypeFilter.EXPENSE -> com.moneta.app.data.local.entity.CategoryType.EXPENSE
+        TypeFilter.INCOME -> com.moneta.app.data.local.entity.CategoryType.INCOME
+        else -> null
+    }
+    val choices = categoryPaths(state.categories.filter { !it.isArchived && (wantedType == null || it.type == wantedType) })
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Filter records") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                Text("Type", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                    items(TypeFilter.entries.toList()) { filter ->
+                        FilterChip(
+                            selected = state.typeFilter == filter,
+                            onClick = { viewModel.onTypeFilterChange(filter) },
+                            label = { Text(filter.label) }
+                        )
+                    }
+                }
+                Text("Account", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Box {
+                    AssistChip(
+                        onClick = { accountMenu = true },
+                        label = { Text(state.accounts.firstOrNull { it.id == state.accountFilterId }?.name ?: "All accounts") },
+                        trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) }
+                    )
+                    DropdownMenu(expanded = accountMenu, onDismissRequest = { accountMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("All accounts") },
+                            onClick = { accountMenu = false; viewModel.onAccountFilterChange(null) }
+                        )
+                        state.accounts.forEach { account ->
+                            DropdownMenuItem(
+                                text = { Text(account.name) },
+                                onClick = { accountMenu = false; viewModel.onAccountFilterChange(account.id) }
+                            )
+                        }
+                    }
+                }
+                Text("Category", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Box {
+                    AssistChip(
+                        onClick = { categoryMenu = true },
+                        label = { Text(state.categoryTitle ?: "All categories") },
+                        trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) }
+                    )
+                    DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("All categories") },
+                            onClick = { categoryMenu = false; viewModel.onCategoryFilterChange(null, null) }
+                        )
+                        choices.forEach { (category, path) ->
+                            DropdownMenuItem(
+                                text = { Text(path) },
+                                onClick = {
+                                    categoryMenu = false
+                                    viewModel.onCategoryFilterChange(descendantIds(category.id, state.categories), category.name)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        dismissButton = { TextButton(onClick = { viewModel.clearAllFilters() }) { Text("Clear all") } }
+    )
 }

@@ -6,6 +6,14 @@
 package com.moneta.app.ui.quickadd
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontWeight
+import com.moneta.app.data.local.entity.AccountType
 import android.widget.Toast
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
@@ -131,6 +139,13 @@ fun QuickAddScreen(
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    // Drops focus (and the on-screen keyboard) so a field never grabs the keyboard back by itself.
+    val dropFocus: () -> Unit = {
+        focusManager.clearFocus()
+        keyboard?.hide()
+    }
 
     val accent: Color = when (state.type) {
         TransactionType.EXPENSE -> ExpenseRed
@@ -140,45 +155,52 @@ fun QuickAddScreen(
 
     val isTransfer = state.type == TransactionType.TRANSFER
     val dropdown = state.pickerStyle == PickerStyle.DROPDOWN
-    val selectedSub = state.subcategoryOptions.firstOrNull { it.id == state.selectedCategoryId }
-    val topSelectedId = selectedSub?.parentCategoryId ?: state.selectedCategoryId
     val inRow = state.pickersInRow && dropdown
 
     Scaffold(
         // Insets are applied once, on the Column below.
         contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
         topBar = {
-            TopAppBar(
-                title = { Text(if (isEditing) "Edit transaction" else "Add transaction") },
-                navigationIcon = {
-                    IconButton(onClick = onDone) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close")
-                    }
-                },
-                actions = {
-                    if (state.saveAtTop) {
-                        if (!isEditing) {
-                            TextButton(
-                                onClick = { viewModel.save(onSaved = onDone, addAnother = true) },
-                                enabled = !state.isSaving
-                            ) { Text("+ Another") }
-                        }
-                        Button(
-                            onClick = {
-                                viewModel.save(onSaved = {
-                                    Toast.makeText(context, successText, Toast.LENGTH_SHORT).show()
-                                    onDone()
-                                })
-                            },
-                            enabled = !state.isSaving,
-                            colors = ButtonDefaults.buttonColors(containerColor = accent),
-                            modifier = Modifier.padding(end = MonetaSpacing.sm)
-                        ) {
-                            Text(if (isEditing) "Save changes" else if (state.isFutureDate) "Schedule" else "Save")
-                        }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(horizontal = MonetaSpacing.sm, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    onClick = onDone,
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Filled.Close, contentDescription = "Cancel", modifier = Modifier.size(22.dp))
                     }
                 }
-            )
+                androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                if (state.saveAtTop) {
+                    if (!isEditing) {
+                        TextButton(
+                            onClick = { viewModel.save(onSaved = onDone, addAnother = true) },
+                            enabled = !state.isSaving
+                        ) { Text("+ Another") }
+                    }
+                    Button(
+                        onClick = {
+                            viewModel.save(onSaved = {
+                                Toast.makeText(context, successText, Toast.LENGTH_SHORT).show()
+                                onDone()
+                            })
+                        },
+                        enabled = !state.isSaving,
+                        colors = ButtonDefaults.buttonColors(containerColor = accent),
+                        modifier = Modifier.padding(end = MonetaSpacing.xs)
+                    ) {
+                        Text(if (isEditing) "Save changes" else if (state.isFutureDate) "Schedule" else "Save")
+                    }
+                }
+            }
         }
     ) { padding ->
         // With the built-in number pad the phone keyboard (for notes) slides OVER the pad instead
@@ -206,10 +228,12 @@ fun QuickAddScreen(
                     prefix = { Text(com.moneta.app.core.money.DisplayCurrency.entryPrefix(), style = MaterialTheme.typography.titleLarge) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    textStyle = MaterialTheme.typography.displayMedium.copy(color = accent),
+                    textStyle = MaterialTheme.typography.displayMedium.copy(color = accent, fontWeight = FontWeight.Bold),
                     isError = state.amountError != null,
                     supportingText = state.amountError?.let { message -> { Text(message) } },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 104.dp)
                 )
             }
             state.savedMessage?.let { message ->
@@ -223,38 +247,46 @@ fun QuickAddScreen(
                 if (inRow) {
                     Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
                         Box(modifier = Modifier.weight(1f)) {
-                            AccountPicker("From", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
+                            AccountPicker("From", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected, onCreate = { n, t -> viewModel.quickAddAccount(n, t, false) })
                         }
                         Box(modifier = Modifier.weight(1f)) {
-                            AccountPicker("To", toAccounts, state.selectedToAccountId, dropdown, viewModel::onToAccountSelected)
+                            AccountPicker("To", toAccounts, state.selectedToAccountId, dropdown, viewModel::onToAccountSelected, onCreate = { n, t -> viewModel.quickAddAccount(n, t, true) })
                         }
                     }
                 } else {
-                    AccountPicker("From account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
-                    AccountPicker("To account", toAccounts, state.selectedToAccountId, dropdown, viewModel::onToAccountSelected)
+                    AccountPicker("From account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected, onCreate = { n, t -> viewModel.quickAddAccount(n, t, false) })
+                    AccountPicker("To account", toAccounts, state.selectedToAccountId, dropdown, viewModel::onToAccountSelected, onCreate = { n, t -> viewModel.quickAddAccount(n, t, true) })
                 }
             } else {
-                if (inRow) {
+                val levels = state.categoryLevels
+                val first = levels.firstOrNull()
+                if (inRow && first != null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
                         Box(modifier = Modifier.weight(1f)) {
-                            AccountPicker("Account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
+                            AccountPicker("Account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected, onCreate = { n, t -> viewModel.quickAddAccount(n, t, false) })
                         }
                         Box(modifier = Modifier.weight(1f)) {
-                            CategoryPicker("Category", state.topLevelCategories, topSelectedId, dropdown, viewModel::onCategorySelected)
+                            CategoryPicker(first.label, first.options, first.selectedId, dropdown, viewModel::onCategorySelected, onCreate = { n -> viewModel.quickAddCategory(n, null) })
                         }
                     }
                 } else {
-                    AccountPicker("Account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected)
-                    CategoryPicker("Category", state.topLevelCategories, topSelectedId, dropdown, viewModel::onCategorySelected)
+                    AccountPicker("Account", state.accounts, state.selectedAccountId, dropdown, viewModel::onAccountSelected, onCreate = { n, t -> viewModel.quickAddAccount(n, t, false) })
+                    if (first != null) {
+                        CategoryPicker(first.label, first.options, first.selectedId, dropdown, viewModel::onCategorySelected, onCreate = { n -> viewModel.quickAddCategory(n, null) })
+                    }
                 }
-                if (state.subcategoryOptions.isNotEmpty()) {
-                    CategoryPicker(
-                        "Subcategory (optional)",
-                        state.subcategoryOptions,
-                        selectedSub?.id,
-                        dropdown,
-                        viewModel::onCategorySelected
-                    )
+                levels.forEachIndexed { index, level ->
+                    if (index > 0) {
+                        val parentId = levels[index - 1].selectedId
+                        CategoryPicker(
+                            level.label,
+                            level.options,
+                            level.selectedId,
+                            dropdown,
+                            viewModel::onCategorySelected,
+                            onCreate = { n -> viewModel.quickAddCategory(n, parentId) }
+                        )
+                    }
                 }
             }
         }
@@ -283,13 +315,13 @@ fun QuickAddScreen(
                 CompactChip(
                     icon = Icons.Filled.Event,
                     text = state.date.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy")),
-                    onClick = { showDatePicker = true },
+                    onClick = { dropFocus(); showDatePicker = true },
                     modifier = Modifier.weight(1.5f)
                 )
                 CompactChip(
                     icon = Icons.Filled.Schedule,
                     text = formatTime(state.timeMinutes),
-                    onClick = { showTimePicker = true },
+                    onClick = { dropFocus(); showTimePicker = true },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -308,6 +340,7 @@ fun QuickAddScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .windowInsetsPadding(bottomInsets)
+                .pointerInput(Unit) { detectTapGestures(onTap = { dropFocus() }) }
         ) {
             // Fixed screen. It only scrolls when the account/category chips are used, since those can be long.
             Column(
@@ -330,6 +363,7 @@ fun QuickAddScreen(
             if (state.customKeypad) {
                 CalculatorKeypad(
                     onKey = { key ->
+                        dropFocus()
                         viewModel.onAmountExpressionChange(applyKeypadKey(state.amountInput, key))
                     }
                 )
@@ -506,12 +540,19 @@ private fun <T> DropdownPicker(
     itemId: (T) -> Long,
     itemText: (T) -> String,
     itemIcon: (T) -> String,
-    onSelect: (T) -> Unit
+    onSelect: (T) -> Unit,
+    onAddNew: (() -> Unit)? = null
 ) {
     var popupOpen by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
     val currentIcon = selectedIcon ?: "category"
     Surface(
-        onClick = { popupOpen = true },
+        onClick = {
+            focusManager.clearFocus()
+            keyboard?.hide()
+            popupOpen = true
+        },
         shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
         modifier = Modifier
@@ -622,6 +663,13 @@ private fun <T> DropdownPicker(
                             .padding(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.End
                     ) {
+                        if (onAddNew != null) {
+                            TextButton(onClick = {
+                                popupOpen = false
+                                onAddNew()
+                            }) { Text("+ New") }
+                            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                        }
                         TextButton(onClick = { popupOpen = false }) { Text("Cancel") }
                     }
                 }
@@ -636,16 +684,14 @@ private fun AccountPicker(
     accounts: List<Account>,
     selectedId: Long?,
     dropdown: Boolean,
-    onSelect: (Long) -> Unit
+    onSelect: (Long) -> Unit,
+    onCreate: (String, AccountType) -> Unit
 ) {
+    var showNew by remember { mutableStateOf(false) }
     if (accounts.isEmpty()) {
-        Text(
-            "Add an account from the side menu (Accounts) to get started.",
-            style = MaterialTheme.typography.bodyMedium
-        )
-        return
-    }
-    if (dropdown) {
+        Text("No account yet.", style = MaterialTheme.typography.bodyMedium)
+        TextButton(onClick = { showNew = true }) { Text("+ New account") }
+    } else if (dropdown) {
         val selected = accounts.firstOrNull { it.id == selectedId }
         DropdownPicker(
             label = label,
@@ -656,7 +702,8 @@ private fun AccountPicker(
             itemId = { it.id },
             itemText = { it.name },
             itemIcon = { it.icon },
-            onSelect = { onSelect(it.id) }
+            onSelect = { onSelect(it.id) },
+            onAddNew = { showNew = true }
         )
     } else {
         SectionLabel(label)
@@ -678,7 +725,17 @@ private fun AccountPicker(
                     }
                 )
             }
+            AssistChip(onClick = { showNew = true }, label = { Text("+ New") })
         }
+    }
+    if (showNew) {
+        NewAccountDialog(
+            onDismiss = { showNew = false },
+            onCreate = { name, type ->
+                showNew = false
+                onCreate(name, type)
+            }
+        )
     }
 }
 
@@ -688,13 +745,14 @@ private fun CategoryPicker(
     categories: List<Category>,
     selectedId: Long?,
     dropdown: Boolean,
-    onSelect: (Long) -> Unit
+    onSelect: (Long) -> Unit,
+    onCreate: (String) -> Unit
 ) {
+    var showNew by remember { mutableStateOf(false) }
     if (categories.isEmpty()) {
-        Text("No categories yet. Add some from the side menu (Categories).", style = MaterialTheme.typography.bodyMedium)
-        return
-    }
-    if (dropdown) {
+        Text("No categories here yet.", style = MaterialTheme.typography.bodyMedium)
+        TextButton(onClick = { showNew = true }) { Text("+ New") }
+    } else if (dropdown) {
         val selected = categories.firstOrNull { it.id == selectedId }
         DropdownPicker(
             label = label,
@@ -705,7 +763,8 @@ private fun CategoryPicker(
             itemId = { it.id },
             itemText = { it.name },
             itemIcon = { it.icon },
-            onSelect = { onSelect(it.id) }
+            onSelect = { onSelect(it.id) },
+            onAddNew = { showNew = true }
         )
     } else {
         SectionLabel(label)
@@ -727,8 +786,79 @@ private fun CategoryPicker(
                     }
                 )
             }
+            AssistChip(onClick = { showNew = true }, label = { Text("+ New") })
         }
     }
+    if (showNew) {
+        NewNameDialog(
+            title = "New category",
+            onDismiss = { showNew = false },
+            onCreate = { name ->
+                showNew = false
+                onCreate(name)
+            }
+        )
+    }
+}
+
+@Composable
+private fun NewNameDialog(title: String, onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Name") },
+                singleLine = true
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onCreate(name) }, enabled = name.isNotBlank()) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+private fun NewAccountDialog(onDismiss: () -> Unit, onCreate: (String, AccountType) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf(AccountType.CASH) }
+    val types = listOf(
+        AccountType.CASH to "Cash",
+        AccountType.BANK to "Bank",
+        AccountType.SAVINGS to "Savings",
+        AccountType.E_WALLET to "Wallet",
+        AccountType.CREDIT_CARD to "Card"
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("New account") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    singleLine = true
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.xs),
+                    verticalArrangement = Arrangement.spacedBy(MonetaSpacing.xs)
+                ) {
+                    types.forEach { (t, text) ->
+                        FilterChip(selected = type == t, onClick = { type = t }, label = { Text(text) })
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onCreate(name, type) }, enabled = name.isNotBlank()) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 /** Shows the typed amount (or calculation) big, with the running result underneath. */
@@ -738,13 +868,19 @@ private fun AmountDisplay(expression: String, accent: Color, error: String?) {
     Surface(
         shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 104.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = MonetaSpacing.md, vertical = MonetaSpacing.md)) {
+        Column(
+            modifier = Modifier.padding(horizontal = MonetaSpacing.md, vertical = MonetaSpacing.md),
+            verticalArrangement = Arrangement.Center
+        ) {
             Text(
                 (com.moneta.app.core.money.DisplayCurrency.entryPrefix() + " " +
                     (if (expression.isEmpty()) "0" else expression.replace('-', '−'))).trim(),
                 style = MaterialTheme.typography.displayMedium,
+                fontWeight = FontWeight.Bold,
                 color = accent,
                 maxLines = 2
             )

@@ -1,6 +1,7 @@
 package com.moneta.app.ui.budgets
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,7 +65,7 @@ private fun statusColor(status: BudgetStatus?): Color = when (status) {
 }
 
 @Composable
-fun BudgetsScreen(onOpenRecords: () -> Unit, viewModel: BudgetsViewModel = hiltViewModel()) {
+fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, viewModel: BudgetsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     var editing by remember { mutableStateOf<BudgetLine?>(null) }
     var deleting by remember { mutableStateOf<BudgetLine?>(null) }
@@ -169,7 +170,7 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, viewModel: BudgetsViewModel = hiltV
                 modifier = Modifier.padding(top = MonetaSpacing.sm)
             )
             Text(
-                "Tap a category with a budget to see its transactions, or tap Set budget.",
+                "Tap a category with a budget to see its transactions. Press and hold it to open its report.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -193,6 +194,10 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, viewModel: BudgetsViewModel = hiltV
                     onSeeTransactions = {
                         viewModel.prepareRecords(line)
                         onOpenRecords()
+                    },
+                    onOpenReport = {
+                        viewModel.prepareReports(line)
+                        onOpenReports()
                     }
                 )
             }
@@ -228,10 +233,35 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, viewModel: BudgetsViewModel = hiltV
 }
 
 @Composable
+private fun OutlookTile(label: String, value: Money, color: Color, modifier: Modifier = Modifier, note: String? = null) {
+    androidx.compose.material3.Surface(
+        modifier = modifier,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+        color = color.copy(alpha = 0.12f)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                value.formatted(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = color
+            )
+            if (note != null) {
+                Text(note, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** The budget outlook for the month. Income is not part of it: only budgets and spending. */
+@Composable
 private fun SummaryCard(state: BudgetsUiState) {
     val over = state.totalRemaining.isNegative
     val percent = state.totalSpentOnBudgeted.percentOf(state.totalBudget) ?: 0.0
     val color = if (over) ExpenseRed else IncomeGreen
+    val variance = state.expectedVariance
+    val verdictColor = if (variance.minorUnits > 0L) ExpenseRed else IncomeGreen
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -241,7 +271,7 @@ private fun SummaryCard(state: BudgetsUiState) {
             Text(
                 state.totalBudget.formatted(),
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.ExtraBold
             )
             Spacer(Modifier.height(MonetaSpacing.sm))
             LinearProgressIndicator(
@@ -249,53 +279,77 @@ private fun SummaryCard(state: BudgetsUiState) {
                 color = color,
                 modifier = Modifier.fillMaxWidth()
             )
-            Spacer(Modifier.height(MonetaSpacing.sm))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("Spent", style = MaterialTheme.typography.labelMedium)
-                    Text(state.totalSpentOnBudgeted.formatted(), style = MaterialTheme.typography.titleMedium)
-                }
-                Text(
-                    "${percent.toInt()}%",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = color
+            Text(
+                "${percent.toInt()}% of the budget used",
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+            Spacer(Modifier.height(MonetaSpacing.md))
+            Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                OutlookTile("Spent", state.totalSpentOnBudgeted, ExpenseRed, Modifier.weight(1f))
+                OutlookTile(
+                    if (over) "Exceeded by" else "Remaining",
+                    state.totalRemaining.abs(),
+                    color,
+                    Modifier.weight(1f)
                 )
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(if (over) "Exceeded by" else "Remaining", style = MaterialTheme.typography.labelMedium)
-                    Text(
-                        state.totalRemaining.abs().formatted(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = color
-                    )
-                }
             }
             Spacer(Modifier.height(MonetaSpacing.sm))
-            Divider()
-            Spacer(Modifier.height(MonetaSpacing.sm))
-            val savings = if (state.isClosed) state.actualSavings else state.expectedSavings
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        if (state.isClosed) "Actual savings" else "Expected savings this month",
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                    Text(
-                        if (state.isClosed) "Income ${state.monthIncome.formatted()} \u2212 spent ${state.totalExpense.formatted()}"
-                        else "Income ${state.monthIncome.formatted()} \u2212 spent ${state.totalExpense.formatted()} \u2212 budgeted still to spend ${state.yetToSpend.formatted()}",
-                        style = MaterialTheme.typography.labelSmall
-                    )
+            Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                OutlookTile(
+                    "Yet to spend",
+                    state.yetToSpend,
+                    WarningAmber,
+                    Modifier.weight(1f),
+                    note = "Budgeted, not spent"
+                )
+                OutlookTile(
+                    if (state.isClosed) "Total spent" else "Expected spend",
+                    state.projectedSpend,
+                    MaterialTheme.colorScheme.primary,
+                    Modifier.weight(1f),
+                    note = if (state.isClosed) "Final for the month" else "At the pace so far"
+                )
+            }
+            if (state.hasAnyBudget) {
+                Spacer(Modifier.height(MonetaSpacing.md))
+                androidx.compose.material3.Surface(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                    color = verdictColor.copy(alpha = 0.16f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                if (state.isClosed) "Result" else "Expected result",
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                            Text(
+                                if (variance.minorUnits > 0L) {
+                                    if (state.isClosed) "Went over budget" else "Likely to go over budget"
+                                } else if (variance.minorUnits < 0L) {
+                                    if (state.isClosed) "Finished under budget" else "Likely to stay under budget"
+                                } else {
+                                    "Right on budget"
+                                },
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        Text(
+                            variance.abs().formatted(),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = verdictColor
+                        )
+                    }
                 }
                 Text(
-                    savings.formatted(),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = if (savings.isNegative) ExpenseRed else IncomeGreen
+                    "Based on budgeted categories only. Income is not counted.",
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(top = 4.dp)
                 )
             }
             if (!state.hasAnyBudget) {
@@ -315,24 +369,29 @@ private fun SummaryCard(state: BudgetsUiState) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun CategoryBudgetCard(
     line: BudgetLine,
     onOpen: () -> Unit,
     onDelete: () -> Unit,
-    onSeeTransactions: () -> Unit
+    onSeeTransactions: () -> Unit,
+    onOpenReport: () -> Unit
 ) {
     val budget = line.effectiveBudget
     var menuOpen by remember { mutableStateOf(false) }
     Card(modifier = Modifier
         .fillMaxWidth()
-        .clickable(onClick = if (budget == null) onOpen else onSeeTransactions)) {
+        .combinedClickable(
+            onClick = if (budget == null) onOpen else onSeeTransactions,
+            onLongClick = onOpenReport
+        )) {
         Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconBadge(iconName = line.category.icon, colorHex = line.category.colorHex)
                 Spacer(Modifier.width(MonetaSpacing.md))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(line.category.name, style = MaterialTheme.typography.titleMedium)
+                    Text(line.label, style = MaterialTheme.typography.titleMedium)
                     if (budget == null) {
                         Text(
                             if (line.spent.isZero) "No budget set" else "Spent ${line.spent.formatted()} · no budget set",

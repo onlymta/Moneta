@@ -91,30 +91,16 @@ fun CategoriesScreen(
                     contentPadding = PaddingValues(start = MonetaSpacing.screenHorizontal, end = MonetaSpacing.screenHorizontal, top = MonetaSpacing.screenHorizontal, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
                 ) {
-                    items(state.topLevelCategories, key = { it.id }) { category ->
-                        Column {
-                            CategoryRow(
-                                category = category,
-                                onClick = { onEditCategory(category.id) },
-                                onDelete = { viewModel.requestDelete(category) }
-                            )
-                            val children = state.subcategoriesByParent[category.id].orEmpty()
-                            if (children.isNotEmpty()) {
-                                Column(modifier = Modifier.padding(start = MonetaSpacing.xl, top = MonetaSpacing.xs)) {
-                                    children.forEach { sub ->
-                                        CategoryRow(
-                                            category = sub,
-                                            onClick = { onEditCategory(sub.id) },
-                                            onDelete = { viewModel.requestDelete(sub) },
-                                            modifier = Modifier.padding(bottom = MonetaSpacing.xs)
-                                        )
-                                    }
-                                }
-                            }
-                            TextButton(onClick = { onAddSubcategory(state.selectedType, category.id) }) {
-                                Text("+ Add subcategory under ${category.name}")
-                            }
-                        }
+                    items(state.tree, key = { it.category.id }) { node ->
+                        CategoryRow(
+                            category = node.category,
+                            onClick = { onEditCategory(node.category.id) },
+                            onDelete = { viewModel.requestDelete(node.category) },
+                            onAddSub = if (state.subcategoriesEnabled) {
+                                { onAddSubcategory(state.selectedType, node.category.id) }
+                            } else null,
+                            modifier = Modifier.padding(start = MonetaSpacing.xl * node.depth)
+                        )
                     }
                 }
             }
@@ -122,7 +108,7 @@ fun CategoriesScreen(
     }
 
     state.pendingReassignment?.let { pending ->
-        val allCategories = state.topLevelCategories + state.subcategoriesByParent.values.flatten()
+        val allCategories = state.allCategories
         ReassignmentDialog(
             categoryName = pending.categoryToDelete.name,
             transactionCount = pending.transactionCount,
@@ -153,7 +139,8 @@ private fun CategoryRow(
     category: Category,
     onClick: () -> Unit,
     onDelete: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onAddSub: (() -> Unit)? = null
 ) {
     Card(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -172,6 +159,11 @@ private fun CategoryRow(
                 IconBadge(iconName = category.icon, colorHex = category.colorHex, size = 36.dp)
                 Spacer(Modifier.width(MonetaSpacing.md))
                 Text(category.name, style = MaterialTheme.typography.bodyLarge)
+            }
+            if (onAddSub != null) {
+                IconButton(onClick = onAddSub) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add a sub-category inside " + category.name)
+                }
             }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Outlined.Delete, contentDescription = "Delete category")

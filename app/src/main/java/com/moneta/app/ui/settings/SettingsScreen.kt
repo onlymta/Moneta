@@ -88,6 +88,7 @@ private enum class SettingsArea(val title: String) {
     APPEARANCE("Appearance"),
     BUDGETS("Budgets and balances"),
     MODULES("Features"),
+    DASHBOARD("Home dashboard"),
     CUSTOMIZE("Customization"),
     REMINDERS("Reminders")
 }
@@ -121,10 +122,11 @@ fun SettingsScreen(
             } else {
                 when (area) {
                     SettingsArea.PROFILE -> ProfileArea(prefs.userName, viewModel)
-                    SettingsArea.CURRENCY -> CurrencyArea(prefs.displayCurrency, prefs.showCurrencySymbol, viewModel)
+                    SettingsArea.CURRENCY -> CurrencyArea(prefs.displayCurrency, prefs.showCurrencySymbol, prefs.decimals, viewModel)
                     SettingsArea.APPEARANCE -> AppearanceArea(prefs.themeMode, viewModel)
                     SettingsArea.BUDGETS -> BudgetsArea(prefs.carryForwardBalance, prefs.rolloverBudgets, viewModel)
-                    SettingsArea.MODULES -> ModulesArea(prefs.budgetsEnabled, prefs.goalsEnabled, prefs.billsEnabled, viewModel)
+                    SettingsArea.MODULES -> ModulesArea(prefs.budgetsEnabled, prefs.goalsEnabled, prefs.billsEnabled, prefs.subcategoriesEnabled, viewModel)
+                    SettingsArea.DASHBOARD -> DashboardArea(prefs.hiddenHomeCards, viewModel)
                     SettingsArea.CUSTOMIZE -> CustomizeArea(prefs, viewModel)
                     SettingsArea.REMINDERS -> RemindersArea(prefs.reminderEnabled, prefs.reminderHour, prefs.reminderMinute, viewModel)
                 }
@@ -202,7 +204,9 @@ private fun SettingsHome(
                 onOpen(SettingsArea.BUDGETS)
             }
             Divider()
-            AreaRow(Icons.Filled.Extension, "Features", "Budgets, goals, bills") { onOpen(SettingsArea.MODULES) }
+            AreaRow(Icons.Filled.Extension, "Features", "Budgets, goals, bills, sub-categories") { onOpen(SettingsArea.MODULES) }
+            Divider()
+            AreaRow(Icons.Filled.Tune, "Home dashboard", "Choose which cards show") { onOpen(SettingsArea.DASHBOARD) }
         }
     }
 
@@ -285,7 +289,24 @@ private fun ProfileArea(userName: String, viewModel: SettingsViewModel) {
 }
 
 @Composable
-private fun CurrencyArea(code: String, showSymbol: Boolean, viewModel: SettingsViewModel) {
+private fun CurrencyArea(code: String, showSymbol: Boolean, decimals: Int, viewModel: SettingsViewModel) {
+    Text("Decimals shown on amounts", style = MaterialTheme.typography.bodyLarge)
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        listOf(0, 1, 2).forEachIndexed { index, value ->
+            SegmentedButton(
+                selected = decimals == value,
+                onClick = { viewModel.setDecimals(value) },
+                shape = SegmentedButtonDefaults.itemShape(index, 3)
+            ) {
+                Text(when (value) { 0 -> "None"; 1 -> "One"; else -> "Two" })
+            }
+        }
+    }
+    Text(
+        "Only changes how amounts look. Nothing recorded is rounded or changed.",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
     ToggleRow("Show currency symbol", "Off shows plain figures only", showSymbol, viewModel::setShowCurrencySymbol)
     Text(
         "Changing the currency only changes the label. Amounts you already recorded are not converted.",
@@ -353,10 +374,30 @@ private fun BudgetsArea(carryForward: Boolean, rollover: Boolean, viewModel: Set
 }
 
 @Composable
-private fun ModulesArea(budgets: Boolean, goals: Boolean, bills: Boolean, viewModel: SettingsViewModel) {
+private fun ModulesArea(budgets: Boolean, goals: Boolean, bills: Boolean, subcategories: Boolean, viewModel: SettingsViewModel) {
     ToggleRow("Budgets", "The Budgets tab", budgets, viewModel::setBudgetsEnabled)
     ToggleRow("Goals", "Savings goals in the side menu", goals, viewModel::setGoalsEnabled)
     ToggleRow("Bills", "Bill tracking in the side menu", bills, viewModel::setBillsEnabled)
+    ToggleRow(
+        "Sub-categories",
+        "Lets you create categories inside categories. Each one gets its own budget and analysis.",
+        subcategories,
+        viewModel::setSubcategoriesEnabled
+    )
+}
+
+@Composable
+private fun DashboardArea(hidden: Set<String>, viewModel: SettingsViewModel) {
+    Text(
+        "Choose which cards appear on the Home page.",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    com.moneta.app.data.settings.HomeCard.entries.forEach { card ->
+        ToggleRow(card.label, "", card.name !in hidden) { on ->
+            viewModel.setHiddenHomeCards(if (on) hidden - card.name else hidden + card.name)
+        }
+    }
 }
 
 @Composable

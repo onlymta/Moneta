@@ -4,7 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.moneta.app.core.money.AmountCalculator
 import com.moneta.app.core.money.Money
+import com.moneta.app.data.local.entity.AccountType
 import com.moneta.app.data.local.entity.CategoryType
+import com.moneta.app.ui.accounts.accountColorPalette
+import com.moneta.app.ui.accounts.defaultIconFor
+import com.moneta.app.ui.categories.DEFAULT_CATEGORY_ICON
 import com.moneta.app.data.local.entity.RecurrenceFrequency
 import com.moneta.app.data.local.entity.TransactionType
 import com.moneta.app.data.repository.Account
@@ -53,20 +57,20 @@ private data class QuickAddForm(
 
 private fun nowMinutes(): Int = LocalTime.now().let { it.hour * 60 + it.minute }
 
+/** One step of the category picker: its options and which one (if any) is chosen. */
+data class CategoryLevel(
+    val label: String,
+    val options: List<Category>,
+    val selectedId: Long?
+)
+
 data class QuickAddUiState(
     val type: TransactionType = TransactionType.EXPENSE,
     val amountInput: String = "",
     val amountError: String? = null,
     val accounts: List<Account> = emptyList(),
-    /** Top-level categories only - the fast, one-tap path (Section 7). */
-    val topLevelCategories: List<Category> = emptyList(),
-    /**
-     * Subcategories to offer as a refinement, derived from whichever category is
-     * currently selected (its children if a top-level category is selected, or its
-     * siblings if a subcategory is already selected) - empty when there's nothing
-     * to refine, so most categories never show a second row at all.
-     */
-    val subcategoryOptions: List<Category> = emptyList(),
+    /** Category pickers from top level down; deeper levels only appear when sub-categories are enabled. */
+    val categoryLevels: List<CategoryLevel> = emptyList(),
     val selectedAccountId: Long? = null,
     val selectedToAccountId: Long? = null,
     val selectedCategoryId: Long? = null,
@@ -142,20 +146,14 @@ class QuickAddViewModel @Inject constructor(
             f.selectedCategoryId ?: lastUsedCategoryId?.takeIf { id -> categories.any { it.id == id } }
         }
 
-        val topLevel = categories.filter { it.parentCategoryId == null }
-        val subcategoryOptions = defaultCategoryId?.let { selectedId ->
-            val selected = categories.find { it.id == selectedId }
-            val parentIdToShow = if (selected?.parentCategoryId == null) selectedId else selected.parentCategoryId
-            categories.filter { it.parentCategoryId == parentIdToShow }
-        }.orEmpty()
+        val levels = buildCategoryLevels(categories, defaultCategoryId, prefs.subcategoriesEnabled)
 
         QuickAddUiState(
             type = f.type,
             amountInput = f.amountInput,
             amountError = f.amountError,
             accounts = accounts,
-            topLevelCategories = topLevel,
-            subcategoryOptions = subcategoryOptions,
+            categoryLevels = levels,
             selectedAccountId = defaultAccountId,
             selectedToAccountId = f.selectedToAccountId,
             selectedCategoryId = defaultCategoryId,
@@ -218,8 +216,41 @@ class QuickAddViewModel @Inject constructor(
 
     fun onToAccountSelected(accountId: Long) = form.update { it.copy(selectedToAccountId = accountId, formError = null) }
 
-    /** Used for both a top-level category tap and a subcategory refinement tap - see [QuickAddUiState.subcategoryOptions]. */
+    /** Used for both a top-level category tap and a subcategory refinement tap. */
     fun onCategorySelected(categoryId: Long) = form.update { it.copy(selectedCategoryId = categoryId, formError = null) }
+
+    /** Creates an account from the form's small "new account" pop-up and selects it. */
+    fun quickAddAccount(name: String, type: AccountType, forDestination: Boolean) {
+        val clean = name.trim()
+        if (clean.isEmpty()) return
+        viewModelScope.launch {
+            val id = accountRepository.createAccount(
+                name = clean,
+                type = type,
+                icon = defaultIconFor(type),
+                colorHex = accountColorPalette.first(),
+                openingBalance = Money(0L, DEFAULT_CURRENCY)
+            )
+            if (forDestination) onToAccountSelected(id) else onAccountSelected(id)
+        }
+    }
+
+    /** Creates a category (optionally inside [parentId]) from the small pop-up and selects it. */
+    fun quickAddCategory(name: String, parentId: Long?) {
+        val clean = name.trim()
+        if (clean.isEmpty()) return
+        val type = if (form.value.type == TransactionType.INCOME) CategoryType.INCOME else CategoryType.EXPENSE
+        viewModelScope.launch {
+            val id = categoryRepository.createCategory(
+                name = clean,
+                type = type,
+                icon = DEFAULT_CATEGORY_ICON,
+                colorHex = com.moneta.app.ui.common.IconMapper.colorFor(DEFAULT_CATEGORY_ICON),
+                parentCategoryId = parentId
+            )
+            onCategorySelected(id)
+        }
+    }
 
     fun onNotesChange(notes: String) = form.update { it.copy(notes = notes) }
 
@@ -377,4 +408,37 @@ class QuickAddViewModel @Inject constructor(
             }
         }
     }
+}
+
+/**
+ * Builds the chain of pickers for the selected category. With sub-categories off there is one
+ * level (root categories). With them on, each chosen category with children adds another level.
+ */
+private fun buildCategoryLevels(
+    categories: List<Category>,
+    selectedId: Long?,
+    subcategoriesEnabled: Boolean
+): List<CategoryLevel> {
+    val byId = categories.associateBy { it.id }
+    val path = ArrayList<Long>()
+    var cursor: Category? = selectedId?.let { byId[it] }
+    while (cursor != null && path.size < 12) {
+        path.add(0, cursor.id)
+        val parentId = cursor.parentCategoryId
+        cursor = if (parentId == null) null else byId[parentId]
+    }
+    val roots = categories.filter { it.parentCategoryId == null }
+    val levels = ArrayList<CategoryLevel>()
+    levels.add(CategoryLevel("Category", roots, path.firstOrNull()))
+    if (!subcategoriesEnabled) return levels
+    var depth = 0
+    while (depth < path.size || depth == 0) {
+        val parentId = path.getOrNull(depth) ?: break
+        val children = categories.filter { it.parentCategoryId == parentId }
+        if (children.isEmpty()) break
+        val label = if (depth == 0) "Sub-category (optional)" else "Sub-sub-category (optional)"
+        levels.add(CategoryLevel(label, children, path.getOrNull(depth + 1)))
+        depth++
+    }
+    return levels
 }

@@ -16,12 +16,19 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** One row of the category list: the category and how deep it sits (0 = top level). */
+data class CategoryNode(val category: Category, val depth: Int)
+
 data class CategoriesUiState(
     val isLoading: Boolean = true,
     val selectedType: CategoryType = CategoryType.EXPENSE,
     /** Top-level categories only - each may have entries in [subcategoriesByParent]. */
     val topLevelCategories: List<Category> = emptyList(),
     val subcategoriesByParent: Map<Long, List<Category>> = emptyMap(),
+    /** Rows to show, in order; nested categories only appear when sub-categories are switched on. */
+    val tree: List<CategoryNode> = emptyList(),
+    val allCategories: List<Category> = emptyList(),
+    val subcategoriesEnabled: Boolean = false,
     /** Non-null while the user is being asked to pick a replacement category for a blocked delete (Section 12). */
     val pendingReassignment: PendingReassignment? = null
 )
@@ -33,8 +40,11 @@ data class PendingReassignment(
 
 @HiltViewModel
 class CategoriesViewModel @Inject constructor(
-    private val categoryRepository: CategoryRepository
+    private val categoryRepository: CategoryRepository,
+    settingsRepository: com.moneta.app.data.settings.SettingsRepository
 ) : ViewModel() {
+
+    private val prefsFlow = settingsRepository.preferences
 
     private val selectedTypeFlow = MutableStateFlow(CategoryType.EXPENSE)
     private val pendingReassignmentFlow = MutableStateFlow<PendingReassignment?>(null)
@@ -46,19 +56,32 @@ class CategoriesViewModel @Inject constructor(
         .flatMapLatest { categoryRepository.observeByType(it) }
 
     val uiState: StateFlow<CategoriesUiState> = combine(
-        selectedTypeFlow, categoriesFlow, pendingReassignmentFlow
-    ) { type, categories, pending ->
+        selectedTypeFlow, categoriesFlow, pendingReassignmentFlow, prefsFlow
+    ) { type, categories, pending, prefs ->
         // Section 12: one level of subcategory nesting - group the flat list from the
         // repository into top-level categories plus a lookup of each one's children,
         // so the screen can render the hierarchy without a second query.
         val topLevel = categories.filter { it.parentCategoryId == null }
         val byParent = categories.filter { it.parentCategoryId != null }
             .groupBy { it.parentCategoryId!! }
+        val rows = ArrayList<CategoryNode>()
+        val seen = HashSet<Long>()
+        fun walk(category: Category, depth: Int) {
+            if (!seen.add(category.id)) return
+            rows.add(CategoryNode(category, depth))
+            if (prefs.subcategoriesEnabled) {
+                byParent[category.id].orEmpty().forEach { walk(it, depth + 1) }
+            }
+        }
+        topLevel.forEach { walk(it, 0) }
         CategoriesUiState(
             isLoading = false,
             selectedType = type,
             topLevelCategories = topLevel,
             subcategoriesByParent = byParent,
+            tree = rows,
+            allCategories = categories,
+            subcategoriesEnabled = prefs.subcategoriesEnabled,
             pendingReassignment = pending
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CategoriesUiState())

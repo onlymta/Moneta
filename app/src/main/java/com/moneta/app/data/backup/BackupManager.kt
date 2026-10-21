@@ -35,7 +35,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /** Bumped whenever the backup JSON schema changes, so a future Moneta version can detect an old backup format. */
-private const val BACKUP_SCHEMA_VERSION = 1
+private const val BACKUP_SCHEMA_VERSION = 2
 
 sealed class RestoreResult {
     data object Success : RestoreResult()
@@ -60,7 +60,8 @@ class BackupManager @Inject constructor(
     private val budgetDao: BudgetDao,
     private val goalDao: GoalDao,
     private val billDao: BillDao,
-    private val recurringTransactionDao: RecurringTransactionDao
+    private val recurringTransactionDao: RecurringTransactionDao,
+    private val settingsRepository: com.moneta.app.data.settings.SettingsRepository
 ) {
 
     suspend fun createBackup(outputStream: OutputStream) {
@@ -95,6 +96,8 @@ class BackupManager @Inject constructor(
         root.put("recurringTransactions", JSONArray().apply {
             recurringTransactionDao.getAllForBackup().forEach { put(it.toJson()) }
         })
+
+        root.put("settings", settingsRepository.exportAllJson())
 
         outputStream.writer(Charsets.UTF_8).use { it.write(root.toString()) }
     }
@@ -146,6 +149,8 @@ class BackupManager @Inject constructor(
                 billDao.insertAll(bills)
                 recurringTransactionDao.insertAll(recurringTransactions)
             }
+            // Settings come last and only after the data restored cleanly. Older backups simply have none.
+            root.optJSONObject("settings")?.let { settingsRepository.importAllJson(it) }
             RestoreResult.Success
         } catch (e: Exception) {
             RestoreResult.Failed("Restore failed: ${e.message ?: "the backup file may be corrupted."}")

@@ -21,6 +21,9 @@ val categoryColorPalette = listOf(
 
 const val DEFAULT_CATEGORY_ICON = "category"
 
+/** A category that could be chosen as the parent, with its full path as the label (Food > Groceries). */
+data class ParentOption(val id: Long, val label: String)
+
 data class AddEditCategoryUiState(
     val isEditing: Boolean = false,
     val type: CategoryType = CategoryType.EXPENSE,
@@ -28,7 +31,7 @@ data class AddEditCategoryUiState(
     val icon: String = DEFAULT_CATEGORY_ICON,
     val colorHex: String = com.moneta.app.ui.common.IconMapper.colorFor(DEFAULT_CATEGORY_ICON),
     /** Top-level categories of this type that could be this category's parent (Section 12 subcategories). */
-    val availableParents: List<Category> = emptyList(),
+    val availableParents: List<ParentOption> = emptyList(),
     val selectedParentId: Long? = null,
     val nameError: String? = null,
     val saved: Boolean = false
@@ -36,7 +39,8 @@ data class AddEditCategoryUiState(
 
 @HiltViewModel
 class AddEditCategoryViewModel @Inject constructor(
-    private val categoryRepository: CategoryRepository
+    private val categoryRepository: CategoryRepository,
+    private val settingsRepository: com.moneta.app.data.settings.SettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddEditCategoryUiState())
@@ -72,11 +76,45 @@ class AddEditCategoryViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Parents are offered only when sub-categories are switched on in Settings. Any category of the same type
+     * can be a parent (so categories can nest further), except this one and the ones inside it.
+     */
     private fun loadParents(type: CategoryType, excludeId: Long?) {
         viewModelScope.launch {
-            val parents = categoryRepository.observeTopLevelByType(type).first()
-                .filter { it.id != excludeId }
-            _uiState.update { it.copy(availableParents = parents) }
+            if (!settingsRepository.preferences.first().subcategoriesEnabled) {
+                _uiState.update { it.copy(availableParents = emptyList()) }
+                return@launch
+            }
+            val all = categoryRepository.observeByType(type).first()
+            val byId = all.associateBy { it.id }
+            val blocked = HashSet<Long>()
+            if (excludeId != null) {
+                blocked.add(excludeId)
+                var added = true
+                while (added) {
+                    added = false
+                    all.forEach { c ->
+                        val parent = c.parentCategoryId
+                        if (parent != null && parent in blocked && blocked.add(c.id)) added = true
+                    }
+                }
+            }
+            fun path(c: Category): String {
+                val parts = ArrayList<String>()
+                var cur: Category? = c
+                var guard = 0
+                while (cur != null && guard < 20) {
+                    parts.add(0, cur.name)
+                    cur = cur.parentCategoryId?.let { byId[it] }
+                    guard++
+                }
+                return parts.joinToString(" > ")
+            }
+            val options = all.filter { it.id !in blocked && !it.isArchived }
+                .map { ParentOption(it.id, path(it)) }
+                .sortedBy { it.label.lowercase() }
+            _uiState.update { it.copy(availableParents = options) }
         }
     }
 

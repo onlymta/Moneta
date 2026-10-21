@@ -157,3 +157,13 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Accounts: default 4th tab, dashboard of All/Current/Savings; removed from Reports.
 - Reports > Spending: tapping a category opens a full analysis page.
 - Records: group by day / week / category, or sort by amount.
+
+## v0.20.0
+- Backup now includes all settings (name, theme, tab order, form options, dashboard cards, decimals, etc.).
+- Home: bigger bold balance and tiles, budget cards (budgeted / spent / yet to spend), expected closing balance, show/hide each card in Settings, balance hide persists, 0/1/2 decimals option, current period highlighted.
+- Records: filter, sort and search icons; category-totals view.
+- Budgets: outlook dashboard (total, spent, remaining, yet to spend, expected over/under). Long-press a category to open its report.
+- Reports: three equal tabs (Overview, Expenses, Income), inline category analysis with period bar kept, per-period history, stats, transactions list.
+- Optional sub-categories (Settings > Modules), nestable, each with own budget and analysis.
+- Quick Add: keyboard only opens on tapping a field, bigger amount, cancel button, "+ New" account/category pop-ups, multi-level category pickers.
+- Header bar scrolls away while scrolling.

@@ -18,7 +18,6 @@ import com.moneta.app.data.settings.SettingsRepository
 import com.moneta.app.domain.usecase.CategoryBreakdownUseCase
 import com.moneta.app.domain.usecase.CategorySlice
 import com.moneta.app.domain.usecase.NetWorthTrendUseCase
-import com.moneta.app.domain.usecase.rollUpToTopLevel
 import com.moneta.app.ui.common.PeriodMode
 import com.moneta.app.ui.common.PeriodSelection
 import com.moneta.app.ui.common.TransactionListItem
@@ -66,7 +65,14 @@ data class HomeUiState(
     val topBudgets: List<BudgetProgress> = emptyList(),
     val openingBreakdown: List<AccountAmount> = emptyList(),
     val incomeBreakdown: List<AccountAmount> = emptyList(),
-    val currentBalance: Money = Money.zero("PKR")
+    val currentBalance: Money = Money.zero("PKR"),
+    val budgetTotal: Money = Money.zero("PKR"),
+    val budgetSpent: Money = Money.zero("PKR"),
+    val yetToSpend: Money = Money.zero("PKR"),
+    /** Balance expected at the end of the month: today's balance less budgeted money still to be spent. */
+    val expectedClosing: Money = Money.zero("PKR"),
+    val hiddenCards: Set<String> = emptySet(),
+    val hideBalance: Boolean = false
 ) {
     /** Income minus expenses for the chosen month - a plain "net change", not "savings". */
     val netChange: Money get() = monthIncome - monthExpense
@@ -89,6 +95,7 @@ class HomeViewModel @Inject constructor(
     private val accountsFlow = accountRepository.observeActiveAccounts()
     private val categoriesFlow = categoryRepository.observeAll()
     private val budgetProgressFlow = budgetRepository.observeProgress()
+    private val allBudgetsFlow = budgetRepository.observeAllBudgets()
     private val prefsFlow = settingsRepository.preferences
 
     val uiState: StateFlow<HomeUiState> = period.flatMapLatest { p ->
@@ -104,7 +111,8 @@ class HomeViewModel @Inject constructor(
                 transactionRepository.observeRecent(5),
                 transactionRepository.observeTotalsByCategory(TransactionType.EXPENSE, range),
                 budgetProgressFlow,
-                categoriesFlow
+                categoriesFlow,
+                allBudgetsFlow
             )
         ) { values ->
             @Suppress("UNCHECKED_CAST")
@@ -118,13 +126,18 @@ class HomeViewModel @Inject constructor(
                 transactions = values[5] as List<Transaction>,
                 categoryTotals = values[6] as List<CategoryTotal>,
                 budgetProgress = values[7] as List<BudgetProgress>,
-                categories = values[8] as List<Category>
+                categories = values[8] as List<Category>,
+                allBudgets = values[9] as List<com.moneta.app.data.repository.Budget>
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
     fun onPeriodChange(selection: PeriodSelection) {
         period.value = selection.copy(mode = PeriodMode.MONTH)
+    }
+
+    fun toggleHideBalance() {
+        viewModelScope.launch { settingsRepository.setHideBalance(!uiState.value.hideBalance) }
     }
 
     fun setBalanceScope(scope: BalanceScope) {
@@ -141,11 +154,12 @@ class HomeViewModel @Inject constructor(
         transactions: List<Transaction>,
         categoryTotals: List<CategoryTotal>,
         budgetProgress: List<BudgetProgress>,
-        categories: List<Category>
+        categories: List<Category>,
+        allBudgets: List<com.moneta.app.data.repository.Budget>
     ): HomeUiState {
         val currency = prefs.currencyCode
         val range = p.range()
-        val breakdown = categoryBreakdownUseCase(rollUpToTopLevel(categoryTotals, categories), expense)
+        val breakdown = categoryBreakdownUseCase(com.moneta.app.domain.usecase.rollUp(categoryTotals, categories, prefs.subcategoriesEnabled), expense)
         val dayBefore = range.start.minusDays(1)
         val openingRows = accounts.filter { it.includeInNetWorth }.map { account ->
             val effect = transactionRepository.getAccountNetEffectAsOf(account.id, dayBefore)
@@ -172,6 +186,30 @@ class HomeViewModel @Inject constructor(
             },
             currency
         )
+        val prevRange = p.shift(-1).range()
+        val prevSpent = if (prefs.rolloverBudgets) {
+            com.moneta.app.domain.usecase.spentMap(
+                transactionRepository.observeTotalsByCategory(TransactionType.EXPENSE, prevRange).first(),
+                categories,
+                prefs.subcategoriesEnabled
+            )
+        } else {
+            emptyMap()
+        }
+        val effective = com.moneta.app.domain.usecase.effectiveBudgets(
+            thisMonth = com.moneta.app.domain.usecase.monthCategoryBudgets(allBudgets, range.start),
+            lastMonth = com.moneta.app.domain.usecase.monthCategoryBudgets(allBudgets, prevRange.start),
+            lastMonthSpent = prevSpent,
+            rollover = prefs.rolloverBudgets
+        )
+        val budgetSummary = com.moneta.app.domain.usecase.summarizeBudgets(
+            budgets = effective,
+            spent = com.moneta.app.domain.usecase.spentMap(categoryTotals, categories, prefs.subcategoriesEnabled),
+            daysElapsed = java.time.LocalDate.now().dayOfMonth,
+            totalDays = range.start.lengthOfMonth(),
+            isCurrentMonth = p.containsToday()
+        )
+        val currentBalanceNow = if (p.containsToday()) Money(allMinor, currency) else opening + income - expense
         return HomeUiState(
             isLoading = false,
             hasAnyAccounts = accounts.isNotEmpty(),
@@ -186,7 +224,17 @@ class HomeViewModel @Inject constructor(
             openingBalance = opening,
             openingBreakdown = openingRows,
             incomeBreakdown = incomeRows,
-            currentBalance = if (p.containsToday()) Money(allMinor, currency) else opening + income - expense,
+            currentBalance = currentBalanceNow,
+            budgetTotal = Money(budgetSummary.totalBudget, currency),
+            budgetSpent = Money(budgetSummary.spent, currency),
+            yetToSpend = Money(budgetSummary.yetToSpend, currency),
+            expectedClosing = if (p.containsToday()) {
+                Money(currentBalanceNow.minorUnits - budgetSummary.yetToSpend, currency)
+            } else {
+                currentBalanceNow
+            },
+            hiddenCards = prefs.hiddenHomeCards,
+            hideBalance = prefs.hideBalance,
             monthIncome = income,
             monthExpense = expense,
             recentItems = buildTransactionItems(transactions.take(5), accounts, categories),

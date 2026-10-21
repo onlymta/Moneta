@@ -6,6 +6,7 @@ import com.moneta.app.core.money.Money
 import com.moneta.app.data.local.entity.TransactionType
 import com.moneta.app.data.repository.Account
 import com.moneta.app.data.repository.AccountRepository
+import com.moneta.app.data.repository.Category
 import com.moneta.app.data.repository.CategoryRepository
 import com.moneta.app.data.repository.TransactionRepository
 import com.moneta.app.data.settings.SettingsRepository
@@ -13,6 +14,7 @@ import com.moneta.app.ui.common.PeriodMode
 import com.moneta.app.ui.common.PeriodSelection
 import com.moneta.app.ui.common.TransactionListItem
 import com.moneta.app.ui.common.buildTransactionItems
+import com.moneta.app.ui.reports.ReportsLaunch
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,14 +33,21 @@ enum class TypeFilter(val label: String) {
     TRANSFER("Transfers")
 }
 
+/** How the list is laid out: records under day headers, under week headers, or one total per category. */
 enum class GroupMode(val label: String) {
-    DAY("By day"),
-    WEEK("By week"),
-    CATEGORY("By category"),
-    AMOUNT("By amount")
+    DAY("Records by day"),
+    WEEK("Records by week"),
+    CATEGORY_TOTALS("Category totals")
 }
 
-/** A block of records under one header: a day, a week, a category, or (sorted by amount) one headerless block. */
+enum class SortMode(val label: String) {
+    DATE_DESC("Date, newest first"),
+    DATE_ASC("Date, oldest first"),
+    AMOUNT_DESC("Amount, high to low"),
+    AMOUNT_ASC("Amount, low to high")
+}
+
+/** A block of records under one header, or (for an amount sort) one headerless block. */
 data class RecordGroup(
     val key: String,
     val title: String,
@@ -46,6 +55,17 @@ data class RecordGroup(
     val totalLabel: String,
     val items: List<TransactionListItem>,
     val net: Money
+)
+
+/** One line of the category-totals view: a category, how many records, and their sum. */
+data class CategoryTotalRow(
+    val categoryId: Long,
+    val name: String,
+    val colorHex: String,
+    val icon: String,
+    val isIncome: Boolean,
+    val count: Int,
+    val total: Money
 )
 
 data class DayGroup(val date: LocalDate, val items: List<TransactionListItem>, val net: Money)
@@ -57,9 +77,13 @@ data class TransactionsUiState(
     val typeFilter: TypeFilter = TypeFilter.ALL,
     val accountFilterId: Long? = null,
     val categoryTitle: String? = null,
+    val categoryFilterIds: Set<Long>? = null,
     val accounts: List<Account> = emptyList(),
+    val categories: List<Category> = emptyList(),
     val groupMode: GroupMode = GroupMode.DAY,
+    val sortMode: SortMode = SortMode.DATE_DESC,
     val groups: List<RecordGroup> = emptyList(),
+    val categoryTotals: List<CategoryTotalRow> = emptyList(),
     val currencyCode: String = "PKR",
     val income: Money = Money.zero("PKR"),
     val expense: Money = Money.zero("PKR"),
@@ -67,13 +91,16 @@ data class TransactionsUiState(
     val count: Int = 0
 ) {
     val net: Money get() = income - expense
+    val activeFilterCount: Int
+        get() = (if (typeFilter != TypeFilter.ALL) 1 else 0) +
+            (if (accountFilterId != null) 1 else 0) +
+            (if (categoryFilterIds != null) 1 else 0)
 }
 
 /**
- * Records: every transaction for the chosen period (day, week, month, year, all
- * time or a custom range), optionally narrowed by type, account and a text
- * search that looks at payee, notes, category, account and amount. The totals
- * always describe exactly the rows currently shown.
+ * Records: every transaction for the chosen period, narrowed by type, account, category and a text
+ * search, laid out by day, by week or as one total per category, and sorted by date or amount.
+ * The totals always describe exactly the rows currently shown.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -82,7 +109,8 @@ class TransactionsViewModel @Inject constructor(
     accountRepository: AccountRepository,
     categoryRepository: CategoryRepository,
     settingsRepository: SettingsRepository,
-    launchFilter: RecordsLaunchFilter
+    launchFilter: RecordsLaunchFilter,
+    private val reportsLaunch: ReportsLaunch
 ) : ViewModel() {
 
     private val period = MutableStateFlow(PeriodSelection(mode = PeriodMode.MONTH))
@@ -92,6 +120,7 @@ class TransactionsViewModel @Inject constructor(
     private val categoryIdsFlow = MutableStateFlow<Set<Long>?>(null)
     private val categoryTitleFlow = MutableStateFlow<String?>(null)
     private val groupModeFlow = MutableStateFlow(GroupMode.DAY)
+    private val sortModeFlow = MutableStateFlow(SortMode.DATE_DESC)
     private val accountsFlow = accountRepository.observeAllAccounts()
     private val categoriesFlow = categoryRepository.observeAll()
     private val prefsFlow = settingsRepository.preferences
@@ -117,6 +146,10 @@ class TransactionsViewModel @Inject constructor(
         val categoryIds: Set<Long>?
     )
 
+    private data class Layout(val group: GroupMode, val sort: SortMode, val categoryTitle: String?)
+
+    private val layout = combine(groupModeFlow, sortModeFlow, categoryTitleFlow) { g, s, t -> Layout(g, s, t) }
+
     val uiState: StateFlow<TransactionsUiState> = filters.flatMapLatest { f ->
         val typeArg: TransactionType? = when (f.type) {
             TypeFilter.ALL -> null
@@ -129,8 +162,8 @@ class TransactionsViewModel @Inject constructor(
             accountsFlow,
             categoriesFlow,
             prefsFlow,
-            groupModeFlow
-        ) { transactions, accounts, categories, prefs, mode ->
+            layout
+        ) { transactions, accounts, categories, prefs, lay ->
             val currency = prefs.currencyCode
             var items = buildTransactionItems(transactions, accounts, categories)
             val ids = f.categoryIds
@@ -152,55 +185,78 @@ class TransactionsViewModel @Inject constructor(
                 .sumOf { it.transaction.amount.minorUnits }
             val expenseMinor = items.filter { it.transaction.type == TransactionType.EXPENSE }
                 .sumOf { it.transaction.amount.minorUnits }
+
             fun netOf(list: List<TransactionListItem>): Money {
                 val inc = list.filter { it.transaction.type == TransactionType.INCOME }.sumOf { it.transaction.amount.minorUnits }
                 val exp = list.filter { it.transaction.type == TransactionType.EXPENSE }.sumOf { it.transaction.amount.minorUnits }
                 return Money(inc - exp, currency)
             }
+            fun sortItems(list: List<TransactionListItem>): List<TransactionListItem> = when (lay.sort) {
+                SortMode.DATE_DESC -> list.sortedWith(
+                    compareByDescending<TransactionListItem> { it.transaction.date }
+                        .thenByDescending { it.transaction.timeMinutesSinceMidnight }
+                )
+                SortMode.DATE_ASC -> list.sortedWith(
+                    compareBy<TransactionListItem> { it.transaction.date }
+                        .thenBy { it.transaction.timeMinutesSinceMidnight }
+                )
+                SortMode.AMOUNT_DESC -> list.sortedByDescending { it.transaction.amount.minorUnits }
+                SortMode.AMOUNT_ASC -> list.sortedBy { it.transaction.amount.minorUnits }
+            }
+            val byAmount = lay.sort == SortMode.AMOUNT_DESC || lay.sort == SortMode.AMOUNT_ASC
+            val dateAscending = lay.sort == SortMode.DATE_ASC
             val dateFmt = java.time.format.DateTimeFormatter.ofPattern("d MMM")
-            val groups: List<RecordGroup> = when (mode) {
-                GroupMode.DAY -> items.groupBy { it.transaction.date }.map { (date, list) ->
-                    RecordGroup("day-$date", date.toString(), date, "Day", list, netOf(list))
-                }.sortedByDescending { it.date }
-                GroupMode.WEEK -> items.groupBy {
-                    it.transaction.date.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
-                }.map { (monday, list) ->
-                    val sunday = monday.plusDays(6)
-                    RecordGroup(
-                        "week-$monday",
-                        monday.format(dateFmt) + " - " + sunday.format(dateFmt) + " " + sunday.year,
-                        null,
-                        "Week",
-                        list.sortedByDescending { it.transaction.date },
-                        netOf(list)
+
+            var groups: List<RecordGroup> = emptyList()
+            var categoryRows: List<CategoryTotalRow> = emptyList()
+            when {
+                lay.group == GroupMode.CATEGORY_TOTALS -> {
+                    val byId = categories.associateBy { it.id }
+                    categoryRows = items
+                        .filter { it.transaction.categoryId != null && it.transaction.type != TransactionType.TRANSFER }
+                        .groupBy { it.transaction.categoryId!! }
+                        .mapNotNull { (id, list) ->
+                            val cat = byId[id] ?: return@mapNotNull null
+                            CategoryTotalRow(
+                                categoryId = id,
+                                name = cat.name,
+                                colorHex = cat.colorHex,
+                                icon = cat.icon,
+                                isIncome = list.first().transaction.type == TransactionType.INCOME,
+                                count = list.size,
+                                total = Money(list.sumOf { it.transaction.amount.minorUnits }, currency)
+                            )
+                        }
+                        .let { rows ->
+                            if (lay.sort == SortMode.AMOUNT_ASC) rows.sortedBy { it.total.minorUnits }
+                            else rows.sortedByDescending { it.total.minorUnits }
+                        }
+                }
+                byAmount -> {
+                    groups = if (items.isEmpty()) emptyList() else listOf(
+                        RecordGroup("amount-all", "", null, "Total", sortItems(items), netOf(items))
                     )
-                }.sortedByDescending { it.key }
-                GroupMode.CATEGORY -> {
-                    val nameOf = categories.associate { it.id to it.name }
-                    items.groupBy { item ->
-                        val cid = item.transaction.categoryId
-                        if (cid == null) "Transfers" else (nameOf[cid] ?: "Uncategorised")
-                    }.map { (name, list) ->
+                }
+                lay.group == GroupMode.WEEK -> {
+                    groups = items.groupBy {
+                        it.transaction.date.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+                    }.map { (monday, list) ->
+                        val sunday = monday.plusDays(6)
                         RecordGroup(
-                            "cat-$name",
-                            name,
+                            "week-$monday",
+                            monday.format(dateFmt) + " - " + sunday.format(dateFmt) + " " + sunday.year,
                             null,
-                            "Total",
-                            list.sortedByDescending { it.transaction.date },
+                            "Week",
+                            sortItems(list),
                             netOf(list)
                         )
-                    }.sortedByDescending { g -> g.items.sumOf { it.transaction.amount.minorUnits } }
+                    }.let { list -> if (dateAscending) list.sortedBy { it.key } else list.sortedByDescending { it.key } }
                 }
-                GroupMode.AMOUNT -> if (items.isEmpty()) emptyList() else listOf(
-                    RecordGroup(
-                        "amount-all",
-                        "",
-                        null,
-                        "Total",
-                        items.sortedByDescending { it.transaction.amount.minorUnits },
-                        netOf(items)
-                    )
-                )
+                else -> {
+                    groups = items.groupBy { it.transaction.date }.map { (date, list) ->
+                        RecordGroup("day-$date", date.toString(), date, "Day", sortItems(list), netOf(list))
+                    }.let { list -> if (dateAscending) list.sortedBy { it.date } else list.sortedByDescending { it.date } }
+                }
             }
             TransactionsUiState(
                 isLoading = false,
@@ -208,10 +264,14 @@ class TransactionsViewModel @Inject constructor(
                 query = f.query,
                 typeFilter = f.type,
                 accountFilterId = f.accountId,
-                categoryTitle = if (f.categoryIds != null) categoryTitleFlow.value else null,
+                categoryTitle = if (f.categoryIds != null) lay.categoryTitle else null,
+                categoryFilterIds = f.categoryIds,
                 accounts = accounts.filter { !it.isArchived },
-                groupMode = mode,
+                categories = categories,
+                groupMode = lay.group,
+                sortMode = lay.sort,
                 groups = groups,
+                categoryTotals = categoryRows,
                 currencyCode = currency,
                 income = Money(incomeMinor, currency),
                 expense = Money(expenseMinor, currency),
@@ -237,11 +297,35 @@ class TransactionsViewModel @Inject constructor(
         groupModeFlow.value = mode
     }
 
+    fun onSortModeChange(mode: SortMode) {
+        sortModeFlow.value = mode
+    }
+
+    /** Filters to one category (and, when [ids] holds more than one id, its sub-categories); null clears it. */
+    fun onCategoryFilterChange(ids: Set<Long>?, title: String?) {
+        categoryTitleFlow.value = title
+        categoryIdsFlow.value = ids
+    }
+
     fun clearCategoryFilter() {
         categoryIdsFlow.value = null
     }
 
     fun onAccountFilterChange(accountId: Long?) {
         accountFilterFlow.value = accountId
+    }
+
+    fun clearAllFilters() {
+        typeFlow.value = TypeFilter.ALL
+        accountFilterFlow.value = null
+        categoryIdsFlow.value = null
+    }
+
+    /** Hands a category to Reports so it opens straight on that category's analysis for the period on screen. */
+    fun prepareReports(categoryId: Long, isIncome: Boolean) {
+        reportsLaunch.clear()
+        reportsLaunch.categoryId = categoryId
+        reportsLaunch.isIncome = isIncome
+        reportsLaunch.period = period.value
     }
 }

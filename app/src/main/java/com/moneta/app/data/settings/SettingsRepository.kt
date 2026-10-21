@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,6 +22,17 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 /** How Quick Add shows its account/category pickers: all chips at once, or compact dropdown menus. */
 enum class PickerStyle { CHIPS, DROPDOWN }
+
+/** Cards on the Home dashboard that can be switched on or off in Settings. */
+enum class HomeCard(val label: String) {
+    OPENING("Opening balance"),
+    INCOME("Income"),
+    EXPENSES("Expenses"),
+    EXPECTED_CLOSING("Expected closing balance"),
+    BUDGETED("Budgeted amount"),
+    BUDGET_SPENT("Spent (in budgeted categories)"),
+    YET_TO_SPEND("Yet to spend (budgeted, not spent)")
+}
 
 /** Which accounts the headline balance adds up. */
 enum class BalanceScope { ALL, CURRENT, SAVINGS }
@@ -83,6 +95,14 @@ data class AppPreferences(
     val formNotesAboveAmount: Boolean = false,
     val formDateBelowKeypad: Boolean = false,
     val balanceScope: BalanceScope = BalanceScope.ALL,
+    /** How many decimals amounts show: 0, 1 or 2. */
+    val decimals: Int = 2,
+    /** The Home balance figure is hidden (shown as dots). Remembered between launches. */
+    val hideBalance: Boolean = false,
+    /** Home dashboard cards the user switched off (keys from HomeCard). */
+    val hiddenHomeCards: Set<String> = emptySet(),
+    /** When on, sub-categories can be created and each has its own budget and analysis. */
+    val subcategoriesEnabled: Boolean = false,
     // --- Reminders and backups ---
     val reminderEnabled: Boolean = false,
     val reminderHour: Int = 21,
@@ -129,6 +149,10 @@ class SettingsRepository @Inject constructor(
         val FORM_NOTES_ABOVE = booleanPreferencesKey("form_notes_above")
         val FORM_DATE_BELOW = booleanPreferencesKey("form_date_below")
         val BALANCE_SCOPE = stringPreferencesKey("balance_scope")
+        val DECIMALS = intPreferencesKey("display_decimals")
+        val HIDE_BALANCE = booleanPreferencesKey("hide_balance")
+        val HIDDEN_HOME_CARDS = stringSetPreferencesKey("hidden_home_cards")
+        val SUBCATEGORIES = booleanPreferencesKey("subcategories_enabled")
         val REMINDER_ENABLED = booleanPreferencesKey("reminder_enabled")
         val REMINDER_HOUR = intPreferencesKey("reminder_hour")
         val REMINDER_MINUTE = intPreferencesKey("reminder_minute")
@@ -176,6 +200,10 @@ class SettingsRepository @Inject constructor(
             balanceScope = prefs[Keys.BALANCE_SCOPE]
                 ?.let { name -> BalanceScope.entries.firstOrNull { it.name == name } }
                 ?: BalanceScope.ALL,
+            decimals = (prefs[Keys.DECIMALS] ?: 2).coerceIn(0, 2),
+            hideBalance = prefs[Keys.HIDE_BALANCE] ?: false,
+            hiddenHomeCards = prefs[Keys.HIDDEN_HOME_CARDS] ?: emptySet(),
+            subcategoriesEnabled = prefs[Keys.SUBCATEGORIES] ?: false,
             reminderEnabled = prefs[Keys.REMINDER_ENABLED] ?: false,
             reminderHour = prefs[Keys.REMINDER_HOUR] ?: 21,
             reminderMinute = prefs[Keys.REMINDER_MINUTE] ?: 0,
@@ -246,6 +274,61 @@ class SettingsRepository @Inject constructor(
     suspend fun setFormCustomKeypad(on: Boolean) = context.dataStore.edit { it[Keys.FORM_KEYPAD] = on }
 
     suspend fun setFormDateBelowKeypad(on: Boolean) = context.dataStore.edit { it[Keys.FORM_DATE_BELOW] = on }
+
+    suspend fun setDecimals(value: Int) = context.dataStore.edit { it[Keys.DECIMALS] = value.coerceIn(0, 2) }
+
+    suspend fun setHideBalance(hidden: Boolean) = context.dataStore.edit { it[Keys.HIDE_BALANCE] = hidden }
+
+    suspend fun setHiddenHomeCards(keys: Set<String>) = context.dataStore.edit { it[Keys.HIDDEN_HOME_CARDS] = keys }
+
+    suspend fun setSubcategoriesEnabled(on: Boolean) = context.dataStore.edit { it[Keys.SUBCATEGORIES] = on }
+
+    /**
+     * Every stored setting as JSON (name, type, value), so a backup can carry the user's whole setup
+     * (name, theme, currency, tab order, form options, dashboard cards...) without listing each key by hand.
+     */
+    suspend fun exportAllJson(): org.json.JSONObject {
+        val out = org.json.JSONObject()
+        context.dataStore.data.first().asMap().forEach { (key, value) ->
+            val entry = org.json.JSONObject()
+            when (value) {
+                is String -> { entry.put("t", "s"); entry.put("v", value) }
+                is Boolean -> { entry.put("t", "b"); entry.put("v", value) }
+                is Int -> { entry.put("t", "i"); entry.put("v", value) }
+                is Long -> { entry.put("t", "l"); entry.put("v", value) }
+                is Set<*> -> {
+                    entry.put("t", "set")
+                    entry.put("v", org.json.JSONArray().apply { value.forEach { put(it.toString()) } })
+                }
+                else -> return@forEach
+            }
+            out.put(key.name, entry)
+        }
+        return out
+    }
+
+    /** Applies settings from [exportAllJson]; keys it doesn't know how to read are skipped. */
+    suspend fun importAllJson(json: org.json.JSONObject) {
+        context.dataStore.edit { prefs ->
+            json.keys().forEach { name ->
+                // Where the welcome flow stands is about this install, not about the data, so it is not restored.
+                if (name == "onboarding_status") return@forEach
+                val entry = json.optJSONObject(name) ?: return@forEach
+                when (entry.optString("t")) {
+                    "s" -> prefs[stringPreferencesKey(name)] = entry.getString("v")
+                    "b" -> prefs[booleanPreferencesKey(name)] = entry.getBoolean("v")
+                    "i" -> prefs[intPreferencesKey(name)] = entry.getInt("v")
+                    "l" -> prefs[longPreferencesKey(name)] = entry.getLong("v")
+                    "set" -> {
+                        val arr = entry.getJSONArray("v")
+                        val set = HashSet<String>()
+                        for (i in 0 until arr.length()) set.add(arr.getString(i))
+                        prefs[stringSetPreferencesKey(name)] = set
+                    }
+                }
+            }
+        }
+    }
 
     suspend fun setBalanceScope(scope: BalanceScope) = context.dataStore.edit { it[Keys.BALANCE_SCOPE] = scope.name }
 

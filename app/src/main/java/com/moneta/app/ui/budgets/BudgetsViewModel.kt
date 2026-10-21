@@ -42,7 +42,9 @@ data class BudgetLine(
     val carriedOver: Money,
     val spent: Money,
     /** This category plus its subcategories, used to open its transactions. */
-    val categoryIds: Set<Long> = emptySet()
+    val categoryIds: Set<Long> = emptySet(),
+    /** Name to show: the plain name, or "Parent > Child" when sub-categories are on. */
+    val label: String = category.name
 ) {
     val effectiveBudget: Money? get() = baseBudget?.let { it + carriedOver }
     val remaining: Money? get() = effectiveBudget?.let { it - spent }
@@ -83,16 +85,15 @@ data class BudgetsUiState(
     /** Last month's spending per top-level category (minor units), used to set budgets automatically. */
     val prevMonthSpent: Map<Long, Long> = emptyMap(),
     val prevMonthLabel: String = "",
-    val monthIncome: Money = Money.zero("PKR"),
-    val totalExpense: Money = Money.zero("PKR"),
-    /** Budgeted money not yet spent: for each budgeted category, what is left of its budget (never negative). */
+    /** Spending in budgeted categories carried forward at this month's pace (income plays no part). */
+    val projectedSpend: Money = Money.zero("PKR"),
+    /** Projected spend minus total budget: positive means expected to go over budget. */
+    val expectedVariance: Money = Money.zero("PKR"),
+    /** Budgeted money not yet spent, category by category. */
     val yetToSpend: Money = Money.zero("PKR"),
-    /** True when the month on screen has already ended, so the figure is actual savings rather than expected. */
+    /** True when the month on screen has ended, so the figures are final rather than expected. */
     val isClosed: Boolean = false
 ) {
-    /** Income minus everything spent so far minus budgeted money still to be spent. */
-    val expectedSavings: Money get() = monthIncome - totalExpense - yetToSpend
-    val actualSavings: Money get() = monthIncome - totalExpense
     val totalRemaining: Money get() = totalBudget - totalSpentOnBudgeted
     val hasAnyBudget: Boolean get() = lines.any { it.budgetId != null }
 }
@@ -104,7 +105,8 @@ class BudgetsViewModel @Inject constructor(
     categoryRepository: CategoryRepository,
     private val transactionRepository: TransactionRepository,
     settingsRepository: SettingsRepository,
-    private val launchFilter: RecordsLaunchFilter
+    private val launchFilter: RecordsLaunchFilter,
+    private val reportsLaunch: com.moneta.app.ui.reports.ReportsLaunch
 ) : ViewModel() {
 
     init {
@@ -120,7 +122,6 @@ class BudgetsViewModel @Inject constructor(
         .flatMapLatest { (p, prefs) ->
             val range = p.range()
             val prevRange = p.shift(-1).range()
-            val incomeFlow = transactionRepository.observeTotalForTypeInRange(TransactionType.INCOME, range, prefs.currencyCode)
             combine(
                 budgetsFlow,
                 categoriesFlow,
@@ -139,22 +140,23 @@ class BudgetsViewModel @Inject constructor(
                     .mapNotNull { it.customPeriodStart }
                     .filter { it.isBefore(range.start) }
                     .maxByOrNull { it.toEpochDay() }
-                val parentOf = categories.associate { it.id to (it.parentCategoryId ?: it.id) }
-
-                fun spentByTop(rows: List<CategoryTotal>): Map<Long, Long> {
-                    val result = HashMap<Long, Long>()
-                    rows.forEach { row ->
-                        val id = row.categoryId
-                        if (id != null) {
-                            val top = parentOf[id] ?: id
-                            result[top] = (result[top] ?: 0L) + row.totalMinor
-                        }
+                val subs = prefs.subcategoriesEnabled
+                val countedMap = com.moneta.app.domain.usecase.countedUnder(categories, subs)
+                val spentNow = com.moneta.app.domain.usecase.spentMap(totals, categories, subs)
+                val spentBefore = com.moneta.app.domain.usecase.spentMap(prevTotals, categories, subs)
+                val byId = categories.associateBy { it.id }
+                fun labelOf(c: Category): String {
+                    if (!subs) return c.name
+                    val parts = ArrayList<String>()
+                    var cur: Category? = c
+                    var guard = 0
+                    while (cur != null && guard < 20) {
+                        parts.add(0, cur.name)
+                        cur = cur.parentCategoryId?.let { byId[it] }
+                        guard++
                     }
-                    return result
+                    return parts.joinToString(" > ")
                 }
-
-                val spentNow = spentByTop(totals)
-                val spentBefore = spentByTop(prevTotals)
                 val categoryBudgets = budgets
                     .filter { it.scope == BudgetScope.CATEGORY && it.categoryId != null }
                     .associateBy { it.categoryId }
@@ -164,7 +166,7 @@ class BudgetsViewModel @Inject constructor(
                     .associateBy { it.categoryId }
 
                 val lines = categories
-                    .filter { it.parentCategoryId == null }
+                    .filter { subs || it.parentCategoryId == null }
                     .map { category ->
                         val budget = categoryBudgets[category.id]
                         val base = budget?.let { Money(it.amount.minorUnits, currency) }
@@ -182,8 +184,8 @@ class BudgetsViewModel @Inject constructor(
                             baseBudget = base,
                             carriedOver = carried,
                             spent = Money(spentNow[category.id] ?: 0L, currency),
-                            categoryIds = setOf(category.id) +
-                                categories.filter { it.parentCategoryId == category.id }.map { it.id }
+                            categoryIds = countedMap.filter { it.value == category.id }.keys + category.id,
+                            label = labelOf(category)
                         )
                     }
                     .sortedWith(
@@ -197,6 +199,15 @@ class BudgetsViewModel @Inject constructor(
                 val spentOnBudgeted = Money(budgeted.sumOf { it.spent.minorUnits }, currency)
                 val outside = totalExpense - spentOnBudgeted
                 val overallBudget = budgets.firstOrNull { it.scope == BudgetScope.OVERALL }
+                val today = LocalDate.now()
+                val isCurrentMonth = !today.isBefore(range.start) && today.isBefore(range.endExclusive)
+                val summary = com.moneta.app.domain.usecase.summarizeBudgets(
+                    budgets = budgeted.associate { it.category.id to (it.effectiveBudget?.minorUnits ?: 0L) },
+                    spent = budgeted.associate { it.category.id to it.spent.minorUnits },
+                    daysElapsed = if (isCurrentMonth) today.dayOfMonth else range.start.lengthOfMonth(),
+                    totalDays = range.start.lengthOfMonth(),
+                    isCurrentMonth = isCurrentMonth
+                )
 
                 BudgetsUiState(
                     isLoading = false,
@@ -214,14 +225,12 @@ class BudgetsViewModel @Inject constructor(
                     copySourceLabel = copySource?.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
                     prevMonthSpent = spentBefore.filter { it.value > 0L },
                     prevMonthLabel = prevRange.start.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
-                    totalExpense = totalExpense,
-                    yetToSpend = Money(
-                        budgeted.sumOf { line -> maxOf(0L, line.remaining?.minorUnits ?: 0L) },
-                        currency
-                    ),
+                    projectedSpend = Money(summary.projectedSpend, currency),
+                    expectedVariance = Money(summary.expectedVariance, currency),
+                    yetToSpend = Money(summary.yetToSpend, currency),
                     isClosed = !range.endExclusive.isAfter(LocalDate.now())
                 )
-            }.combine(incomeFlow) { st, inc -> st.copy(monthIncome = inc) }
+            }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BudgetsUiState())
 
@@ -269,6 +278,14 @@ class BudgetsViewModel @Inject constructor(
                 budgetRepository.createCategoryBudgetForMonth(entry.key, Money(entry.value, currency), target)
             }
         }
+    }
+
+    /** Hands a category to Reports so it opens straight on that category's expense analysis for this month. */
+    fun prepareReports(line: BudgetLine) {
+        reportsLaunch.clear()
+        reportsLaunch.categoryId = line.category.id
+        reportsLaunch.isIncome = false
+        reportsLaunch.period = uiState.value.period
     }
 
     /** Hands a category (and its subcategories) to Records so the user sees its transactions for this month. */

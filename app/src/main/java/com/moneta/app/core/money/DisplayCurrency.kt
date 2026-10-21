@@ -13,6 +13,9 @@ object DisplayCurrency {
     var code: String by mutableStateOf("PKR")
     var showSymbol: Boolean by mutableStateOf(true)
 
+    /** Decimals shown on amounts (0, 1 or 2). */
+    var decimals: Int by mutableStateOf(2)
+
     /** Currency choices offered in Settings: code to name. */
     val choices: List<Pair<String, String>> = listOf(
         "PKR" to "Pakistani rupee",
