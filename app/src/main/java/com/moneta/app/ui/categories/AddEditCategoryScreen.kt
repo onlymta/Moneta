@@ -23,6 +23,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -49,82 +54,133 @@ fun AddEditCategoryScreen(
     }
     val state by viewModel.uiState.collectAsState()
 
+    var iconPickerOpen by remember { mutableStateOf(false) }
+    var parentMenuOpen by remember { mutableStateOf(false) }
+    val currentTint = Color(android.graphics.Color.parseColor(IconMapper.colorFor(state.icon)))
+
     FormScreenScaffold(
-        title = if (state.isEditing) "Edit category" else "Add ${state.type.name.lowercase()} category",
+        title = if (state.isEditing) "Edit category" else "New ${state.type.name.lowercase()} category",
         onClose = onDone
     ) {
-        OutlinedTextField(
-            value = state.name,
-            onValueChange = viewModel::onNameChange,
-            label = { Text("Category name") },
-            isError = state.nameError != null,
-            supportingText = state.nameError?.let { { Text(it) } },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Text("Icon", style = MaterialTheme.typography.labelMedium)
-        IconMapper.pickerNames.chunked(7).forEach { rowNames ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+        // Icon and name share one row; tapping the icon opens the icon list.
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(currentTint.copy(alpha = 0.18f))
+                    .border(2.dp, currentTint, CircleShape)
+                    .clickable { iconPickerOpen = true },
+                contentAlignment = Alignment.Center
             ) {
-                rowNames.forEach { name ->
-                    val selected = state.icon == name
-                    val tint = Color(android.graphics.Color.parseColor(IconMapper.colorFor(name)))
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(if (selected) tint.copy(alpha = 0.28f) else tint.copy(alpha = 0.10f))
-                            .border(
-                                width = if (selected) 2.dp else 0.dp,
-                                color = if (selected) tint else Color.Transparent,
-                                shape = CircleShape
-                            )
-                            .clickable { viewModel.onIconChange(name) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = IconMapper.iconFor(name),
-                            contentDescription = name,
-                            tint = tint,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                }
-                // Keep the last row's icons aligned with the rows above it.
-                repeat(7 - rowNames.size) { Spacer(Modifier.size(40.dp)) }
+                Icon(
+                    imageVector = IconMapper.iconFor(state.icon),
+                    contentDescription = "Change icon",
+                    tint = currentTint,
+                    modifier = Modifier.size(28.dp)
+                )
             }
-        }
-
-        // Section 12: subcategories - optional, one level deep. "None" (the default)
-        // means this stays a top-level category; picking one nests it underneath.
-        if (state.availableParents.isNotEmpty()) {
-            Text("Inside another category (optional)", style = MaterialTheme.typography.labelMedium)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
-                items(state.availableParents, key = { it.id }) { parent ->
-                    FilterChip(
-                        selected = state.selectedParentId == parent.id,
-                        onClick = { viewModel.onParentSelected(parent.id) },
-                        label = { Text(parent.label) }
-                    )
-                }
-            }
-            Text(
-                if (state.selectedParentId == null) {
-                    "This will be a top-level category."
-                } else {
-                    "This will show nested under \"${state.availableParents.firstOrNull { it.id == state.selectedParentId }?.label ?: "its parent"}\"."
-                },
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            OutlinedTextField(
+                value = state.name,
+                onValueChange = viewModel::onNameChange,
+                label = { Text("Category name") },
+                singleLine = true,
+                isError = state.nameError != null,
+                supportingText = state.nameError?.let { { Text(it) } },
+                modifier = Modifier.weight(1f)
             )
         }
 
-        Spacer(Modifier.height(0.dp))
+        if (state.availableParents.isNotEmpty()) {
+            val parentLabel = state.availableParents.firstOrNull { it.id == state.selectedParentId }?.label
+            Box {
+                androidx.compose.material3.Surface(
+                    onClick = { parentMenuOpen = true },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = MonetaSpacing.md, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Inside", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(parentLabel ?: "Nothing (top-level category)", style = MaterialTheme.typography.bodyLarge)
+                        }
+                        Icon(androidx.compose.material.icons.Icons.Filled.ArrowDropDown, contentDescription = null)
+                    }
+                }
+                androidx.compose.material3.DropdownMenu(expanded = parentMenuOpen, onDismissRequest = { parentMenuOpen = false }) {
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("Nothing (top-level category)") },
+                        onClick = {
+                            parentMenuOpen = false
+                            if (state.selectedParentId != null) viewModel.onParentSelected(state.selectedParentId)
+                        }
+                    )
+                    state.availableParents.forEach { parent ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(parent.label) },
+                            onClick = {
+                                parentMenuOpen = false
+                                if (state.selectedParentId != parent.id) viewModel.onParentSelected(parent.id)
+                            }
+                        )
+                    }
+                }
+            }
+        }
 
         Button(onClick = { viewModel.save(onDone) }, modifier = Modifier.fillMaxWidth()) {
             Text("Save")
         }
+    }
+
+    if (iconPickerOpen) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { iconPickerOpen = false },
+            title = { Text("Choose an icon") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    IconMapper.pickerNames.chunked(5).forEach { rowNames ->
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            rowNames.forEach { name ->
+                                val selected = state.icon == name
+                                val tint = Color(android.graphics.Color.parseColor(IconMapper.colorFor(name)))
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .background(if (selected) tint.copy(alpha = 0.28f) else tint.copy(alpha = 0.10f))
+                                        .border(
+                                            width = if (selected) 2.dp else 0.dp,
+                                            color = if (selected) tint else Color.Transparent,
+                                            shape = CircleShape
+                                        )
+                                        .clickable {
+                                            viewModel.onIconChange(name)
+                                            iconPickerOpen = false
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = IconMapper.iconFor(name),
+                                        contentDescription = name,
+                                        tint = tint,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+                            repeat(5 - rowNames.size) { Spacer(Modifier.size(44.dp)) }
+                        }
+                    }
+                }
+            },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { iconPickerOpen = false }) { Text("Close") } }
+        )
     }
 }

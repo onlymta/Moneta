@@ -171,22 +171,43 @@ private fun AccountsDashboard(
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
         Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
-            Text("All accounts", style = MaterialTheme.typography.labelLarge)
-            Text(
-                all.formatted(),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-            )
+            Text("All accounts", style = MaterialTheme.typography.titleSmall)
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.material3.LocalTextStyle provides MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold
+                )
+            ) {
+                MoneyText(all)
+            }
             Spacer(Modifier.height(MonetaSpacing.sm))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("Current", style = MaterialTheme.typography.labelMedium)
-                    Text(current.formatted(), style = MaterialTheme.typography.titleMedium)
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("Savings", style = MaterialTheme.typography.labelMedium)
-                    Text(savings.formatted(), style = MaterialTheme.typography.titleMedium)
-                }
+            Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                DashboardTile("Current", current, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+                DashboardTile("Savings", savings, MaterialTheme.colorScheme.tertiary, Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardTile(
+    label: String,
+    amount: com.moneta.app.core.money.Money,
+    color: androidx.compose.ui.graphics.Color,
+    modifier: Modifier
+) {
+    androidx.compose.material3.Surface(
+        modifier = modifier,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+        color = color.copy(alpha = 0.14f)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.material3.LocalTextStyle provides MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold
+                )
+            ) {
+                MoneyText(amount, color = color)
             }
         }
     }
@@ -195,11 +216,25 @@ private fun AccountsDashboard(
 @Composable
 private fun GroupHeader(title: String, minor: Long, currency: String) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = MonetaSpacing.sm),
-        horizontalArrangement = Arrangement.SpaceBetween
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = MonetaSpacing.sm),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        MoneyText(com.moneta.app.core.money.Money(minor, currency))
+        Text(
+            title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.material3.LocalTextStyle provides MaterialTheme.typography.titleSmall.copy(
+                fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold
+            )
+        ) {
+            MoneyText(com.moneta.app.core.money.Money(minor, currency))
+        }
     }
 }
 
@@ -253,7 +288,11 @@ private fun AccountRow(account: Account, onClick: () -> Unit, onEdit: () -> Unit
                 com.moneta.app.ui.common.IconBadge(iconName = account.icon, colorHex = account.colorHex)
                 Spacer(Modifier.width(MonetaSpacing.md))
                 Column {
-                    Text(account.name, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        account.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                    )
                     Text(
                         (if (archived) "Archived · " else "") + account.type.name.replace('_', ' ').lowercase()
                             .replaceFirstChar { it.uppercase() },
@@ -262,8 +301,17 @@ private fun AccountRow(account: Account, onClick: () -> Unit, onEdit: () -> Unit
                     )
                 }
             }
-            MoneyText(account.currentBalance)
-            Spacer(Modifier.height(0.dp))
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.material3.LocalTextStyle provides MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold
+                )
+            ) {
+                MoneyText(
+                    account.currentBalance,
+                    color = if (account.currentBalance.isNegative) com.moneta.app.ui.theme.ExpenseRed
+                    else androidx.compose.ui.graphics.Color.Unspecified
+                )
+            }
             Box {
                 IconButton(onClick = { menuExpanded = true }) {
                     Icon(Icons.Outlined.MoreVert, contentDescription = "More actions")

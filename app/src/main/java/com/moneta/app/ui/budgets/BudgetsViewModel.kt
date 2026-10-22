@@ -274,7 +274,13 @@ class BudgetsViewModel @Inject constructor(
 
     /** Creates or updates the monthly budget for [line]'s category. Returns false if the amount is invalid. */
     fun saveBudget(line: BudgetLine, amountInput: String): Boolean {
-        val amount = Money.fromDecimalInput(amountInput, uiState.value.currencyCode)
+        val cleaned = amountInput.trim()
+        // Blank or zero means "no budget this month for this category": an existing budget is removed.
+        if (cleaned.isEmpty() || cleaned.toDoubleOrNull() == 0.0) {
+            line.budgetId?.let { id -> viewModelScope.launch { budgetRepository.delete(id) } }
+            return true
+        }
+        val amount = Money.fromDecimalInput(cleaned, uiState.value.currencyCode)
         if (amount == null || amount.isZero) return false
         val monthStart = uiState.value.period.range().start
         viewModelScope.launch {

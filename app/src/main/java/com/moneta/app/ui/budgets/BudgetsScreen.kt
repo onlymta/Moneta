@@ -313,42 +313,24 @@ private fun SummaryCard(state: BudgetsUiState) {
                     Modifier.weight(1f)
                 )
             }
-            Spacer(Modifier.height(MonetaSpacing.sm))
-            OutlookTile(
-                "Yet to spend",
-                state.yetToSpend,
-                WarningAmber,
-                Modifier.fillMaxWidth(),
-                note = "Budgeted, not spent"
-            )
             if (state.hasAnyBudget) {
-                Spacer(Modifier.height(MonetaSpacing.md))
-                androidx.compose.material3.Surface(
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
-                    color = verdictColor.copy(alpha = 0.16f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                if (state.isClosed) "Deviation" else "Expected Deviation",
-                                style = MaterialTheme.typography.labelLarge
-                            )
-                            Text(
-                                if (variance.minorUnits > 0L) "Excess over budget" else "Within budget",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                        Text(
-                            (if (variance.minorUnits > 0L) "-" else "") + variance.abs().formatted(),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = verdictColor
-                        )
-                    }
+                Spacer(Modifier.height(MonetaSpacing.sm))
+                val excess = variance.minorUnits > 0L
+                Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                    OutlookTile(
+                        if (state.isClosed) "Unused" else "Yet to spend",
+                        state.yetToSpend,
+                        WarningAmber,
+                        Modifier.weight(1f),
+                        note = if (state.isClosed) "Budget left over" else "Budgeted, not spent"
+                    )
+                    OutlookTile(
+                        if (state.isClosed) "Final deviation" else "Expected deviation",
+                        Money(if (excess) -variance.minorUnits else 0L, variance.currencyCode),
+                        verdictColor,
+                        Modifier.weight(1f),
+                        note = if (excess) "Over budget" else "On track"
+                    )
                 }
             }
             if (!state.hasAnyBudget) {
@@ -502,17 +484,17 @@ private fun BudgetAmountDialog(line: BudgetLine, onSave: (String) -> Boolean, on
                         error = null
                     },
                     label = { Text("Monthly budget") },
+                    supportingText = { Text(error ?: "Leave blank or enter 0 for no budget this month") },
                     singleLine = true,
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     isError = error != null,
-                    supportingText = error?.let { message -> { Text(message) } },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                if (!onSave(input)) error = "Enter an amount greater than zero."
+                if (!onSave(input)) error = "Enter a valid amount."
             }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }

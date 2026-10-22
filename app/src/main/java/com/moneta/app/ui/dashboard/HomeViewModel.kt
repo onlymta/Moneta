@@ -76,6 +76,7 @@ data class HomeUiState(
     val expectedClosing: Money = Money.zero("PKR"),
     val hiddenCards: Set<String> = emptySet(),
     val cardOrder: List<String> = emptyList(),
+    val compactCards: Boolean = false,
     /** Budgeted money still to spend, category by category (largest first). */
     val yetToSpendLines: List<YetToSpendLine> = emptyList(),
     val hideBalance: Boolean = false
@@ -263,6 +264,7 @@ class HomeViewModel @Inject constructor(
             },
             hiddenCards = prefs.hiddenHomeCards,
             cardOrder = prefs.homeCardOrder,
+            compactCards = prefs.compactHome,
             yetToSpendLines = yetLines,
             hideBalance = prefs.hideBalance,
             monthIncome = income,

@@ -178,3 +178,13 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Budgets: no "Expected spend" tile; "Expected Deviation" (excess in red); parent categories show the total of their sub-categories and expand to show them.
 - Reports: aligned overview, six-period income vs expenses chart, expenses/income tabs with totals and six-period bars, category analysis bar chart (budget, actual, % of budget, % of total), parent/sub-category tree; no "+" button.
 - Back button: opening Budgets/Reports/Records from another screen now steps forward so Back returns; Reports closes an open category first.
+
+## v0.22.0
+- Home: optional compact mode (month total with opening/income/expenses, one budget card, expected closing).
+- Records: one row of equally sized controls (filter, sort, view as, period type, search); slimmer period bar.
+- Budgets: Yet to spend and Expected deviation side by side (Unused / Final deviation for past months); a category can be set to no budget with 0 or blank.
+- Categories: compact form (icon + name on one line, icon list in a pop-up, parent as a drop-down).
+- Accounts: bold figures and tiles consistent with the rest of the app.
+- Reports: six-period chart now sits below the category list on Expenses and Income.
+- Settings: one organised page (Profile, General, Money and budgets, Home page, Layout, Reminders); name saves reliably.
+- Backup: optional extra copy of automatic backups in a folder you choose; cloud placeholder card removed.

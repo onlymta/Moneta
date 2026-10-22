@@ -102,6 +102,8 @@ data class AppPreferences(
     val hiddenHomeCards: Set<String> = emptySet(),
     /** Order of the Home dashboard cards (keys from HomeCard). */
     val homeCardOrder: List<String> = HomeCard.entries.map { it.name },
+    /** Home shows three wide cards (month total, budget, expected closing) instead of six tiles. */
+    val compactHome: Boolean = false,
     /** When on, sub-categories can be created and each has its own budget and analysis. */
     val subcategoriesEnabled: Boolean = false,
     // --- Reminders and backups ---
@@ -110,6 +112,8 @@ data class AppPreferences(
     val reminderMinute: Int = 0,
     val autoBackupFrequency: BackupFrequency = BackupFrequency.OFF,
     val lastAutoBackupAt: Long = 0L,
+    /** A folder the user chose (as a content URI) that automatic backups are also copied into; empty when unset. */
+    val autoBackupFolder: String = "",
     val dismissedAlertIds: Set<String> = emptySet()
 )
 
@@ -154,12 +158,14 @@ class SettingsRepository @Inject constructor(
         val HIDE_BALANCE = booleanPreferencesKey("hide_balance")
         val HIDDEN_HOME_CARDS = stringSetPreferencesKey("hidden_home_cards")
         val HOME_CARD_ORDER = stringPreferencesKey("home_card_order")
+        val HOME_COMPACT = booleanPreferencesKey("home_compact")
         val SUBCATEGORIES = booleanPreferencesKey("subcategories_enabled")
         val REMINDER_ENABLED = booleanPreferencesKey("reminder_enabled")
         val REMINDER_HOUR = intPreferencesKey("reminder_hour")
         val REMINDER_MINUTE = intPreferencesKey("reminder_minute")
         val AUTO_BACKUP_FREQUENCY = stringPreferencesKey("auto_backup_frequency")
         val LAST_AUTO_BACKUP = longPreferencesKey("last_auto_backup_at")
+        val AUTO_BACKUP_FOLDER = stringPreferencesKey("auto_backup_folder")
         val DISMISSED_ALERTS = stringSetPreferencesKey("dismissed_alert_ids")
     }
 
@@ -206,6 +212,7 @@ class SettingsRepository @Inject constructor(
             hideBalance = prefs[Keys.HIDE_BALANCE] ?: false,
             hiddenHomeCards = prefs[Keys.HIDDEN_HOME_CARDS] ?: emptySet(),
             homeCardOrder = parseHomeCardOrder(prefs[Keys.HOME_CARD_ORDER]),
+            compactHome = prefs[Keys.HOME_COMPACT] ?: false,
             subcategoriesEnabled = prefs[Keys.SUBCATEGORIES] ?: false,
             reminderEnabled = prefs[Keys.REMINDER_ENABLED] ?: false,
             reminderHour = prefs[Keys.REMINDER_HOUR] ?: 21,
@@ -214,6 +221,7 @@ class SettingsRepository @Inject constructor(
                 ?.let { runCatching { BackupFrequency.valueOf(it) }.getOrNull() }
                 ?: BackupFrequency.OFF,
             lastAutoBackupAt = prefs[Keys.LAST_AUTO_BACKUP] ?: 0L,
+            autoBackupFolder = prefs[Keys.AUTO_BACKUP_FOLDER] ?: "",
             dismissedAlertIds = prefs[Keys.DISMISSED_ALERTS] ?: emptySet()
         )
     }
@@ -284,6 +292,8 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setHiddenHomeCards(keys: Set<String>) = context.dataStore.edit { it[Keys.HIDDEN_HOME_CARDS] = keys }
 
+    suspend fun setCompactHome(on: Boolean) = context.dataStore.edit { it[Keys.HOME_COMPACT] = on }
+
     suspend fun setHomeCardOrder(order: List<String>) = context.dataStore.edit { it[Keys.HOME_CARD_ORDER] = order.joinToString(",") }
 
     suspend fun setSubcategoriesEnabled(on: Boolean) = context.dataStore.edit { it[Keys.SUBCATEGORIES] = on }
@@ -317,7 +327,7 @@ class SettingsRepository @Inject constructor(
         context.dataStore.edit { prefs ->
             json.keys().forEach { name ->
                 // Where the welcome flow stands is about this install, not about the data, so it is not restored.
-                if (name == "onboarding_status") return@forEach
+                if (name == "onboarding_status" || name == "auto_backup_folder" || name == "last_auto_backup_at") return@forEach
                 val entry = json.optJSONObject(name) ?: return@forEach
                 when (entry.optString("t")) {
                     "s" -> prefs[stringPreferencesKey(name)] = entry.getString("v")
@@ -347,6 +357,8 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setAutoBackupFrequency(frequency: BackupFrequency) =
         context.dataStore.edit { it[Keys.AUTO_BACKUP_FREQUENCY] = frequency.name }
+
+    suspend fun setAutoBackupFolder(uri: String) = context.dataStore.edit { it[Keys.AUTO_BACKUP_FOLDER] = uri }
 
     suspend fun setLastAutoBackupAt(timeMillis: Long) = context.dataStore.edit { it[Keys.LAST_AUTO_BACKUP] = timeMillis }
 

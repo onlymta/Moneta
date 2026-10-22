@@ -226,7 +226,16 @@ private fun HomeContent(
             card.name !in state.hiddenCards && (hasBudgets || (card != com.moneta.app.data.settings.HomeCard.BUDGETED &&
                 card != com.moneta.app.data.settings.HomeCard.YET_TO_SPEND))
         }
-        items(cards.chunked(2), key = { row -> row.first().name }) { row ->
+        if (state.compactCards) item {
+            CompactHomeCards(
+                state = state,
+                onOpening = { dialog = HomeDialog.OPENING },
+                onIncome = { dialog = HomeDialog.INCOME },
+                onExpenses = { onOpenRecords(TypeFilter.EXPENSE) },
+                onYet = { dialog = HomeDialog.YET },
+                onBalance = { dialog = HomeDialog.BALANCE }
+            )
+        } else items(cards.chunked(2), key = { row -> row.first().name }) { row ->
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
                 row.forEach { card ->
                     when (card) {
@@ -309,6 +318,124 @@ private fun HomeContent(
                     onClick = { onTransactionClick(item.transaction.id) }
                 )
             }
+        }
+    }
+}
+
+/** Three wide cards: the month's total (with opening, income and expenses beneath), the budget in one card, and expected closing. */
+@Composable
+private fun CompactHomeCards(
+    state: HomeUiState,
+    onOpening: () -> Unit,
+    onIncome: () -> Unit,
+    onExpenses: () -> Unit,
+    onYet: () -> Unit,
+    onBalance: () -> Unit
+) {
+    val hidden = state.hiddenCards
+    val showMonth = !("OPENING" in hidden && "INCOME" in hidden && "EXPENSES" in hidden)
+    val showBudget = !state.budgetTotal.isZero && ("BUDGETED" !in hidden || "YET_TO_SPEND" !in hidden)
+    val showClosing = "EXPECTED_CLOSING" !in hidden
+    val primary = MaterialTheme.colorScheme.primary
+    Column(verticalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
+        if (showMonth) {
+            Card(colors = CardDefaults.cardColors(containerColor = primary.copy(alpha = 0.12f)), modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+                    Text(
+                        if (state.isCurrentMonth) "This month so far" else "Month total",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        androidx.compose.material3.LocalTextStyle provides MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold)
+                    ) {
+                        MoneyText(state.currentBalance, color = if (state.currentBalance.isNegative) ExpenseRed else primary)
+                    }
+                    Spacer(Modifier.height(MonetaSpacing.sm))
+                    Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                        if ("OPENING" !in hidden) CompactFigure("Opening", state.openingBalance ?: Money.zero(state.currencyCode), primary, Modifier.weight(1f), onOpening)
+                        if ("INCOME" !in hidden) CompactFigure("Income", state.monthIncome, IncomeGreen, Modifier.weight(1f), onIncome)
+                        if ("EXPENSES" !in hidden) CompactFigure("Expenses", state.monthExpense, ExpenseRed, Modifier.weight(1f), onExpenses)
+                    }
+                }
+            }
+        }
+        if (showBudget) {
+            val percent = state.budgetSpent.percentOf(state.budgetTotal) ?: 0.0
+            val barColor = if (percent >= 100.0) ExpenseRed else if (percent >= 80.0) WarningAmber else IncomeGreen
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onYet)
+            ) {
+                Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Budget",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text("${percent.toInt()}% used", style = MaterialTheme.typography.labelLarge, color = barColor, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(MonetaSpacing.xs))
+                    androidx.compose.material3.LinearProgressIndicator(
+                        progress = { (percent / 100.0).toFloat().coerceIn(0f, 1f) },
+                        color = barColor,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                    )
+                    Spacer(Modifier.height(MonetaSpacing.sm))
+                    Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                        CompactFigure("Budgeted", state.budgetTotal, MaterialTheme.colorScheme.tertiary, Modifier.weight(1f), onYet)
+                        CompactFigure("Spent", state.budgetSpent, ExpenseRed, Modifier.weight(1f), onYet)
+                        CompactFigure("Yet to spend", state.yetToSpend, WarningAmber, Modifier.weight(1f), onYet)
+                    }
+                }
+            }
+        }
+        if (showClosing) {
+            val tint = if (state.expectedClosing.isNegative) ExpenseRed else primary
+            Card(
+                colors = CardDefaults.cardColors(containerColor = tint.copy(alpha = 0.12f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onBalance)
+            ) {
+                Row(modifier = Modifier.padding(MonetaSpacing.cardPadding), verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            if (state.isCurrentMonth) "Expected closing" else "Closing balance",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            if (state.isCurrentMonth) "Balance less budget still to spend" else "Where the month ended",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        androidx.compose.material3.LocalTextStyle provides MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold)
+                    ) {
+                        MoneyText(state.expectedClosing, color = tint)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactFigure(label: String, amount: Money, color: Color, modifier: Modifier, onClick: () -> Unit) {
+    Column(modifier = modifier.clickable(onClick = onClick)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.material3.LocalTextStyle provides MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold)
+        ) {
+            MoneyText(amount, color = color)
         }
     }
 }

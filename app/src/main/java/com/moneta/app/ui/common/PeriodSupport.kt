@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.DatePicker
@@ -35,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import com.moneta.app.core.date.DateRange
 import java.time.DayOfWeek
@@ -129,6 +131,8 @@ private fun dateOf(millis: Long): LocalDate = Instant.ofEpochMilli(millis).atZon
  * The shared "< October 2026 >" bar. Tap the arrows to step back/forward; tap the
  * label to switch between daily/weekly/monthly/yearly/all-time/custom (only the
  * modes in [modes] are offered - with a single mode the label isn't tappable).
+ * With [calendarPick] the label opens a calendar instead, and the period type is chosen
+ * elsewhere with a [PeriodModeButton].
  */
 @Composable
 fun PeriodBar(
@@ -136,44 +140,21 @@ fun PeriodBar(
     onChange: (PeriodSelection) -> Unit,
     modifier: Modifier = Modifier,
     modes: List<PeriodMode> = PeriodMode.entries,
-    /**
-     * When true, tapping the period label opens a calendar to jump to any day/week/month/year, and a small
-     * separate button next to the arrows chooses the kind of period (day, week, month, year, all time, custom).
-     */
     calendarPick: Boolean = false
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var calendarOpen by remember { mutableStateOf(false) }
-    var pickStart by remember { mutableStateOf(false) }
-    var pickEnd by remember { mutableStateOf(false) }
-    var pendingStart by remember { mutableStateOf(selection.customStart) }
-
-    val modeMenu: @Composable () -> Unit = {
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            modes.forEach { mode ->
-                DropdownMenuItem(
-                    text = { Text(mode.label) },
-                    onClick = {
-                        menuOpen = false
-                        if (mode == PeriodMode.CUSTOM) {
-                            pickStart = true
-                        } else {
-                            // Keep the day you were looking at when switching between day/week/month/year.
-                            val anchor = if (selection.mode == PeriodMode.CUSTOM) selection.customEnd else selection.anchor
-                            onChange(selection.copy(mode = mode, anchor = anchor))
-                        }
-                    }
-                )
-            }
-        }
-    }
 
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = { onChange(selection.shift(-1)) }, enabled = selection.canShift) {
+        IconButton(
+            onClick = { onChange(selection.shift(-1)) },
+            enabled = selection.canShift,
+            modifier = Modifier.size(40.dp)
+        ) {
             Icon(Icons.Outlined.ChevronLeft, contentDescription = "Previous")
         }
         Box {
@@ -182,19 +163,19 @@ fun PeriodBar(
             val isPast = showNow && !isNow && selection.range().endExclusive.isBefore(LocalDate.now().plusDays(1))
             Surface(
                 shape = RoundedCornerShape(50),
-                color = if (isNow) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                color = if (isNow) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f) else Color.Transparent,
                 modifier = Modifier.clickable(enabled = modes.size > 1 || calendarPick) {
                     if (calendarPick && selection.canShift) calendarOpen = true else menuOpen = true
                 }
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             selection.label(),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = if (isNow) FontWeight.Bold else FontWeight.Medium,
                             color = if (isNow) MaterialTheme.colorScheme.onPrimaryContainer
                             else MaterialTheme.colorScheme.onSurfaceVariant
@@ -202,49 +183,28 @@ fun PeriodBar(
                         if (showNow) {
                             Text(
                                 if (isNow) "\u25CF Current" else if (isPast) "Past" else "Upcoming",
-                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                lineHeight = 11.sp,
                                 color = if (isNow) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.outline
                             )
                         }
                     }
                     if (modes.size > 1 && !calendarPick) {
-                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "Change period type")
+                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "Change period type", modifier = Modifier.size(20.dp))
                     }
                 }
             }
-            if (!calendarPick) modeMenu()
+            if (!calendarPick) {
+                PeriodModeMenu(selection, onChange, modes, menuOpen) { menuOpen = false }
+            }
         }
-        IconButton(onClick = { onChange(selection.shift(1)) }, enabled = selection.canShift) {
+        IconButton(
+            onClick = { onChange(selection.shift(1)) },
+            enabled = selection.canShift,
+            modifier = Modifier.size(40.dp)
+        ) {
             Icon(Icons.Outlined.ChevronRight, contentDescription = "Next")
-        }
-        if (calendarPick) {
-            Box {
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier.clickable { menuOpen = true }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            when (selection.mode) {
-                                PeriodMode.DAY -> "Day"
-                                PeriodMode.WEEK -> "Week"
-                                PeriodMode.MONTH -> "Month"
-                                PeriodMode.YEAR -> "Year"
-                                PeriodMode.ALL -> "All"
-                                PeriodMode.CUSTOM -> "Custom"
-                            },
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "Change period type", modifier = Modifier.size(18.dp))
-                    }
-                }
-                modeMenu()
-            }
         }
     }
 
@@ -261,6 +221,64 @@ fun PeriodBar(
             dismissButton = { TextButton(onClick = { calendarOpen = false }) { Text("Cancel") } }
         ) {
             DatePicker(state = state, title = { Text("  Jump to a date") })
+        }
+    }
+}
+
+/** An icon button that opens the day / week / month / year / all time / custom menu. Sized like its neighbours. */
+@Composable
+fun PeriodModeButton(
+    selection: PeriodSelection,
+    onChange: (PeriodSelection) -> Unit,
+    modifier: Modifier = Modifier,
+    modes: List<PeriodMode> = PeriodMode.entries
+) {
+    var menuShown by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        IconButton(onClick = { menuShown = true }) {
+            Icon(
+                Icons.Filled.DateRange,
+                contentDescription = "Show records by " + selection.mode.label.lowercase(),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+        PeriodModeMenu(selection, onChange, modes, menuShown) { menuShown = false }
+    }
+}
+
+/** The list of period types plus the two date pickers a custom range needs. */
+@Composable
+private fun PeriodModeMenu(
+    selection: PeriodSelection,
+    onChange: (PeriodSelection) -> Unit,
+    modes: List<PeriodMode>,
+    expanded: Boolean,
+    onDismiss: () -> Unit
+) {
+    var pickStart by remember { mutableStateOf(false) }
+    var pickEnd by remember { mutableStateOf(false) }
+    var pendingStart by remember { mutableStateOf(selection.customStart) }
+
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        modes.forEach { mode ->
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        (if (mode == selection.mode) "\u2713  " else "     ") + mode.label,
+                        fontWeight = if (mode == selection.mode) FontWeight.Bold else FontWeight.Normal
+                    )
+                },
+                onClick = {
+                    onDismiss()
+                    if (mode == PeriodMode.CUSTOM) {
+                        pickStart = true
+                    } else {
+                        // Keep the day you were looking at when switching between day/week/month/year.
+                        val anchor = if (selection.mode == PeriodMode.CUSTOM) selection.customEnd else selection.anchor
+                        onChange(selection.copy(mode = mode, anchor = anchor))
+                    }
+                }
+            )
         }
     }
 

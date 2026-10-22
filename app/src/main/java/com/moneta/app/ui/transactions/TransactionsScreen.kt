@@ -56,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.moneta.app.ui.common.DayHeader
 import com.moneta.app.ui.common.PeriodBar
+import com.moneta.app.ui.common.PeriodModeButton
 import com.moneta.app.ui.common.PeriodMode
 import com.moneta.app.ui.common.TransactionRowCard
 import com.moneta.app.ui.theme.ExpenseRed
@@ -88,34 +89,37 @@ fun TransactionsScreen(
                 modes = PeriodMode.entries,
                 calendarPick = true
             )
-            // Three small controls under the period: filter, sort / view, and (far right) search.
+            // One row of equally sized controls: filter, sort, view as, period type, search.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { filterOpen = true }) {
-                    Icon(
-                        Icons.Filled.FilterList,
-                        contentDescription = "Filter records",
-                        tint = if (state.activeFilterCount > 0) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                val totalsView = state.groupMode == GroupMode.CATEGORY_TOTALS
+                val idle = MaterialTheme.colorScheme.onSurfaceVariant
+                val active = MaterialTheme.colorScheme.primary
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    IconButton(onClick = { filterOpen = true }) {
+                        androidx.compose.material3.BadgedBox(
+                            badge = {
+                                if (state.activeFilterCount > 0) {
+                                    androidx.compose.material3.Badge { Text(state.activeFilterCount.toString()) }
+                                }
+                            }
+                        ) {
+                            Icon(
+                                Icons.Filled.FilterList,
+                                contentDescription = "Filter records",
+                                tint = if (state.activeFilterCount > 0) active else idle
+                            )
+                        }
+                    }
                 }
-                if (state.activeFilterCount > 0) {
-                    Text(
-                        state.activeFilterCount.toString(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Box {
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     IconButton(onClick = { sortOpen = true }) {
                         Icon(
                             Icons.Filled.SwapVert,
                             contentDescription = "Sort records",
-                            tint = if (state.sortMode != SortMode.DATE_DESC)
-                                MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = if (state.sortMode != SortMode.DATE_DESC) active else idle
                         )
                     }
                     DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
@@ -138,27 +142,31 @@ fun TransactionsScreen(
                         }
                     }
                 }
-                val totalsView = state.groupMode == GroupMode.CATEGORY_TOTALS
-                IconButton(onClick = {
-                    viewModel.onGroupModeChange(if (totalsView) GroupMode.DAY else GroupMode.CATEGORY_TOTALS)
-                }) {
-                    Icon(
-                        if (totalsView) Icons.Filled.PieChart else Icons.Filled.ViewList,
-                        contentDescription = if (totalsView) "Showing category totals. Tap for individual records" else "Showing individual records. Tap for category totals",
-                        tint = if (totalsView) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    IconButton(onClick = {
+                        viewModel.onGroupModeChange(if (totalsView) GroupMode.DAY else GroupMode.CATEGORY_TOTALS)
+                    }) {
+                        Icon(
+                            if (totalsView) Icons.Filled.PieChart else Icons.Filled.ViewList,
+                            contentDescription = if (totalsView) "Showing category totals. Tap for individual records" else "Showing individual records. Tap for category totals",
+                            tint = if (totalsView) active else idle
+                        )
+                    }
                 }
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = {
-                    searchOpen = !searchOpen
-                    if (!searchOpen) viewModel.onQueryChange("")
-                }) {
-                    Icon(
-                        Icons.Outlined.Search,
-                        contentDescription = "Search records",
-                        tint = if (searchOpen || state.query.isNotEmpty()) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    PeriodModeButton(selection = state.period, onChange = viewModel::onPeriodChange)
+                }
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    IconButton(onClick = {
+                        searchOpen = !searchOpen
+                        if (!searchOpen) viewModel.onQueryChange("")
+                    }) {
+                        Icon(
+                            Icons.Outlined.Search,
+                            contentDescription = "Search records",
+                            tint = if (searchOpen || state.query.isNotEmpty()) active else idle
+                        )
+                    }
                 }
             }
             if (state.activeFilterCount > 0) {

@@ -406,29 +406,6 @@ private fun BreakdownTab(
                 }
             }
         }
-        if (trend.size > 1) {
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
-                        Text(
-                            (if (isIncome) "Income" else "Expenses") + ", last " + trend.size + " periods",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(Modifier.height(MonetaSpacing.md))
-                        GroupedBarChart(
-                            groups = trend.map { stat ->
-                                val amount = if (isIncome) stat.income else stat.expense
-                                BarGroup(
-                                    label = stat.label,
-                                    bars = listOf(BarValue(amount.minorUnits, accent)),
-                                    highlight = stat.isSelected
-                                )
-                            }
-                        )
-                    }
-                }
-            }
-        }
         if (slices.isEmpty()) {
             item {
                 Column(
@@ -502,6 +479,29 @@ private fun BreakdownTab(
                         color = rowColor,
                         modifier = Modifier.fillMaxWidth()
                     )
+                }
+            }
+        }
+        if (trend.size > 1) {
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+                        Text(
+                            (if (isIncome) "Income" else "Expenses") + ", last " + trend.size + " periods",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(Modifier.height(MonetaSpacing.md))
+                        GroupedBarChart(
+                            groups = trend.map { stat ->
+                                val amount = if (isIncome) stat.income else stat.expense
+                                BarGroup(
+                                    label = stat.label,
+                                    bars = listOf(BarValue(amount.minorUnits, accent)),
+                                    highlight = stat.isSelected
+                                )
+                            }
+                        )
+                    }
                 }
             }
         }

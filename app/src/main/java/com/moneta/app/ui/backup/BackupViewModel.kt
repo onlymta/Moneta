@@ -31,7 +31,8 @@ data class BackupUiState(
     val isCloudConnected: Boolean = false,
     val frequency: BackupFrequency = BackupFrequency.OFF,
     val lastAutoBackupAt: Long = 0L,
-    val localBackups: List<LocalBackup> = emptyList()
+    val localBackups: List<LocalBackup> = emptyList(),
+    val backupFolder: String = ""
 )
 
 private const val LOCAL_PREFIX = "local:"
@@ -54,7 +55,11 @@ class BackupViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.preferences.collect { prefs ->
                 _uiState.update {
-                    it.copy(frequency = prefs.autoBackupFrequency, lastAutoBackupAt = prefs.lastAutoBackupAt)
+                    it.copy(
+                        frequency = prefs.autoBackupFrequency,
+                        lastAutoBackupAt = prefs.lastAutoBackupAt,
+                        backupFolder = prefs.autoBackupFolder
+                    )
                 }
             }
         }
@@ -73,6 +78,11 @@ class BackupViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setAutoBackupFrequency(frequency) }
     }
 
+    /** Remembers the folder the user picked for extra copies of automatic backups ("" clears it). */
+    fun setBackupFolder(uri: String) {
+        viewModelScope.launch { settingsRepository.setAutoBackupFolder(uri) }
+    }
+
     fun backupNow() {
         viewModelScope.launch {
             _uiState.update { it.copy(isWorking = true, lastMessage = null) }
@@ -81,7 +91,9 @@ class BackupViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     isWorking = false,
-                    lastMessage = if (result.isSuccess) "Backup saved on this phone." else "Backup failed: ${result.exceptionOrNull()?.message}"
+                    lastMessage = if (result.isSuccess) {
+                        "Backup saved on this phone." + (autoBackupManager.lastFolderResult?.let { " $it" } ?: "")
+                    } else "Backup failed: ${result.exceptionOrNull()?.message}"
                 )
             }
         }

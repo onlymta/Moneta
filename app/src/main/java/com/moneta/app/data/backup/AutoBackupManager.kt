@@ -30,6 +30,60 @@ class AutoBackupManager @Inject constructor(
     private val settingsRepository: SettingsRepository
 ) {
     private val keepCount = 7
+    private val folderKeepCount = 14
+
+    /** What happened with the optional chosen folder on the last backup: null if none is set, else a short message. */
+    @Volatile
+    var lastFolderResult: String? = null
+        private set
+
+    /** Also writes the backup into the folder the user picked, so it survives uninstalling the app. */
+    private suspend fun copyToChosenFolder(file: File): String? {
+        val folder = settingsRepository.preferences.first().autoBackupFolder
+        if (folder.isBlank()) return null
+        return withContext(Dispatchers.IO) {
+            try {
+                val resolver = context.contentResolver
+                val tree = android.net.Uri.parse(folder)
+                val treeDocId = android.provider.DocumentsContract.getTreeDocumentId(tree)
+                val parent = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, treeDocId)
+                val created = android.provider.DocumentsContract.createDocument(
+                    resolver, parent, "application/octet-stream", file.name
+                ) ?: return@withContext "Couldn't create the file in the chosen folder."
+                resolver.openOutputStream(created)?.use { out ->
+                    FileInputStream(file).use { input -> input.copyTo(out) }
+                } ?: return@withContext "Couldn't write to the chosen folder."
+                pruneFolder(tree, treeDocId)
+                "Copied to your chosen folder."
+            } catch (e: Exception) {
+                "Couldn't write to the chosen folder. Pick it again in Backup."
+            }
+        }
+    }
+
+    /** Keeps only the newest few automatic backups in the chosen folder. */
+    private fun pruneFolder(tree: android.net.Uri, treeDocId: String) {
+        val resolver = context.contentResolver
+        val children = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, treeDocId)
+        val found = ArrayList<Pair<String, String>>()
+        resolver.query(
+            children,
+            arrayOf(
+                android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME
+            ),
+            null, null, null
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val name = cursor.getString(1) ?: continue
+                if (name.startsWith("moneta-auto-") && name.endsWith(".monetabackup")) found.add(cursor.getString(0) to name)
+            }
+        }
+        found.sortedByDescending { it.second }.drop(folderKeepCount).forEach { entry ->
+            val doc = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, entry.first)
+            runCatching { android.provider.DocumentsContract.deleteDocument(resolver, doc) }
+        }
+    }
 
     private fun directory(): File {
         val dir = File(context.filesDir, "auto_backups")
@@ -61,6 +115,7 @@ class AutoBackupManager @Inject constructor(
                 .sortedByDescending { it.lastModified() }
             all.drop(keepCount).forEach { it.delete() }
         }
+        lastFolderResult = copyToChosenFolder(file)
         settingsRepository.setLastAutoBackupAt(System.currentTimeMillis())
         return file.name
     }

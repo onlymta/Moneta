@@ -14,6 +14,20 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.text.input.ImeAction
+import android.widget.Toast
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -66,6 +80,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.moneta.app.core.money.DisplayCurrency
@@ -81,18 +97,6 @@ import com.moneta.app.ui.theme.MonetaSpacing
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
-/** The areas the Settings home links to. */
-private enum class SettingsArea(val title: String) {
-    PROFILE("Profile"),
-    CURRENCY("Currency and format"),
-    APPEARANCE("Appearance"),
-    BUDGETS("Budgets and balances"),
-    MODULES("Features"),
-    DASHBOARD("Home dashboard"),
-    CUSTOMIZE("Customization"),
-    REMINDERS("Reminders")
-}
-
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
@@ -100,16 +104,9 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val prefs by viewModel.preferences.collectAsState()
-    var areaName by rememberSaveable { mutableStateOf("") }
-    val area: SettingsArea? = SettingsArea.entries.firstOrNull { it.name == areaName }
-
-    BackHandler(enabled = area != null) { areaName = "" }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        SubPageHeader(
-            title = area?.title ?: "Settings",
-            onBack = { if (area != null) areaName = "" else onBack() }
-        )
+        SubPageHeader(title = "Settings", onBack = onBack)
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -117,377 +114,357 @@ fun SettingsScreen(
                 .padding(horizontal = MonetaSpacing.screenHorizontal, vertical = MonetaSpacing.sm),
             verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
         ) {
-            if (area == null) {
-                SettingsHome(prefs, viewModel) { areaName = it.name }
-            } else {
-                when (area) {
-                    SettingsArea.PROFILE -> ProfileArea(prefs.userName, viewModel)
-                    SettingsArea.CURRENCY -> CurrencyArea(prefs.displayCurrency, prefs.showCurrencySymbol, prefs.decimals, viewModel)
-                    SettingsArea.APPEARANCE -> AppearanceArea(prefs.themeMode, viewModel)
-                    SettingsArea.BUDGETS -> BudgetsArea(prefs.carryForwardBalance, prefs.rolloverBudgets, viewModel)
-                    SettingsArea.MODULES -> ModulesArea(prefs.budgetsEnabled, prefs.goalsEnabled, prefs.billsEnabled, prefs.subcategoriesEnabled, viewModel)
-                    SettingsArea.DASHBOARD -> DashboardArea(prefs.hiddenHomeCards, prefs.homeCardOrder, viewModel)
-                    SettingsArea.CUSTOMIZE -> CustomizeArea(prefs, viewModel)
-                    SettingsArea.REMINDERS -> RemindersArea(prefs.reminderEnabled, prefs.reminderHour, prefs.reminderMinute, viewModel)
+            ProfileSection(prefs.userName, viewModel)
+            GeneralSection(prefs, viewModel)
+            MoneySection(prefs, viewModel)
+            HomeSection(prefs, viewModel)
+            LayoutSection(prefs, viewModel)
+            RemindersSection(prefs.reminderEnabled, prefs.reminderHour, prefs.reminderMinute, viewModel)
+            Spacer(Modifier.height(MonetaSpacing.xl))
+        }
+    }
+}
+
+// ---- building blocks ------------------------------------------------------------------------------
+
+@Composable
+private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Text(
+        title.uppercase(),
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 0.8.sp,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 4.dp, top = MonetaSpacing.sm)
+    )
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(horizontal = MonetaSpacing.cardPadding, vertical = MonetaSpacing.xs),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+/** A label on the left and a small segmented choice on the right, on one line. */
+@Composable
+private fun SegmentRow(title: String, options: List<String>, selectedIndex: Int, onSelect: (Int) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(0.8f))
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1.4f)) {
+            options.forEachIndexed { index, label ->
+                SegmentedButton(
+                    selected = index == selectedIndex,
+                    onClick = { onSelect(index) },
+                    shape = SegmentedButtonDefaults.itemShape(index, options.size)
+                ) {
+                    Text(label, maxLines = 1, style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
     }
 }
 
-// ---- the home list --------------------------------------------------------------------------
-
+/** A label with the current value on the right; tapping opens a small list to pick from. */
 @Composable
-private fun SettingsHome(
-    prefs: com.moneta.app.data.settings.AppPreferences,
-    viewModel: SettingsViewModel,
-    onOpen: (SettingsArea) -> Unit
-) {
-    // Profile card
-    Card(modifier = Modifier
-        .fillMaxWidth()
-        .clickable { onOpen(SettingsArea.PROFILE) }) {
+private fun PickRow(title: String, value: String, choices: List<Pair<String, String>>, onPick: (String) -> Unit) {
+    var menuShown by remember { mutableStateOf(false) }
+    Box {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(MonetaSpacing.cardPadding),
+                .clickable { menuShown = true }
+                .padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+            Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        }
+        DropdownMenu(expanded = menuShown, onDismissRequest = { menuShown = false }) {
+            choices.forEach { choice ->
+                DropdownMenuItem(
+                    text = { Text(choice.first + "  " + choice.second) },
+                    onClick = {
+                        menuShown = false
+                        onPick(choice.first)
+                    }
+                )
+            }
+        }
+    }
+}
+
+/** A row that unfolds in place to show more controls. */
+@Composable
+private fun ExpandRow(title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) {
+    var expanded by rememberSaveable(title) { mutableStateOf(false) }
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.bodyLarge)
+                Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, contentDescription = null)
+        }
+        if (expanded) {
+            Column(modifier = Modifier.padding(bottom = 6.dp), content = content)
+        }
+    }
+}
+
+@Composable
+private fun RowDivider() {
+    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+}
+
+// ---- sections -------------------------------------------------------------------------------------
+
+@Composable
+private fun ProfileSection(userName: String, viewModel: SettingsViewModel) {
+    val context = LocalContext.current
+    var nameInput by remember(userName) { mutableStateOf(userName) }
+    val latestInput by rememberUpdatedState(nameInput)
+    val latestSaved by rememberUpdatedState(userName)
+    val save = {
+        val clean = nameInput.trim()
+        if (clean != userName) {
+            viewModel.setUserName(clean)
+            Toast.makeText(context, "Name saved", Toast.LENGTH_SHORT).show()
+        }
+    }
+    // Leaving the page with an unsaved name saves it, so typing a name is never lost.
+    DisposableEffect(Unit) {
+        onDispose {
+            val clean = latestInput.trim()
+            if (clean != latestSaved) viewModel.setUserName(clean)
+        }
+    }
+    SectionCard("Profile") {
+        Row(
+            modifier = Modifier.padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(48.dp)
                     .background(MaterialTheme.colorScheme.primary, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    prefs.userName.trim().take(1).uppercase().ifEmpty { "M" },
+                    nameInput.trim().take(1).uppercase().ifEmpty { "M" },
                     color = MaterialTheme.colorScheme.onPrimary,
                     style = MaterialTheme.typography.titleMedium
                 )
             }
             Spacer(Modifier.width(MonetaSpacing.md))
-            Column(modifier = Modifier.weight(1f)) {
+            OutlinedTextField(
+                value = nameInput,
+                onValueChange = { nameInput = it.take(40) },
+                label = { Text("Your name") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { save() }),
+                trailingIcon = {
+                    IconButton(onClick = { save() }, enabled = nameInput.trim() != userName) {
+                        Icon(Icons.Filled.Check, contentDescription = "Save name")
+                    }
+                },
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun GeneralSection(prefs: com.moneta.app.data.settings.AppPreferences, viewModel: SettingsViewModel) {
+    SectionCard("General") {
+        val currencyName = DisplayCurrency.choices.firstOrNull { it.first == prefs.displayCurrency }?.second.orEmpty()
+        PickRow("Currency", prefs.displayCurrency + (if (currencyName.isNotEmpty()) " ($currencyName)" else ""), DisplayCurrency.choices) {
+            viewModel.setDisplayCurrency(it)
+        }
+        RowDivider()
+        SwitchRow("Show currency symbol", null, prefs.showCurrencySymbol, viewModel::setShowCurrencySymbol)
+        RowDivider()
+        SegmentRow("Decimals", listOf("0", "1", "2"), prefs.decimals.coerceIn(0, 2)) { viewModel.setDecimals(it) }
+        RowDivider()
+        SegmentRow(
+            "Theme",
+            listOf("System", "Light", "Dark"),
+            ThemeMode.entries.indexOf(prefs.themeMode).coerceAtLeast(0)
+        ) { viewModel.setThemeMode(ThemeMode.entries[it]) }
+    }
+}
+
+@Composable
+private fun MoneySection(prefs: com.moneta.app.data.settings.AppPreferences, viewModel: SettingsViewModel) {
+    SectionCard("Money and budgets") {
+        SwitchRow(
+            "Carry forward balance",
+            "Each month opens with what was left from earlier months",
+            prefs.carryForwardBalance,
+            viewModel::setCarryForwardBalance
+        )
+        RowDivider()
+        SwitchRow(
+            "Roll over unspent budget",
+            "Add last month's unspent budget to this month's",
+            prefs.rolloverBudgets,
+            viewModel::setRolloverBudgets
+        )
+        RowDivider()
+        SwitchRow(
+            "Sub-categories",
+            "Categories inside categories, each with its own budget and analysis",
+            prefs.subcategoriesEnabled,
+            viewModel::setSubcategoriesEnabled
+        )
+        RowDivider()
+        SwitchRow("Budgets", "Show the Budgets tab", prefs.budgetsEnabled, viewModel::setBudgetsEnabled)
+        RowDivider()
+        SwitchRow("Goals", "Savings goals in the side menu", prefs.goalsEnabled, viewModel::setGoalsEnabled)
+        RowDivider()
+        SwitchRow("Bills", "Bill tracking in the side menu", prefs.billsEnabled, viewModel::setBillsEnabled)
+    }
+}
+
+@Composable
+private fun HomeSection(prefs: com.moneta.app.data.settings.AppPreferences, viewModel: SettingsViewModel) {
+    SectionCard("Home page") {
+        SwitchRow(
+            "Compact cards",
+            "Three wide cards instead of six tiles",
+            prefs.compactHome,
+            viewModel::setCompactHome
+        )
+        RowDivider()
+        ExpandRow("Cards", "Show, hide and reorder") {
+            val hidden = prefs.hiddenHomeCards
+            val order = prefs.homeCardOrder
+            order.forEachIndexed { index, key ->
+                val card = com.moneta.app.data.settings.HomeCard.entries.firstOrNull { it.name == key } ?: return@forEachIndexed
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(card.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    TextButton(
+                        enabled = index > 0 && !prefs.compactHome,
+                        onClick = {
+                            val list = order.toMutableList()
+                            list.removeAt(index)
+                            list.add(index - 1, key)
+                            viewModel.setHomeCardOrder(list)
+                        }
+                    ) { Text("Up") }
+                    TextButton(
+                        enabled = index < order.size - 1 && !prefs.compactHome,
+                        onClick = {
+                            val list = order.toMutableList()
+                            list.removeAt(index)
+                            list.add(index + 1, key)
+                            viewModel.setHomeCardOrder(list)
+                        }
+                    ) { Text("Down") }
+                    Switch(
+                        checked = card.name !in hidden,
+                        onCheckedChange = { on ->
+                            viewModel.setHiddenHomeCards(if (on) hidden - card.name else hidden + card.name)
+                        }
+                    )
+                }
+            }
+            if (prefs.compactHome) {
                 Text(
-                    prefs.userName.ifBlank { "Add your name" },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    "Currency: " + prefs.displayCurrency,
-                    style = MaterialTheme.typography.labelMedium,
+                    "Compact mode keeps a fixed order; the switches still hide figures.",
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-
-    GroupLabel("General")
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column {
-            AreaRow(Icons.Filled.AttachMoney, "Currency and format", prefs.displayCurrency + (if (prefs.showCurrencySymbol) ", symbol shown" else ", plain figures")) {
-                onOpen(SettingsArea.CURRENCY)
-            }
-            Divider()
-            AreaRow(Icons.Filled.Palette, "Appearance", themeLabel(prefs.themeMode)) { onOpen(SettingsArea.APPEARANCE) }
-            Divider()
-            AreaRow(Icons.Filled.Notifications, "Reminders", if (prefs.reminderEnabled) "Daily at " + timeLabel(prefs.reminderHour, prefs.reminderMinute) else "Off") {
-                onOpen(SettingsArea.REMINDERS)
-            }
-        }
-    }
-
-    GroupLabel("Money")
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column {
-            AreaRow(Icons.Filled.AccountBalanceWallet, "Budgets and balances", if (prefs.carryForwardBalance) "Carry forward on" else "Carry forward off") {
-                onOpen(SettingsArea.BUDGETS)
-            }
-            Divider()
-            AreaRow(Icons.Filled.Extension, "Features", "Budgets, goals, bills, sub-categories") { onOpen(SettingsArea.MODULES) }
-            Divider()
-            AreaRow(Icons.Filled.Tune, "Home dashboard", "Choose which cards show") { onOpen(SettingsArea.DASHBOARD) }
-        }
-    }
-
-    GroupLabel("App")
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column {
-            AreaRow(Icons.Filled.Tune, "Customization", "Bottom bar, record form") { onOpen(SettingsArea.CUSTOMIZE) }
         }
     }
 }
 
 @Composable
-private fun GroupLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 4.dp, top = MonetaSpacing.xs)
-    )
-}
-
-@Composable
-private fun AreaRow(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = MonetaSpacing.cardPadding, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-            modifier = Modifier.size(36.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-            }
-        }
-        Spacer(Modifier.width(MonetaSpacing.md))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-private fun themeLabel(mode: ThemeMode): String = when (mode) {
-    ThemeMode.SYSTEM -> "Follows your phone"
-    ThemeMode.LIGHT -> "Light"
-    ThemeMode.DARK -> "Dark"
-}
-
-private fun timeLabel(hour: Int, minute: Int): String =
-    LocalTime.of(hour.coerceIn(0, 23), minute.coerceIn(0, 59)).format(DateTimeFormatter.ofPattern("h:mm a"))
-
-// ---- the areas ------------------------------------------------------------------------------------
-
-@Composable
-private fun ProfileArea(userName: String, viewModel: SettingsViewModel) {
-    var nameInput by remember(userName) { mutableStateOf(userName) }
-    OutlinedTextField(
-        value = nameInput,
-        onValueChange = { nameInput = it.take(40) },
-        label = { Text("Your name") },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth()
-    )
-    Text(
-        "Shown on Home and printed on exports.",
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    Button(
-        onClick = { viewModel.setUserName(nameInput) },
-        enabled = nameInput.trim() != userName,
-        modifier = Modifier.fillMaxWidth()
-    ) { Text("Save") }
-}
-
-@Composable
-private fun CurrencyArea(code: String, showSymbol: Boolean, decimals: Int, viewModel: SettingsViewModel) {
-    Text("Decimals shown on amounts", style = MaterialTheme.typography.bodyLarge)
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        listOf(0, 1, 2).forEachIndexed { index, value ->
-            SegmentedButton(
-                selected = decimals == value,
-                onClick = { viewModel.setDecimals(value) },
-                shape = SegmentedButtonDefaults.itemShape(index, 3)
-            ) {
-                Text(when (value) { 0 -> "None"; 1 -> "One"; else -> "Two" })
-            }
-        }
-    }
-    Text(
-        "Only changes how amounts look. Nothing recorded is rounded or changed.",
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    ToggleRow("Show currency symbol", "Off shows plain figures only", showSymbol, viewModel::setShowCurrencySymbol)
-    Text(
-        "Changing the currency only changes the label. Amounts you already recorded are not converted.",
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column {
-            DisplayCurrency.choices.forEachIndexed { index, choice ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { viewModel.setDisplayCurrency(choice.first) }
-                        .padding(horizontal = MonetaSpacing.cardPadding, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(choice.first, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.width(56.dp))
-                    Text(choice.second, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    if (choice.first == code) {
-                        Text("✓", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium)
-                    }
+private fun LayoutSection(prefs: com.moneta.app.data.settings.AppPreferences, viewModel: SettingsViewModel) {
+    SectionCard("Layout") {
+        ExpandRow("Bottom bar", "Show, hide and reorder tabs") {
+            prefs.tabOrder.forEachIndexed { index, key ->
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(tabLabel(key), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    TextButton(
+                        enabled = index > 0,
+                        onClick = {
+                            val list = prefs.tabOrder.toMutableList()
+                            list.removeAt(index)
+                            list.add(index - 1, key)
+                            viewModel.setTabOrder(list)
+                        }
+                    ) { Text("Left") }
+                    TextButton(
+                        enabled = index < prefs.tabOrder.size - 1,
+                        onClick = {
+                            val list = prefs.tabOrder.toMutableList()
+                            list.removeAt(index)
+                            list.add(index + 1, key)
+                            viewModel.setTabOrder(list)
+                        }
+                    ) { Text("Right") }
+                    Switch(
+                        checked = key !in prefs.hiddenTabs,
+                        enabled = key != "home",
+                        onCheckedChange = { on ->
+                            viewModel.setHiddenTabs(if (on) prefs.hiddenTabs - key else prefs.hiddenTabs + key)
+                        }
+                    )
                 }
-                if (index < DisplayCurrency.choices.size - 1) Divider()
             }
         }
-    }
-}
-
-@Composable
-private fun AppearanceArea(themeMode: ThemeMode, viewModel: SettingsViewModel) {
-    Text("Theme", style = MaterialTheme.typography.bodyLarge)
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        ThemeMode.entries.forEachIndexed { index, mode ->
-            SegmentedButton(
-                selected = themeMode == mode,
-                onClick = { viewModel.setThemeMode(mode) },
-                shape = SegmentedButtonDefaults.itemShape(index, ThemeMode.entries.size)
-            ) {
-                Text(
-                    when (mode) {
-                        ThemeMode.SYSTEM -> "System"
-                        ThemeMode.LIGHT -> "Light"
-                        ThemeMode.DARK -> "Dark"
-                    }
-                )
-            }
+        RowDivider()
+        ExpandRow("Record form", "Order and keypad options") {
+            SwitchRow("Save buttons at top", null, prefs.formSaveAtTop, viewModel::setFormSaveAtTop)
+            SwitchRow("Account and category in one row", null, prefs.formPickersInRow, viewModel::setFormPickersInRow)
+            SwitchRow("Pickers above the amount", null, prefs.formPickersAboveAmount, viewModel::setFormPickersAboveAmount)
+            SwitchRow("Notes above the amount", null, prefs.formNotesAboveAmount, viewModel::setFormNotesAboveAmount)
+            SwitchRow("Built-in number pad", "Calculator keys instead of the phone keyboard", prefs.formCustomKeypad, viewModel::setFormCustomKeypad)
+            SwitchRow("Date and time below the pad", null, prefs.formDateBelowKeypad, viewModel::setFormDateBelowKeypad)
+            SegmentRow(
+                "Pickers",
+                listOf("Pop-up list", "Chips"),
+                if (prefs.pickerStyle == PickerStyle.DROPDOWN) 0 else 1
+            ) { viewModel.setPickerStyle(if (it == 0) PickerStyle.DROPDOWN else PickerStyle.CHIPS) }
         }
     }
 }
 
 @Composable
-private fun BudgetsArea(carryForward: Boolean, rollover: Boolean, viewModel: SettingsViewModel) {
-    ToggleRow(
-        "Carry forward balance",
-        "Each month's opening balance includes what was left from earlier months",
-        carryForward,
-        viewModel::setCarryForwardBalance
-    )
-    ToggleRow(
-        "Roll over unspent budget",
-        "Add last month's unspent budget to this month's",
-        rollover,
-        viewModel::setRolloverBudgets
-    )
-}
-
-@Composable
-private fun ModulesArea(budgets: Boolean, goals: Boolean, bills: Boolean, subcategories: Boolean, viewModel: SettingsViewModel) {
-    ToggleRow("Budgets", "The Budgets tab", budgets, viewModel::setBudgetsEnabled)
-    ToggleRow("Goals", "Savings goals in the side menu", goals, viewModel::setGoalsEnabled)
-    ToggleRow("Bills", "Bill tracking in the side menu", bills, viewModel::setBillsEnabled)
-    ToggleRow(
-        "Sub-categories",
-        "Lets you create categories inside categories. Each one gets its own budget and analysis.",
-        subcategories,
-        viewModel::setSubcategoriesEnabled
-    )
-}
-
-@Composable
-private fun DashboardArea(hidden: Set<String>, order: List<String>, viewModel: SettingsViewModel) {
-    Text(
-        "Choose which cards appear on the Home page and move them up or down.",
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    order.forEachIndexed { index, key ->
-        val card = com.moneta.app.data.settings.HomeCard.entries.firstOrNull { it.name == key } ?: return@forEachIndexed
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(card.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            TextButton(
-                enabled = index > 0,
-                onClick = {
-                    val list = order.toMutableList()
-                    list.removeAt(index)
-                    list.add(index - 1, key)
-                    viewModel.setHomeCardOrder(list)
-                }
-            ) { Text("Up") }
-            TextButton(
-                enabled = index < order.size - 1,
-                onClick = {
-                    val list = order.toMutableList()
-                    list.removeAt(index)
-                    list.add(index + 1, key)
-                    viewModel.setHomeCardOrder(list)
-                }
-            ) { Text("Down") }
-            Switch(
-                checked = card.name !in hidden,
-                onCheckedChange = { on ->
-                    viewModel.setHiddenHomeCards(if (on) hidden - card.name else hidden + card.name)
-                }
-            )
-        }
-    }
-}
-
-@Composable
-private fun CustomizeArea(prefs: com.moneta.app.data.settings.AppPreferences, viewModel: SettingsViewModel) {
-    GroupLabel("Bottom bar")
-    Text(
-        "Turn tabs on or off and move them left or right. Home is always shown.",
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    prefs.tabOrder.forEachIndexed { index, key ->
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(tabLabel(key), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            TextButton(
-                enabled = index > 0,
-                onClick = {
-                    val list = prefs.tabOrder.toMutableList()
-                    list.removeAt(index)
-                    list.add(index - 1, key)
-                    viewModel.setTabOrder(list)
-                }
-            ) { Text("Left") }
-            TextButton(
-                enabled = index < prefs.tabOrder.size - 1,
-                onClick = {
-                    val list = prefs.tabOrder.toMutableList()
-                    list.removeAt(index)
-                    list.add(index + 1, key)
-                    viewModel.setTabOrder(list)
-                }
-            ) { Text("Right") }
-            Switch(
-                checked = key !in prefs.hiddenTabs,
-                enabled = key != "home",
-                onCheckedChange = { on ->
-                    viewModel.setHiddenTabs(if (on) prefs.hiddenTabs - key else prefs.hiddenTabs + key)
-                }
-            )
-        }
-    }
-
-    Divider(modifier = Modifier.padding(vertical = MonetaSpacing.xs))
-    GroupLabel("Record form")
-    ToggleRow("Save buttons at top", "Instead of the bottom", prefs.formSaveAtTop, viewModel::setFormSaveAtTop)
-    ToggleRow("Account and category in one row", "Pop-up list style only", prefs.formPickersInRow, viewModel::setFormPickersInRow)
-    ToggleRow("Pickers above the amount", "Choose account and category first", prefs.formPickersAboveAmount, viewModel::setFormPickersAboveAmount)
-    ToggleRow("Notes above the amount", "Instead of below it", prefs.formNotesAboveAmount, viewModel::setFormNotesAboveAmount)
-    ToggleRow("Date and time below the pad", "Moves the date row under the number pad", prefs.formDateBelowKeypad, viewModel::setFormDateBelowKeypad)
-    ToggleRow("Built-in number pad", "Calculator keys (+ − × ÷) instead of the phone keyboard", prefs.formCustomKeypad, viewModel::setFormCustomKeypad)
-    Text("Account and category pickers", style = MaterialTheme.typography.bodyMedium)
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        PickerStyle.entries.forEachIndexed { index, style ->
-            SegmentedButton(
-                selected = prefs.pickerStyle == style,
-                onClick = { viewModel.setPickerStyle(style) },
-                shape = SegmentedButtonDefaults.itemShape(index, PickerStyle.entries.size)
-            ) {
-                Text(if (style == PickerStyle.CHIPS) "Chips" else "Pop-up list")
-            }
-        }
-    }
-}
-
-@Composable
-private fun RemindersArea(enabled: Boolean, hour: Int, minute: Int, viewModel: SettingsViewModel) {
+private fun RemindersSection(enabled: Boolean, hour: Int, minute: Int, viewModel: SettingsViewModel) {
     val context = LocalContext.current
     var showTime by remember { mutableStateOf(false) }
     var blocked by remember { mutableStateOf(false) }
@@ -497,40 +474,44 @@ private fun RemindersArea(enabled: Boolean, hour: Int, minute: Int, viewModel: S
         if (granted) viewModel.setReminder(true, hour, minute)
     }
 
-    ToggleRow(
-        "Daily reminder",
-        "A notification asking you to record your transactions",
-        enabled
-    ) { on ->
-        if (!on) {
-            blocked = false
-            viewModel.setReminder(false, hour, minute)
-        } else {
-            val needsPermission = Build.VERSION.SDK_INT >= 33 &&
-                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-            if (needsPermission) {
-                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            } else {
+    SectionCard("Reminders") {
+        SwitchRow("Daily reminder", "A notification to record your transactions", enabled) { on ->
+            if (!on) {
                 blocked = false
-                viewModel.setReminder(true, hour, minute)
+                viewModel.setReminder(false, hour, minute)
+            } else {
+                val needsPermission = Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                if (needsPermission) {
+                    permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    blocked = false
+                    viewModel.setReminder(true, hour, minute)
+                }
             }
         }
+        if (enabled) {
+            RowDivider()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showTime = true }
+                    .padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Time", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text(timeLabel(hour, minute), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+        if (blocked) {
+            Text(
+                "Notifications are blocked for Moneta. Allow them in your phone's app settings to get reminders.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 6.dp)
+            )
+        }
     }
-    OutlinedButton(onClick = { showTime = true }, modifier = Modifier.fillMaxWidth()) {
-        Text("Time: " + timeLabel(hour, minute))
-    }
-    if (blocked) {
-        Text(
-            "Notifications are blocked for Moneta. Allow them in your phone's app settings to get reminders.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error
-        )
-    }
-    Text(
-        "Your phone may deliver it a few minutes late to save battery.",
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
 
     if (showTime) {
         val timeState = rememberTimePickerState(initialHour = hour, initialMinute = minute, is24Hour = false)
@@ -548,22 +529,8 @@ private fun RemindersArea(enabled: Boolean, hour: Int, minute: Int, viewModel: S
     }
 }
 
-@Composable
-private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
+private fun timeLabel(hour: Int, minute: Int): String =
+    LocalTime.of(hour.coerceIn(0, 23), minute.coerceIn(0, 59)).format(DateTimeFormatter.ofPattern("h:mm a"))
 
 private fun tabLabel(key: String): String = when (key) {
     "home" -> "Home"

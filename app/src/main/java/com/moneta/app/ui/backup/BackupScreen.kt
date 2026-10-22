@@ -48,6 +48,21 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let { viewModel.requestRestore(it.toString()) } }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val folderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            viewModel.setBackupFolder(uri.toString())
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         SubPageHeader(title = "Backup & restore", onBack = onBack)
         Column(
@@ -107,8 +122,8 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
                         }
                     }
                     Text(
-                        "Saved on this phone when you open the app and the time is due. The latest 7 are kept. " +
-                            "They are removed if you uninstall the app, so also download a copy now and then.",
+                        "Saved inside Moneta when you open the app and a backup is due (latest 7 kept). " +
+                            "Those copies are deleted if the app is uninstalled, so choose a folder below to keep copies outside the app.",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -117,6 +132,23 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
                         else "No automatic backup yet.",
                         style = MaterialTheme.typography.bodySmall
                     )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Extra copy in a folder", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                            Text(
+                                if (state.backupFolder.isBlank()) "Not set"
+                                else android.net.Uri.decode(android.net.Uri.parse(state.backupFolder).lastPathSegment.orEmpty()),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        TextButton(onClick = { folderLauncher.launch(null) }) {
+                            Text(if (state.backupFolder.isBlank()) "Choose" else "Change")
+                        }
+                        if (state.backupFolder.isNotBlank()) {
+                            TextButton(onClick = { viewModel.setBackupFolder("") }) { Text("Stop") }
+                        }
+                    }
                     OutlinedButton(
                         onClick = viewModel::backupNow,
                         enabled = !state.isWorking,
@@ -144,27 +176,6 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
                 Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             }
 
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(MonetaSpacing.cardPadding),
-                    verticalArrangement = Arrangement.spacedBy(MonetaSpacing.xs)
-                ) {
-                    Text("Cloud backup", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        if (state.isCloudConnected) "Connected to ${state.cloudProviderName}."
-                        else "Not available yet. ${state.cloudProviderName} needs a Google Cloud setup by the app's publisher.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedButton(
-                        onClick = viewModel::connectCloud,
-                        enabled = !state.isCloudConnected,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(if (state.isCloudConnected) "Connected" else "Connect ${state.cloudProviderName}")
-                    }
-                }
-            }
         }
     }
 

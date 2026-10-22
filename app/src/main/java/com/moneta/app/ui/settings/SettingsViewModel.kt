@@ -63,6 +63,8 @@ class SettingsViewModel @Inject constructor(
 
     fun setHideBalance(hidden: Boolean) = viewModelScope.launch { settingsRepository.setHideBalance(hidden) }
 
+    fun setCompactHome(on: Boolean) = viewModelScope.launch { settingsRepository.setCompactHome(on) }
+
     fun setHomeCardOrder(order: List<String>) = viewModelScope.launch { settingsRepository.setHomeCardOrder(order) }
 
     fun setHiddenHomeCards(keys: Set<String>) = viewModelScope.launch { settingsRepository.setHiddenHomeCards(keys) }
