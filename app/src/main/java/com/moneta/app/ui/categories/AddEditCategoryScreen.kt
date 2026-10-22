@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.FilterChip
@@ -108,7 +110,7 @@ fun AddEditCategoryScreen(
                             Text("Inside", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(parentLabel ?: "Nothing (top-level category)", style = MaterialTheme.typography.bodyLarge)
                         }
-                        Icon(androidx.compose.material.icons.Icons.Filled.ArrowDropDown, contentDescription = null)
+                        Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
                     }
                 }
                 androidx.compose.material3.DropdownMenu(expanded = parentMenuOpen, onDismissRequest = { parentMenuOpen = false }) {

@@ -188,3 +188,6 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Reports: six-period chart now sits below the category list on Expenses and Income.
 - Settings: one organised page (Profile, General, Money and budgets, Home page, Layout, Reminders); name saves reliably.
 - Backup: optional extra copy of automatic backups in a folder you choose; cloud placeholder card removed.
+
+## v0.22.1
+- Build fix: missing icon import in the category form.
