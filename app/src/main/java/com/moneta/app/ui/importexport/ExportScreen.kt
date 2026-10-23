@@ -81,13 +81,18 @@ fun ExportScreen(onBack: () -> Unit, viewModel: ExportViewModel = hiltViewModel(
                 enabled = !state.isExporting,
                 onExport = { xlsxLauncher.launch(viewModel.fileName("xlsx")) }
             )
+            val plusVm: com.moneta.app.ui.plus.PlusViewModel = hiltViewModel()
+            val plusState by plusVm.state.collectAsState()
+            if (!plusState.insightsUnlocked) {
+                com.moneta.app.ui.plus.LockedInsightsCard(what = "PDF report", viewModel = plusVm)
+            }
             FormatRow(
                 badge = "PDF",
                 badgeColor = Color(0xFFC62828),
                 title = "PDF report",
                 subtitle = "A neat printable statement",
                 fileName = viewModel.fileName("pdf"),
-                enabled = !state.isExporting,
+                enabled = !state.isExporting && plusState.insightsUnlocked,
                 onExport = { pdfLauncher.launch(viewModel.fileName("pdf")) }
             )
             FormatRow(

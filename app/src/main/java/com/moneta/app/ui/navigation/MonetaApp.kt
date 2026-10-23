@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.AccountBalance
@@ -251,6 +252,9 @@ private fun MonetaAppContent(
                 onDismiss = { settingsViewModel.dismissOnboardingReminder() }
             )
         }
+        androidx.compose.runtime.CompositionLocalProvider(
+            com.moneta.app.ui.plus.LocalOpenPlus provides { navController.navigate(PLUS_ROUTE) }
+        ) {
         NavHost(
             navController = navController,
             startDestination = startRoute,
@@ -451,6 +455,10 @@ private fun MonetaAppContent(
                 AddRecurringScreen(onDone = { navController.popBackStack() })
             }
 
+            composable(PLUS_ROUTE) {
+                com.moneta.app.ui.plus.PlusScreen(onBack = goBack)
+            }
+
             composable(ABOUT_ROUTE) {
                 com.moneta.app.ui.settings.AboutScreen(onBack = goBack)
             }
@@ -459,6 +467,7 @@ private fun MonetaAppContent(
             composable(SETTINGS_ROUTE) {
                 SettingsScreen(onBack = goBack, onOpenRoute = { route -> navController.navigate(route) })
             }
+        }
         }
       }
     }
@@ -629,6 +638,7 @@ private fun MonetaDrawerContent(
         add(DrawerEntry("Import", Icons.Outlined.FileUpload, IMPORT_ROUTE))
         add(DrawerEntry("Export", Icons.Outlined.FileDownload, EXPORT_ROUTE))
         add(DrawerEntry("Backup & restore", Icons.Outlined.Backup, BACKUP_ROUTE))
+        add(DrawerEntry("Moneta Plus", androidx.compose.material.icons.Icons.Outlined.Star, PLUS_ROUTE))
         add(DrawerEntry("Settings", Icons.Outlined.Settings, SETTINGS_ROUTE))
         add(DrawerEntry("About", Icons.Outlined.Info, ABOUT_ROUTE))
     }

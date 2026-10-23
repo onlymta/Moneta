@@ -195,7 +195,8 @@ private fun OverviewTab(state: ReportsUiState, onGoTo: (ReportTab) -> Unit, onOp
         }
         if (state.trend.isNotEmpty() && state.trend.any { !it.income.isZero || !it.expense.isZero }) {
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                com.moneta.app.ui.plus.InsightsGate(what = "Income vs expenses chart") {
+Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
                         Text("Income vs expenses", style = MaterialTheme.typography.titleMedium)
                         Text(
@@ -221,6 +222,7 @@ private fun OverviewTab(state: ReportsUiState, onGoTo: (ReportTab) -> Unit, onOp
                         )
                     }
                 }
+}
             }
         }
         if (state.transactionCount == 0) {
@@ -484,7 +486,8 @@ private fun BreakdownTab(
         }
         if (trend.size > 1) {
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                com.moneta.app.ui.plus.InsightsGate(what = "Trend chart") {
+Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
                         Text(
                             (if (isIncome) "Income" else "Expenses") + ", last " + trend.size + " periods",
@@ -503,6 +506,7 @@ private fun BreakdownTab(
                         )
                     }
                 }
+}
             }
         }
         item {
@@ -653,7 +657,8 @@ private fun CategoryDetail(analysis: CategoryAnalysis, onBack: () -> Unit, onTra
                 val actualColor = if (analysis.isIncome) IncomeGreen else ExpenseRed
                 val budgetColor = MaterialTheme.colorScheme.tertiary
                 val showBudget = !analysis.isIncome && analysis.bars.any { it.budget != null }
-                Card(modifier = Modifier.fillMaxWidth()) {
+                com.moneta.app.ui.plus.InsightsGate(what = "Category trend chart") {
+Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
                         Text(
                             analysis.name + ", last " + analysis.bars.size + " periods",
@@ -692,6 +697,7 @@ private fun CategoryDetail(analysis: CategoryAnalysis, onBack: () -> Unit, onTra
                         )
                     }
                 }
+}
             }
         }
         item {

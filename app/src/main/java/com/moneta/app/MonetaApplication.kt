@@ -17,12 +17,23 @@ class MonetaApplication : Application() {
     @Inject lateinit var categoryDao: CategoryDao
     @Inject lateinit var recurringTransactionRepository: RecurringTransactionRepository
     @Inject lateinit var autoBackupManager: com.moneta.app.data.backup.AutoBackupManager
+    @Inject lateinit var plusRepository: com.moneta.app.data.plus.PlusRepository
+    @Inject lateinit var billingManager: com.moneta.app.data.plus.BillingManager
 
     override fun onCreate() {
         super.onCreate()
         // Both run on the process lifecycle scope rather than blocking app
         // startup (Section 42: startup performance matters for Play Store
         // quality).
+        ProcessLifecycleOwner.get().lifecycleScope.launch {
+            // Starts the free Plus trial on the very first run, then re-checks the Play purchase.
+            plusRepository.ensureTrialStarted()
+            try {
+                billingManager.refresh()
+            } catch (e: Exception) {
+                // Billing being unavailable must never stop the app.
+            }
+        }
         ProcessLifecycleOwner.get().lifecycleScope.launch {
             seedDefaultCategoriesIfNeeded()
         }

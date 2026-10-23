@@ -32,7 +32,8 @@ data class BackupUiState(
     val frequency: BackupFrequency = BackupFrequency.OFF,
     val lastAutoBackupAt: Long = 0L,
     val localBackups: List<LocalBackup> = emptyList(),
-    val backupFolder: String = ""
+    val backupFolder: String = "",
+    val hasPlus: Boolean = true
 )
 
 private const val LOCAL_PREFIX = "local:"
@@ -43,7 +44,8 @@ class BackupViewModel @Inject constructor(
     private val backupManager: BackupManager,
     private val cloudBackupProvider: CloudBackupProvider,
     private val autoBackupManager: AutoBackupManager,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val plusRepository: com.moneta.app.data.plus.PlusRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -62,6 +64,9 @@ class BackupViewModel @Inject constructor(
                     )
                 }
             }
+        }
+        viewModelScope.launch {
+            plusRepository.hasPlus.collect { plus -> _uiState.update { it.copy(hasPlus = plus) } }
         }
         refreshLocal()
         viewModelScope.launch {

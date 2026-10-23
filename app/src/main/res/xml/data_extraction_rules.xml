@@ -2,8 +2,10 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="database" path="." />
+        <exclude domain="file" path="datastore/moneta_plus.preferences_pb" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="database" path="." />
+        <exclude domain="file" path="datastore/moneta_plus.preferences_pb" />
     </device-transfer>
 </data-extraction-rules>

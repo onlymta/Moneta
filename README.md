@@ -191,3 +191,9 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 
 ## v0.22.1
 - Build fix: missing icon import in the category form.
+
+## v1.0.0 - Moneta Plus, ads, Play Store release
+- One-time **Moneta Plus** purchase (Play Billing, product id `moneta_plus`), 14-day free trial, restore purchase.
+- Free tier: rewarded ad unlocks charts and PDF report for 24 hours. Plus: no ads, sub-categories, compact Home and card order, scheduled backups and folder copy.
+- Entitlement kept in its own DataStore (not in backups, excluded from Android auto-backup).
+- CI builds a signed Play Store bundle; see PLAY_STORE_SETUP.md and the `store/` folder.

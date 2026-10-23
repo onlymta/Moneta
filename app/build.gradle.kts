@@ -6,6 +6,14 @@ plugins {
     kotlin("kapt")
 }
 
+// Ad and release settings. Defaults are Google's public TEST ids, so a build without real ids only
+// shows test ads. Real ids come from CI secrets (or gradle properties) - see PLAY_STORE_SETUP.md.
+fun secretOf(name: String): String? =
+    (project.findProperty(name) as String?)?.takeIf { it.isNotBlank() }
+        ?: System.getenv(name)?.takeIf { it.isNotBlank() }
+val admobAppId: String = secretOf("ADMOB_APP_ID") ?: "ca-app-pub-3940256099942544~3347511713"
+val admobRewardedId: String = secretOf("ADMOB_REWARDED_ID") ?: "ca-app-pub-3940256099942544/5224354917"
+
 android {
     namespace = "com.moneta.app"
     compileSdk = 35
@@ -14,8 +22,10 @@ android {
         applicationId = "com.moneta.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 29
-        versionName = "0.22.1"
+        versionCode = secretOf("VERSION_CODE")?.toIntOrNull() ?: 30
+        versionName = "1.0.0"
+        manifestPlaceholders["admobAppId"] = admobAppId
+        buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobRewardedId\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -123,6 +133,11 @@ dependencies {
 
     // Settings persistence (Phase 10)
     implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    // Moneta Plus: Google Play Billing (one-time purchase), AdMob rewarded ads, and the EEA/UK consent form
+    implementation("com.android.billingclient:billing:7.1.1")
+    implementation("com.google.android.gms:play-services-ads:23.3.0")
+    implementation("com.google.android.ump:user-messaging-platform:3.0.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

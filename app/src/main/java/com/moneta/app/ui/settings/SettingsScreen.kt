@@ -114,6 +114,7 @@ fun SettingsScreen(
                 .padding(horizontal = MonetaSpacing.screenHorizontal, vertical = MonetaSpacing.sm),
             verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
         ) {
+            PlusStatusCard()
             ProfileSection(prefs.userName, viewModel)
             GeneralSection(prefs, viewModel)
             MoneySection(prefs, viewModel)
@@ -121,6 +122,32 @@ fun SettingsScreen(
             LayoutSection(prefs, viewModel)
             RemindersSection(prefs.reminderEnabled, prefs.reminderHour, prefs.reminderMinute, viewModel)
             Spacer(Modifier.height(MonetaSpacing.xl))
+        }
+    }
+}
+
+@Composable
+private fun PlusStatusCard(plusViewModel: com.moneta.app.ui.plus.PlusViewModel = hiltViewModel()) {
+    val plus by plusViewModel.state.collectAsState()
+    val openPlus = com.moneta.app.ui.plus.LocalOpenPlus.current
+    Card(modifier = Modifier.fillMaxWidth().clickable { openPlus() }) {
+        Row(
+            modifier = Modifier.padding(MonetaSpacing.cardPadding),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Moneta Plus", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    when {
+                        plus.purchased -> "Unlocked. Thank you!"
+                        plus.trialActive -> "Free trial: ${plus.trialDaysLeft} day(s) left"
+                        else -> "No ads and all features, one payment"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(if (plus.purchased) "View" else "See", color = MaterialTheme.colorScheme.primary)
         }
     }
 }
@@ -327,6 +354,10 @@ private fun GeneralSection(prefs: com.moneta.app.data.settings.AppPreferences, v
 
 @Composable
 private fun MoneySection(prefs: com.moneta.app.data.settings.AppPreferences, viewModel: SettingsViewModel) {
+    val plusVm: com.moneta.app.ui.plus.PlusViewModel = hiltViewModel()
+    val plusState by plusVm.state.collectAsState()
+    val hasPlus = plusState.hasPlus
+    val openPlus = com.moneta.app.ui.plus.LocalOpenPlus.current
     SectionCard("Money and budgets") {
         SwitchRow(
             "Carry forward balance",
@@ -344,9 +375,9 @@ private fun MoneySection(prefs: com.moneta.app.data.settings.AppPreferences, vie
         RowDivider()
         SwitchRow(
             "Sub-categories",
-            "Categories inside categories, each with its own budget and analysis",
+            if (hasPlus) "Categories inside categories, each with its own budget and analysis" else "Plus feature: categories inside categories, each with its own budget",
             prefs.subcategoriesEnabled,
-            viewModel::setSubcategoriesEnabled
+            { on -> if (hasPlus) viewModel.setSubcategoriesEnabled(on) else openPlus() }
         )
         RowDivider()
         SwitchRow("Budgets", "Show the Budgets tab", prefs.budgetsEnabled, viewModel::setBudgetsEnabled)
@@ -359,12 +390,16 @@ private fun MoneySection(prefs: com.moneta.app.data.settings.AppPreferences, vie
 
 @Composable
 private fun HomeSection(prefs: com.moneta.app.data.settings.AppPreferences, viewModel: SettingsViewModel) {
+    val plusVm: com.moneta.app.ui.plus.PlusViewModel = hiltViewModel()
+    val plusState by plusVm.state.collectAsState()
+    val hasPlus = plusState.hasPlus
+    val openPlus = com.moneta.app.ui.plus.LocalOpenPlus.current
     SectionCard("Home page") {
         SwitchRow(
             "Compact cards",
-            "Three wide cards instead of six tiles",
+            if (hasPlus) "Three wide cards instead of six tiles" else "Plus feature: three wide cards instead of six tiles",
             prefs.compactHome,
-            viewModel::setCompactHome
+            { on -> if (hasPlus) viewModel.setCompactHome(on) else openPlus() }
         )
         RowDivider()
         ExpandRow("Cards", "Show, hide and reorder") {
@@ -377,19 +412,27 @@ private fun HomeSection(prefs: com.moneta.app.data.settings.AppPreferences, view
                     TextButton(
                         enabled = index > 0 && !prefs.compactHome,
                         onClick = {
-                            val list = order.toMutableList()
-                            list.removeAt(index)
-                            list.add(index - 1, key)
-                            viewModel.setHomeCardOrder(list)
+                            if (!hasPlus) {
+                                openPlus()
+                            } else {
+                                val list = order.toMutableList()
+                                list.removeAt(index)
+                                list.add(index - 1, key)
+                                viewModel.setHomeCardOrder(list)
+                            }
                         }
                     ) { Text("Up") }
                     TextButton(
                         enabled = index < order.size - 1 && !prefs.compactHome,
                         onClick = {
-                            val list = order.toMutableList()
-                            list.removeAt(index)
-                            list.add(index + 1, key)
-                            viewModel.setHomeCardOrder(list)
+                            if (!hasPlus) {
+                                openPlus()
+                            } else {
+                                val list = order.toMutableList()
+                                list.removeAt(index)
+                                list.add(index + 1, key)
+                                viewModel.setHomeCardOrder(list)
+                            }
                         }
                     ) { Text("Down") }
                     Switch(

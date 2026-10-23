@@ -49,6 +49,7 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
     ) { uri -> uri?.let { viewModel.requestRestore(it.toString()) } }
 
     val context = androidx.compose.ui.platform.LocalContext.current
+    val openPlus = com.moneta.app.ui.plus.LocalOpenPlus.current
     val folderLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -79,7 +80,7 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
                 ) {
                     Text("Your data file", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Everything in one file you save wherever you like.",
+                        "Everything in one file. When saving, pick Google Drive, OneDrive, Dropbox or any storage app from the list to keep it in the cloud, free.",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -104,10 +105,22 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
                     verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
                 ) {
                     Text("Automatic backup", style = MaterialTheme.typography.titleMedium)
+                    if (!state.hasPlus) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Plus feature: backups on a schedule, plus an extra copy in a folder (Google Drive, if your phone offers it).",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = openPlus) { Text("See Plus") }
+                        }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
                         BackupFrequency.entries.forEach { option ->
                             FilterChip(
                                 selected = state.frequency == option,
+                                enabled = state.hasPlus,
                                 onClick = { viewModel.setFrequency(option) },
                                 label = {
                                     Text(
@@ -142,7 +155,7 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        TextButton(onClick = { folderLauncher.launch(null) }) {
+                        TextButton(onClick = { folderLauncher.launch(null) }, enabled = state.hasPlus) {
                             Text(if (state.backupFolder.isBlank()) "Choose" else "Change")
                         }
                         if (state.backupFolder.isNotBlank()) {
@@ -151,7 +164,7 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
                     }
                     OutlinedButton(
                         onClick = viewModel::backupNow,
-                        enabled = !state.isWorking,
+                        enabled = !state.isWorking && state.hasPlus,
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("Back up now") }
 

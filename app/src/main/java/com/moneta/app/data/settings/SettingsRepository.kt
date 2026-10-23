@@ -123,7 +123,8 @@ private val Context.dataStore by preferencesDataStore(name = "moneta_settings")
 
 @Singleton
 class SettingsRepository @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val plusRepository: com.moneta.app.data.plus.PlusRepository
 ) {
     private object Keys {
         val THEME_MODE = stringPreferencesKey("theme_mode")
@@ -169,7 +170,10 @@ class SettingsRepository @Inject constructor(
         val DISMISSED_ALERTS = stringSetPreferencesKey("dismissed_alert_ids")
     }
 
-    val preferences: Flow<AppPreferences> = context.dataStore.data.map { prefs ->
+    val preferences: Flow<AppPreferences> = kotlinx.coroutines.flow.combine(
+        context.dataStore.data,
+        plusRepository.hasPlus
+    ) { prefs, hasPlus ->
         AppPreferences(
             themeMode = prefs[Keys.THEME_MODE]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() }
                 ?: ThemeMode.SYSTEM,
@@ -211,17 +215,17 @@ class SettingsRepository @Inject constructor(
             decimals = (prefs[Keys.DECIMALS] ?: 2).coerceIn(0, 2),
             hideBalance = prefs[Keys.HIDE_BALANCE] ?: false,
             hiddenHomeCards = prefs[Keys.HIDDEN_HOME_CARDS] ?: emptySet(),
-            homeCardOrder = parseHomeCardOrder(prefs[Keys.HOME_CARD_ORDER]),
-            compactHome = prefs[Keys.HOME_COMPACT] ?: false,
-            subcategoriesEnabled = prefs[Keys.SUBCATEGORIES] ?: false,
+            homeCardOrder = if (hasPlus) parseHomeCardOrder(prefs[Keys.HOME_CARD_ORDER]) else HomeCard.entries.map { it.name },
+            compactHome = hasPlus && (prefs[Keys.HOME_COMPACT] ?: false),
+            subcategoriesEnabled = hasPlus && (prefs[Keys.SUBCATEGORIES] ?: false),
             reminderEnabled = prefs[Keys.REMINDER_ENABLED] ?: false,
             reminderHour = prefs[Keys.REMINDER_HOUR] ?: 21,
             reminderMinute = prefs[Keys.REMINDER_MINUTE] ?: 0,
-            autoBackupFrequency = prefs[Keys.AUTO_BACKUP_FREQUENCY]
+            autoBackupFrequency = if (!hasPlus) BackupFrequency.OFF else prefs[Keys.AUTO_BACKUP_FREQUENCY]
                 ?.let { runCatching { BackupFrequency.valueOf(it) }.getOrNull() }
                 ?: BackupFrequency.OFF,
             lastAutoBackupAt = prefs[Keys.LAST_AUTO_BACKUP] ?: 0L,
-            autoBackupFolder = prefs[Keys.AUTO_BACKUP_FOLDER] ?: "",
+            autoBackupFolder = if (hasPlus) (prefs[Keys.AUTO_BACKUP_FOLDER] ?: "") else "",
             dismissedAlertIds = prefs[Keys.DISMISSED_ALERTS] ?: emptySet()
         )
     }

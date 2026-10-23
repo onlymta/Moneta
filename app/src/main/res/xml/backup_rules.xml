@@ -6,4 +6,5 @@
 -->
 <full-backup-content>
     <exclude domain="database" path="." />
+    <exclude domain="file" path="datastore/moneta_plus.preferences_pb" />
 </full-backup-content>
