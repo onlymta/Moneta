@@ -204,3 +204,6 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Budgets: parent categories have a receipt button to open all their transactions.
 - New "Plan and adjust" page (from Budgets): expected income, savings target, how last month went, and suggested next-month budgets (overspend is taken back; optionally add back underspend).
 - Goals: optional target date (picker), order by My order / Earliest date / Smallest first, choose the accounts that pay for goals, and per-goal "savings can cover it / needs X more" in priority order.
+
+## v1.1.1
+- Build fix: AddGoalScreen was missing the setValue import for the date-picker state.
