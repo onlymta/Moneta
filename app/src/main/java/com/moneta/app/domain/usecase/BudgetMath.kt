@@ -50,15 +50,23 @@ fun monthCategoryBudgets(all: List<Budget>, monthStart: LocalDate): Map<Long, Lo
     }
     .associate { it.categoryId!! to it.amount.minorUnits }
 
-/** Budgets plus, when roll-over is on, what was left unspent of last month's budget in each category. */
+/** Budgets plus, when roll-over is on, what was left unspent of last month's budget, and minus last month's overspending when that is on. */
 fun effectiveBudgets(
     thisMonth: Map<Long, Long>,
     lastMonth: Map<Long, Long>,
     lastMonthSpent: Map<Long, Long>,
-    rollover: Boolean
+    rollover: Boolean,
+    carryOverspend: Boolean = false
 ): Map<Long, Long> = thisMonth.mapValues { (id, base) ->
-    val left = if (rollover) (lastMonth[id] ?: 0L) - (lastMonthSpent[id] ?: 0L) else 0L
-    base + (if (left > 0L) left else 0L)
+    val prevBase = lastMonth[id]
+    val diff = if (prevBase != null) prevBase - (lastMonthSpent[id] ?: 0L) else 0L
+    val carry = when {
+        diff > 0L && rollover -> diff
+        // Overspending last month shrinks this month's budget, but never below zero.
+        diff < 0L && carryOverspend -> maxOf(diff, -base)
+        else -> 0L
+    }
+    base + carry
 }
 
 /**

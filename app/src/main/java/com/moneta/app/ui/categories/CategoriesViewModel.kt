@@ -41,7 +41,7 @@ data class PendingReassignment(
 @HiltViewModel
 class CategoriesViewModel @Inject constructor(
     private val categoryRepository: CategoryRepository,
-    settingsRepository: com.moneta.app.data.settings.SettingsRepository
+    private val settingsRepository: com.moneta.app.data.settings.SettingsRepository
 ) : ViewModel() {
 
     private val prefsFlow = settingsRepository.preferences
@@ -85,6 +85,16 @@ class CategoriesViewModel @Inject constructor(
             pendingReassignment = pending
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CategoriesUiState())
+
+    fun setSubcategoriesEnabled(on: Boolean) {
+        viewModelScope.launch { settingsRepository.setSubcategoriesEnabled(on) }
+    }
+
+    fun saveOrder(ids: List<Long>) {
+        viewModelScope.launch { categoryRepository.saveOrder(ids) }
+    }
+
+    suspend fun mostUsedFirst(ids: List<Long>): List<Long> = categoryRepository.mostUsedFirst(ids)
 
     fun onTypeSelected(type: CategoryType) {
         selectedTypeFlow.value = type

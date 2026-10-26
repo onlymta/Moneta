@@ -124,7 +124,11 @@ data class AppPreferences(
     /** Goals page: ids in the user's own order (used when the sort is MANUAL). */
     val goalOrder: List<Long> = emptyList(),
     /** Goals page: accounts whose money pays for goals (empty = all Savings accounts). */
-    val goalAccountIds: Set<Long> = emptySet()
+    val goalAccountIds: Set<Long> = emptySet(),
+    /** Budgets page order: SMART (budgeted first, most used) or ORDER (the category order). */
+    val budgetSort: String = "SMART",
+    /** When on, spending over a category's budget is taken off the same category's budget next month. */
+    val carryOverspend: Boolean = false
 )
 
 val DEFAULT_TAB_ORDER = listOf("home", "transactions", "budgets", "accounts", "reports")
@@ -180,6 +184,8 @@ class SettingsRepository @Inject constructor(
         val DISMISSED_ALERTS = stringSetPreferencesKey("dismissed_alert_ids")
         val PLAN_INCOME = longPreferencesKey("plan_income_minor")
         val PLAN_SAVINGS = longPreferencesKey("plan_savings_minor")
+        val BUDGET_SORT = stringPreferencesKey("budget_sort")
+        val CARRY_OVERSPEND = booleanPreferencesKey("carry_overspend")
         val GOAL_SORT = stringPreferencesKey("goal_sort")
         val GOAL_ORDER = stringPreferencesKey("goal_order")
         val GOAL_ACCOUNTS = stringPreferencesKey("goal_accounts")
@@ -244,6 +250,8 @@ class SettingsRepository @Inject constructor(
             dismissedAlertIds = prefs[Keys.DISMISSED_ALERTS] ?: emptySet(),
             planIncomeMinor = prefs[Keys.PLAN_INCOME] ?: 0L,
             planSavingsMinor = prefs[Keys.PLAN_SAVINGS] ?: 0L,
+            budgetSort = prefs[Keys.BUDGET_SORT] ?: "SMART",
+            carryOverspend = prefs[Keys.CARRY_OVERSPEND] ?: false,
             goalSort = prefs[Keys.GOAL_SORT] ?: "MANUAL",
             goalOrder = prefs[Keys.GOAL_ORDER]?.split(",")?.mapNotNull { it.toLongOrNull() } ?: emptyList(),
             goalAccountIds = prefs[Keys.GOAL_ACCOUNTS]?.split(",")?.mapNotNull { it.toLongOrNull() }?.toSet() ?: emptySet()
@@ -390,6 +398,10 @@ class SettingsRepository @Inject constructor(
         it[Keys.PLAN_INCOME] = incomeMinor.coerceAtLeast(0L)
         it[Keys.PLAN_SAVINGS] = savingsMinor.coerceAtLeast(0L)
     }
+
+    suspend fun setBudgetSort(sort: String) = context.dataStore.edit { it[Keys.BUDGET_SORT] = sort }
+
+    suspend fun setCarryOverspend(on: Boolean) = context.dataStore.edit { it[Keys.CARRY_OVERSPEND] = on }
 
     suspend fun setGoalSort(sort: String) = context.dataStore.edit { it[Keys.GOAL_SORT] = sort }
 

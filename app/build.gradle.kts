@@ -22,8 +22,8 @@ android {
         applicationId = "com.moneta.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = secretOf("VERSION_CODE")?.toIntOrNull() ?: 32
-        versionName = "1.1.1"
+        versionCode = secretOf("VERSION_CODE")?.toIntOrNull() ?: 33
+        versionName = "1.2.0"
         manifestPlaceholders["admobAppId"] = admobAppId
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobRewardedId\"")
 

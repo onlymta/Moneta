@@ -7,6 +7,9 @@ import androidx.room.Update
 import com.moneta.app.data.local.entity.AccountEntity
 import kotlinx.coroutines.flow.Flow
 
+/** How many records use an account or a category, used to put the most used first. */
+data class UseCount(val id: Long, val uses: Int)
+
 @Dao
 interface AccountDao {
 
@@ -19,6 +22,12 @@ interface AccountDao {
 
     @Query("SELECT * FROM accounts ORDER BY sort_order ASC")
     fun observeAllAccounts(): Flow<List<AccountEntity>>
+
+    @Query("UPDATE accounts SET sort_order = :order WHERE id = :id")
+    suspend fun setSortOrder(id: Long, order: Int)
+
+    @Query("SELECT account_id AS id, COUNT(*) AS uses FROM transactions WHERE is_deleted = 0 GROUP BY account_id")
+    suspend fun useCounts(): List<UseCount>
 
     @Query("SELECT * FROM accounts WHERE id = :id")
     suspend fun getById(id: Long): AccountEntity?

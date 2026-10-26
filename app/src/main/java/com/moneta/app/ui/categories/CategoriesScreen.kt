@@ -57,6 +57,10 @@ fun CategoriesScreen(
     viewModel: CategoriesViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    var reordering by remember { mutableStateOf(false) }
+    val plusVm: com.moneta.app.ui.plus.PlusViewModel = hiltViewModel()
+    val plusState by plusVm.state.collectAsState()
+    val openPlus = com.moneta.app.ui.plus.LocalOpenPlus.current
 
     Scaffold(
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
@@ -84,6 +88,31 @@ fun CategoriesScreen(
                 )
             }
 
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = MonetaSpacing.screenHorizontal),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Sub-categories", style = MaterialTheme.typography.bodyMedium)
+                    if (!plusState.hasPlus) {
+                        Text(
+                            "A Moneta Plus feature",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                androidx.compose.material3.Switch(
+                    checked = state.subcategoriesEnabled,
+                    onCheckedChange = { on ->
+                        if (plusState.hasPlus) viewModel.setSubcategoriesEnabled(on) else openPlus()
+                    }
+                )
+                TextButton(onClick = { reordering = true }) { Text("Reorder") }
+            }
+
             if (!state.isLoading && state.topLevelCategories.isEmpty()) {
                 CategoriesEmptyState()
             } else {
@@ -105,6 +134,19 @@ fun CategoriesScreen(
                 }
             }
         }
+    }
+
+    if (reordering) {
+        com.moneta.app.ui.common.ReorderDialog(
+            title = "Reorder categories",
+            items = state.tree.map { node -> node.category.id to ("    ".repeat(node.depth) + node.category.name) },
+            onMostUsed = { ids -> viewModel.mostUsedFirst(ids) },
+            onSave = { ids ->
+                viewModel.saveOrder(ids)
+                reordering = false
+            },
+            onDismiss = { reordering = false }
+        )
     }
 
     state.pendingReassignment?.let { pending ->

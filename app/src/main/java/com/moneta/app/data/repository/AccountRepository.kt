@@ -26,6 +26,17 @@ class AccountRepository @Inject constructor(
     fun observeAllAccounts(): Flow<List<Account>> =
         accountDao.observeAllAccounts().map { list -> list.map { it.toDomain() } }
 
+    /** Saves the order the user chose: the first id gets position 0, and so on. */
+    suspend fun saveOrder(ids: List<Long>) {
+        ids.forEachIndexed { index, id -> accountDao.setSortOrder(id, index) }
+    }
+
+    /** The same ids with the most used account first (ties keep their current order). */
+    suspend fun mostUsedFirst(ids: List<Long>): List<Long> {
+        val uses = accountDao.useCounts().associate { it.id to it.uses }
+        return ids.sortedByDescending { uses[it] ?: 0 }
+    }
+
     fun observeTotalNetWorth(currencyCode: String): Flow<Money> =
         accountDao.observeTotalNetWorthMinor().map { Money(it, currencyCode) }
 

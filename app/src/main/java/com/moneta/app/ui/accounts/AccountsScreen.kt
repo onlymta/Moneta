@@ -63,6 +63,7 @@ fun AccountsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    var reordering by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -98,6 +99,13 @@ fun AccountsScreen(
                 val savingsType = com.moneta.app.data.local.entity.AccountType.SAVINGS
                 val currentList = active.filter { it.type != savingsType }
                 val savingsList = active.filter { it.type == savingsType }
+                if (active.size > 1) {
+                    item(key = "reorder") {
+                        androidx.compose.material3.TextButton(onClick = { reordering = true }) {
+                            Text("Reorder or sort accounts")
+                        }
+                    }
+                }
                 if (active.isNotEmpty()) {
                     item(key = "dashboard") {
                         val cur = active.filter { it.includeInNetWorth }
@@ -157,6 +165,19 @@ fun AccountsScreen(
                 }
             }
         }
+    }
+
+    if (reordering) {
+        com.moneta.app.ui.common.ReorderDialog(
+            title = "Reorder accounts",
+            items = state.accounts.filter { !it.isArchived }.map { it.id to it.name },
+            onMostUsed = { ids -> viewModel.mostUsedFirst(ids) },
+            onSave = { ids ->
+                viewModel.saveOrder(ids)
+                reordering = false
+            },
+            onDismiss = { reordering = false }
+        )
     }
 }
 

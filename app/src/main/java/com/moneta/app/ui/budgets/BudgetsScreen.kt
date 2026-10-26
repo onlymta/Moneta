@@ -2,7 +2,6 @@ package com.moneta.app.ui.budgets
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -76,6 +75,7 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, onO
     var setupStarted by remember(monthKey) { mutableStateOf(false) }
     val showSetup = state.hasAnyBudget || setupStarted
     var expandedIds by remember { mutableStateOf(setOf<Long>()) }
+    var reorderingBudgets by remember { mutableStateOf(false) }
     // A line is visible when every ancestor above it is expanded (lines arrive in tree order).
     val visibleLines = remember(state.lines, expandedIds) {
         val out = ArrayList<BudgetLine>()
@@ -179,8 +179,22 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, onO
         }
 
         if (showSetup) item {
-            OutlinedButton(onClick = onOpenPlan, modifier = Modifier.fillMaxWidth()) {
-                Text("Plan income and savings, adjust next month")
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                androidx.compose.material3.FilterChip(
+                    selected = state.sortMode != "ORDER",
+                    onClick = { viewModel.setSort("SMART") },
+                    label = { Text("Smart order") }
+                )
+                androidx.compose.material3.FilterChip(
+                    selected = state.sortMode == "ORDER",
+                    onClick = { viewModel.setSort("ORDER") },
+                    label = { Text("My order") }
+                )
+                TextButton(onClick = { reorderingBudgets = true }) { Text("Reorder") }
+                TextButton(onClick = onOpenPlan) { Text("Plan") }
             }
         }
 
@@ -191,7 +205,7 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, onO
                 modifier = Modifier.padding(top = MonetaSpacing.sm)
             )
             Text(
-                "Tap a category to see its transactions, or to expand it if it has sub-categories (use the receipt button to see all its transactions). Press and hold to open its report.",
+                "Tap a category's name or icon to see its transactions. Use the arrow to open its sub-categories. Press and hold the name to open its report.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -228,6 +242,19 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, onO
                 )
             }
         }
+    }
+
+    if (reorderingBudgets) {
+        com.moneta.app.ui.common.ReorderDialog(
+            title = "Reorder budgets",
+            items = state.lines.map { it.category.id to ("    ".repeat(it.depth) + it.category.name) },
+            onMostUsed = { ids -> viewModel.mostUsedFirst(ids) },
+            onSave = { ids ->
+                viewModel.saveOrder(ids)
+                reorderingBudgets = false
+            },
+            onDismiss = { reorderingBudgets = false }
+        )
     }
 
     editing?.let { line ->
@@ -372,17 +399,19 @@ private fun CategoryBudgetCard(
     var menuOpen by remember { mutableStateOf(false) }
     Card(modifier = Modifier
         .fillMaxWidth()
-        .padding(start = (line.depth * 18).dp)
-        .combinedClickable(
-            onClick = when {
-                line.hasChildren -> onToggle
-                budget == null -> onOpen
-                else -> onSeeTransactions
-            },
-            onLongClick = onOpenReport
-        )) {
+        .padding(start = (line.depth * 18).dp)) {
         Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                // The icon and name open the transactions (or "set budget" when there is none yet); press and hold for the report.
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .combinedClickable(
+                            onClick = { if (!line.hasChildren && budget == null) onOpen() else onSeeTransactions() },
+                            onLongClick = onOpenReport
+                        ),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                 IconBadge(iconName = line.category.icon, colorHex = line.category.colorHex)
                 Spacer(Modifier.width(MonetaSpacing.md))
                 Column(modifier = Modifier.weight(1f)) {
@@ -398,20 +427,21 @@ private fun CategoryBudgetCard(
                     } else {
                         Text(
                             (if (line.derived) "Total budget " else "Budget ") + budget.formatted() +
-                                (if (!line.carriedOver.isZero) " (incl. ${line.carriedOver.formatted()} carried over)" else ""),
+                                (if (line.carriedOver.isNegative) " (after ${line.carriedOver.abs().formatted()} overspent last month)"
+                                else if (!line.carriedOver.isZero) " (incl. ${line.carriedOver.formatted()} carried over)" else ""),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
+                }
                 if (line.hasChildren) {
-                    IconButton(onClick = onSeeTransactions) {
-                        Icon(Icons.Outlined.Receipt, contentDescription = "See all transactions of " + line.label)
+                    IconButton(onClick = onToggle) {
+                        Icon(
+                            if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                            contentDescription = if (expanded) "Collapse" else "Expand"
+                        )
                     }
-                    Icon(
-                        if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                        contentDescription = if (expanded) "Collapse" else "Expand"
-                    )
                 } else if (budget == null) {
                     TextButton(onClick = onOpen) { Text("Set budget") }
                 } else {

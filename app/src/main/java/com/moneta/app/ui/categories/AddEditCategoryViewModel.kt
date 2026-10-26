@@ -139,6 +139,14 @@ class AddEditCategoryViewModel @Inject constructor(
         }
         viewModelScope.launch {
             val existingId = editingCategoryId
+            val clash = categoryRepository.observeByType(state.type).first().any {
+                it.id != existingId && it.parentCategoryId == state.selectedParentId &&
+                    it.name.trim().equals(state.name.trim(), ignoreCase = true)
+            }
+            if (clash) {
+                _uiState.update { it.copy(nameError = "A category with this name already exists here.") }
+                return@launch
+            }
             if (existingId != null) {
                 categoryRepository.renameOrRestyle(
                     Category(

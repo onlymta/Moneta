@@ -1,5 +1,6 @@
 package com.moneta.app.ui.budgets
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,11 +8,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -25,28 +25,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.moneta.app.core.money.Money
-import com.moneta.app.ui.common.PeriodBar
-import com.moneta.app.ui.common.PeriodMode
 import com.moneta.app.ui.common.SubPageHeader
 import com.moneta.app.ui.theme.ExpenseRed
 import com.moneta.app.ui.theme.IncomeGreen
 import com.moneta.app.ui.theme.MonetaSpacing
 
+/** A simple monthly plan: income, savings, how the rest is handed to categories, and what to carry over. */
 @Composable
 fun BudgetPlanScreen(onBack: () -> Unit, viewModel: BudgetPlanViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     var editingPlan by remember { mutableStateOf(false) }
+    var editingRow by remember { mutableStateOf<PlanAllocRow?>(null) }
     val currency = state.currencyCode
 
-    fun money(minor: Long) = Money(minor, currency).formatted()
-
     Column(modifier = Modifier.fillMaxSize()) {
-        SubPageHeader(title = "Plan and adjust", onBack = onBack)
+        SubPageHeader(title = "Budget plan", onBack = onBack)
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -54,138 +52,71 @@ fun BudgetPlanScreen(onBack: () -> Unit, viewModel: BudgetPlanViewModel = hiltVi
                 .padding(horizontal = MonetaSpacing.screenHorizontal, vertical = MonetaSpacing.sm),
             verticalArrangement = Arrangement.spacedBy(MonetaSpacing.md)
         ) {
-            PeriodBar(
-                selection = state.period,
-                onChange = viewModel::onPeriodChange,
-                modes = listOf(PeriodMode.MONTH)
-            )
-
-            // --- The plan: income, savings, what is left to spend ---
+            // 1. Income, savings, spending
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(MonetaSpacing.cardPadding),
                     verticalArrangement = Arrangement.spacedBy(MonetaSpacing.xs)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("My monthly plan", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("1. My monthly plan", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "Applies to every month from now on.",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         TextButton(onClick = { editingPlan = true }) { Text("Edit") }
                     }
-                    PlanLine(
-                        if (state.plannedIncome.isZero) "Income (this month's actual)" else "Expected income",
-                        state.planIncome.formatted()
-                    )
-                    PlanLine("Savings target", state.savingsTarget.formatted())
-                    PlanLine("Available to spend", state.availableToSpend.formatted(), bold = true)
-                    PlanLine("Budgeted in ${state.monthLabel}", state.totalBudget.formatted())
-                    val gap = state.availableToSpend - state.totalBudget
-                    Text(
-                        if (state.planIncome.isZero) "Add your expected income (Edit) so budgets can be checked against it."
-                        else if (gap.isNegative) "Budgets are ${gap.abs().formatted()} more than you can spend and still reach your savings target."
-                        else "${gap.formatted()} of your spendable income is not given to any budget.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (!state.planIncome.isZero && gap.isNegative) ExpenseRed else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    PlanLine("Expected income", state.income.formatted())
+                    PlanLine("Savings", state.savings.formatted())
+                    PlanLine("Spending (income minus savings)", state.spending.formatted(), bold = true)
+                    if (state.income.isZero) {
+                        Text(
+                            "Tap Edit and enter what you expect to earn and want to save each month.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
 
-            // --- How the month went ---
+            // 2. Give the spending to categories
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(MonetaSpacing.cardPadding),
                     verticalArrangement = Arrangement.spacedBy(MonetaSpacing.xs)
                 ) {
-                    Text("How ${state.monthLabel} went", style = MaterialTheme.typography.titleMedium)
-                    PlanLine("Income", state.actualIncome.formatted())
-                    PlanLine("Spent (all expenses)", state.totalSpentAll.formatted())
-                    val saved = state.actualSaved
-                    PlanLine("Saved", saved.formatted(), color = if (saved.isNegative) ExpenseRed else IncomeGreen, bold = true)
-                    if (!state.savingsTarget.isZero) {
-                        val diff = saved - state.savingsTarget
-                        Text(
-                            if (diff.isNegative) "${diff.abs().formatted()} short of your savings target."
-                            else "${diff.formatted()} ahead of your savings target.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (diff.isNegative) ExpenseRed else IncomeGreen
-                        )
-                    }
-                    val budgetDiff = state.totalSpentOnBudgeted - state.totalBudget
-                    if (!state.totalBudget.isZero) {
-                        Text(
-                            if (budgetDiff.minorUnits > 0L) "Budgeted categories went ${budgetDiff.formatted()} over budget."
-                            else "Budgeted categories finished ${budgetDiff.abs().formatted()} under budget.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (budgetDiff.minorUnits > 0L) ExpenseRed else IncomeGreen
-                        )
-                    }
-                }
-            }
-
-            // --- Adjust next month ---
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(MonetaSpacing.cardPadding),
-                    verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
-                ) {
-                    Text("Adjust ${state.nextMonthLabel}", style = MaterialTheme.typography.titleMedium)
+                    Text("2. Give your spending to categories", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Overspent a category? Its budget next month is cut by the same amount, so your average stays on plan.",
-                        style = MaterialTheme.typography.bodySmall,
+                        "Tap a category to set its monthly budget. It is saved for ${state.monthLabel} and the 11 months after.",
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Also add back what I underspent", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        Switch(checked = state.raiseWhenUnder, onCheckedChange = viewModel::setRaiseWhenUnder)
-                    }
-                    if (state.rows.isEmpty()) {
-                        Text(
-                            "No budgets were set for ${state.monthLabel}, so there is nothing to compare yet.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
+                    PlanLine("Given to categories", state.assigned.formatted())
+                    val left = state.left
+                    PlanLine(
+                        if (left.isNegative) "Over your spending by" else "Still to give",
+                        left.abs().formatted(),
+                        bold = true,
+                        color = if (state.income.isZero) Color.Unspecified else if (left.isNegative) ExpenseRed else IncomeGreen
+                    )
                     state.rows.forEach { row ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = row.selected,
-                                enabled = row.suggestedMinor != row.budgetMinor,
-                                onCheckedChange = { viewModel.toggleRow(row.categoryId, it) }
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(row.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                                Text(
-                                    "Budget ${money(row.budgetMinor)}, spent ${money(row.spentMinor)}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    money(row.suggestedMinor),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                if (row.changeMinor != 0L) {
-                                    Text(
-                                        (if (row.changeMinor > 0L) "+" else "-") + money(kotlin.math.abs(row.changeMinor)),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = if (row.changeMinor < 0L) ExpenseRed else IncomeGreen
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    if (state.rows.isNotEmpty()) {
-                        PlanLine("Total budget for ${state.nextMonthLabel}", state.nextTotalBudget.formatted(), bold = true)
-                        val room = state.availableToSpend - state.nextTotalBudget
-                        if (!state.planIncome.isZero) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { editingRow = row }
+                                .padding(vertical = MonetaSpacing.sm),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(row.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                             Text(
-                                if (room.isNegative) "Still ${room.abs().formatted()} above what you can spend and keep your savings target."
-                                else "Fits your plan, with ${room.formatted()} to spare.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (room.isNegative) ExpenseRed else IncomeGreen
+                                if (row.amountMinor > 0L) Money(row.amountMinor, currency).formatted() else "Set",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = if (row.amountMinor > 0L) Color.Unspecified else MaterialTheme.colorScheme.primary
                             )
-                        }
-                        Button(onClick = viewModel::applyToNextMonth, modifier = Modifier.fillMaxWidth()) {
-                            Text("Apply to ${state.nextMonthLabel}")
                         }
                     }
                     state.message?.let {
@@ -193,12 +124,39 @@ fun BudgetPlanScreen(onBack: () -> Unit, viewModel: BudgetPlanViewModel = hiltVi
                     }
                 }
             }
+
+            // 3. What to do with over and under spending
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(MonetaSpacing.cardPadding),
+                    verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
+                ) {
+                    Text("3. When a month ends", style = MaterialTheme.typography.titleMedium)
+                    ToggleLine(
+                        "Spent more than a budget?",
+                        "Take the extra off that category's budget next month.",
+                        state.reduceOverspend,
+                        viewModel::setReduceOverspend
+                    )
+                    ToggleLine(
+                        "Spent less than a budget?",
+                        "Add what was left to that category's budget next month.",
+                        state.addUnderspend,
+                        viewModel::setAddUnderspend
+                    )
+                    Text(
+                        "With a switch off, the budget just stays as you set it.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 
     if (editingPlan) {
-        var income by remember { mutableStateOf(if (state.plannedIncome.isZero) "" else state.plannedIncome.toEditableDecimalString()) }
-        var savings by remember { mutableStateOf(if (state.savingsTarget.isZero) "" else state.savingsTarget.toEditableDecimalString()) }
+        var income by remember { mutableStateOf(if (state.income.isZero) "" else state.income.toEditableDecimalString()) }
+        var savings by remember { mutableStateOf(if (state.savings.isZero) "" else state.savings.toEditableDecimalString()) }
         var error by remember { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { editingPlan = false },
@@ -216,7 +174,7 @@ fun BudgetPlanScreen(onBack: () -> Unit, viewModel: BudgetPlanViewModel = hiltVi
                     OutlinedTextField(
                         value = savings,
                         onValueChange = { savings = it; error = false },
-                        label = { Text("Savings target per month") },
+                        label = { Text("Savings per month") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth()
@@ -232,17 +190,58 @@ fun BudgetPlanScreen(onBack: () -> Unit, viewModel: BudgetPlanViewModel = hiltVi
             dismissButton = { TextButton(onClick = { editingPlan = false }) { Text("Cancel") } }
         )
     }
+
+    editingRow?.let { row ->
+        var amount by remember(row.categoryId) {
+            mutableStateOf(if (row.amountMinor > 0L) Money(row.amountMinor, currency).toEditableDecimalString() else "")
+        }
+        var error by remember(row.categoryId) { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { editingRow = null },
+            title = { Text(row.name) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it; error = false },
+                        label = { Text("Monthly budget") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        isError = error,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        "Leave empty for no budget.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (viewModel.setAmount(row.categoryId, amount)) editingRow = null else error = true
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { editingRow = null }) { Text("Cancel") } }
+        )
+    }
 }
 
 @Composable
-private fun PlanLine(
-    label: String,
-    value: String,
-    bold: Boolean = false,
-    color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified
-) {
+private fun ToggleLine(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun PlanLine(label: String, value: String, bold: Boolean = false, color: Color = Color.Unspecified) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Text(
             value,
             style = MaterialTheme.typography.bodyMedium,

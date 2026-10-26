@@ -38,6 +38,12 @@ class AccountsViewModel @Inject constructor(
     private val _events = MutableSharedFlow<AccountsEvent>()
     val events: SharedFlow<AccountsEvent> = _events
 
+    fun saveOrder(ids: List<Long>) {
+        viewModelScope.launch { accountRepository.saveOrder(ids) }
+    }
+
+    suspend fun mostUsedFirst(ids: List<Long>): List<Long> = accountRepository.mostUsedFirst(ids)
+
     /** Section 10: archiving is the safe default for accounts with history; hard delete only when empty. */
     fun archiveOrDeleteAccount(account: Account) {
         viewModelScope.launch {

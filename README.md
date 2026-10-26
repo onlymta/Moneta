@@ -207,3 +207,11 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 
 ## v1.1.1
 - Build fix: AddGoalScreen was missing the setValue import for the date-picker state.
+
+## v1.2.0
+- Ads: failure message now says why (no internet / ids not valid / nothing to show yet).
+- Budget plan is now its own side-menu page: income, savings, give spending to categories (saved for this month and the next 11), and two switches for next month (reduce by overspending / add underspending).
+- Budgets: tap name or icon opens transactions, the arrow expands sub-categories; Smart or My order, with Reorder.
+- Categories: Sub-categories switch on the page, Reorder, and duplicate names are refused.
+- Accounts: Reorder with "most used first". Record form lists follow this order.
+- New welcome flow (new or backup file, name, accounts with Cash and Bank, basic settings, guide) and a Help and guide page.

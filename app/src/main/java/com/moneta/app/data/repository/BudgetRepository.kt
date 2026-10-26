@@ -92,6 +92,17 @@ class BudgetRepository @Inject constructor(
         }
     }
 
+    /** Removes a category's budget for one month, if it has one. */
+    suspend fun clearCategoryBudgetForMonth(categoryId: Long, month: LocalDate) {
+        val start = month.withDayOfMonth(1)
+        budgetDao.observeAll().first()
+            .filter {
+                it.scope == BudgetScope.CATEGORY && it.categoryId == categoryId &&
+                    it.period == BudgetPeriod.CUSTOM && it.customPeriodStart == start.toEpochDay()
+            }
+            .forEach { budgetDao.delete(it.id) }
+    }
+
     /** Copies every budget of [fromMonth] into [toMonth] (skipping ones already there). Returns how many were added. */
     suspend fun copyBudgets(fromMonth: LocalDate, toMonth: LocalDate): Int {
         val from = fromMonth.withDayOfMonth(1)

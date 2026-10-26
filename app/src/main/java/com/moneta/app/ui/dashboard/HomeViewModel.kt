@@ -194,7 +194,7 @@ class HomeViewModel @Inject constructor(
             currency
         )
         val prevRange = p.shift(-1).range()
-        val prevSpent = if (prefs.rolloverBudgets) {
+        val prevSpent = if (prefs.rolloverBudgets || prefs.carryOverspend) {
             com.moneta.app.domain.usecase.spentMap(
                 transactionRepository.observeTotalsByCategory(TransactionType.EXPENSE, prevRange).first(),
                 categories,
@@ -207,7 +207,8 @@ class HomeViewModel @Inject constructor(
             thisMonth = com.moneta.app.domain.usecase.monthCategoryBudgets(allBudgets, range.start),
             lastMonth = com.moneta.app.domain.usecase.monthCategoryBudgets(allBudgets, prevRange.start),
             lastMonthSpent = prevSpent,
-            rollover = prefs.rolloverBudgets
+            rollover = prefs.rolloverBudgets,
+            carryOverspend = prefs.carryOverspend
         )
         val (unitBudgets, unitSpent) = com.moneta.app.domain.usecase.budgetUnits(
             categories, effective, categoryTotals, prefs.subcategoriesEnabled

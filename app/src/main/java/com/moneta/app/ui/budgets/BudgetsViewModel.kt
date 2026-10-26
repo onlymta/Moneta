@@ -83,6 +83,7 @@ data class BudgetsUiState(
     val totalSpentOnBudgeted: Money = Money.zero("PKR"),
     val spentOutsideBudgets: Money = Money.zero("PKR"),
     val rolloverOn: Boolean = false,
+    val sortMode: String = "SMART",
     /** The latest earlier month that has budgets, offered as "copy from" when this month has none. */
     val copySourceMonth: LocalDate? = null,
     val copySourceLabel: String? = null,
@@ -106,9 +107,9 @@ data class BudgetsUiState(
 @HiltViewModel
 class BudgetsViewModel @Inject constructor(
     private val budgetRepository: BudgetRepository,
-    categoryRepository: CategoryRepository,
+    private val categoryRepository: CategoryRepository,
     private val transactionRepository: TransactionRepository,
-    settingsRepository: SettingsRepository,
+    private val settingsRepository: SettingsRepository,
     private val launchFilter: RecordsLaunchFilter,
     private val reportsLaunch: com.moneta.app.ui.reports.ReportsLaunch
 ) : ViewModel() {
@@ -174,10 +175,13 @@ class BudgetsViewModel @Inject constructor(
                 val carriedOwn = categories.associate { c ->
                     val base = categoryBudgets[c.id]
                     val prevBase = prevCategoryBudgets[c.id]?.amount?.minorUnits
-                    val left = if (prefs.rolloverBudgets && base != null && prevBase != null) {
-                        prevBase - (spentBefore[c.id] ?: 0L)
-                    } else 0L
-                    c.id to (if (left > 0L) left else 0L)
+                    val diff = if (base != null && prevBase != null) prevBase - (spentBefore[c.id] ?: 0L) else 0L
+                    val carry = when {
+                        diff > 0L && prefs.rolloverBudgets -> diff
+                        diff < 0L && prefs.carryOverspend && base != null -> maxOf(diff, -base.amount.minorUnits)
+                        else -> 0L
+                    }
+                    c.id to carry
                 }
                 val aggBudget = if (subs) com.moneta.app.domain.usecase.treeTotals(categories, ownBase, true) else ownBase
                 val aggCarried = if (subs) com.moneta.app.domain.usecase.treeTotals(categories, carriedOwn, true) else carriedOwn
@@ -214,7 +218,8 @@ class BudgetsViewModel @Inject constructor(
                     .thenByDescending { it.spent.minorUnits }
                 val lines = ArrayList<BudgetLine>()
                 fun emit(list: List<Category>, depth: Int) {
-                    list.map { makeLine(it, depth) }.sortedWith(lineOrder).forEach { line ->
+                    val made = list.map { makeLine(it, depth) }
+                    (if (prefs.budgetSort == "ORDER") made else made.sortedWith(lineOrder)).forEach { line ->
                         lines.add(line)
                         if (subs && depth < 12) {
                             emit(categories.filter { it.parentCategoryId == line.category.id }, depth + 1)
@@ -254,7 +259,8 @@ class BudgetsViewModel @Inject constructor(
                     totalBudget = totalBudget,
                     totalSpentOnBudgeted = spentOnBudgeted,
                     spentOutsideBudgets = if (outside.isNegative) Money.zero(currency) else outside,
-                    rolloverOn = prefs.rolloverBudgets,
+                    rolloverOn = prefs.rolloverBudgets || prefs.carryOverspend,
+                    sortMode = prefs.budgetSort,
                     copySourceMonth = copySource,
                     copySourceLabel = copySource?.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
                     prevMonthSpent = spentBefore.filter { it.value > 0L },
@@ -293,6 +299,19 @@ class BudgetsViewModel @Inject constructor(
         }
         return true
     }
+
+    fun setSort(mode: String) {
+        viewModelScope.launch { settingsRepository.setBudgetSort(mode) }
+    }
+
+    fun saveOrder(ids: List<Long>) {
+        viewModelScope.launch {
+            categoryRepository.saveOrder(ids)
+            settingsRepository.setBudgetSort("ORDER")
+        }
+    }
+
+    suspend fun mostUsedFirst(ids: List<Long>): List<Long> = categoryRepository.mostUsedFirst(ids)
 
     fun deleteBudget(budgetId: Long) {
         viewModelScope.launch { budgetRepository.delete(budgetId) }

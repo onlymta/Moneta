@@ -4,23 +4,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.moneta.app.core.money.Money
 import com.moneta.app.data.local.entity.AccountType
-import com.moneta.app.data.local.entity.CategoryType
-import com.moneta.app.data.repository.Account
 import com.moneta.app.data.repository.AccountRepository
-import com.moneta.app.data.repository.Category
-import com.moneta.app.data.repository.CategoryRepository
 import com.moneta.app.data.settings.OnboardingStatus
 import com.moneta.app.data.settings.SettingsRepository
 import com.moneta.app.ui.accounts.accountColorPalette
 import com.moneta.app.ui.accounts.defaultIconFor
-import com.moneta.app.ui.categories.DEFAULT_CATEGORY_ICON
-import com.moneta.app.ui.categories.categoryColorPalette
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -30,32 +23,31 @@ private const val DEFAULT_CURRENCY = "PKR"
 /** Where the user goes when the welcome flow ends. */
 enum class OnboardingExit { HOME, ADD_TRANSACTION, IMPORT }
 
-const val ONBOARDING_LAST_STEP = 3
+const val ONBOARDING_LAST_STEP = 4
 
-private data class OnboardingForm(
-    val step: Int = 0,
-    val name: String = "",
-    val accountName: String = "",
-    val accountType: AccountType = AccountType.CASH,
-    val accountBalance: String = "",
-    val accountError: String? = null,
-    val removedCategoryIds: Set<Long> = emptySet(),
-    val newCategoryName: String = "",
-    val isWorking: Boolean = false,
-    val restoreMessage: String? = null
+/** An account the user is setting up; it is only saved when the welcome flow finishes. */
+data class PendingAccount(
+    val key: Int,
+    val name: String,
+    val type: AccountType,
+    val balance: String = ""
 )
 
 data class OnboardingUiState(
     val step: Int = 0,
     val name: String = "",
-    val accounts: List<Account> = emptyList(),
-    val accountName: String = "",
-    val accountType: AccountType = AccountType.CASH,
-    val accountBalance: String = "",
+    val accounts: List<PendingAccount> = emptyList(),
+    val newAccountName: String = "",
+    val newAccountType: AccountType = AccountType.CASH,
+    val newAccountBalance: String = "",
     val accountError: String? = null,
-    val expenseCategories: List<Category> = emptyList(),
-    val removedCategoryIds: Set<Long> = emptySet(),
-    val newCategoryName: String = "",
+    val currency: String = DEFAULT_CURRENCY,
+    val showSymbol: Boolean = true,
+    val decimals: Int = 2,
+    val carryForward: Boolean = true,
+    val budgetsOn: Boolean = true,
+    val goalsOn: Boolean = true,
+    val billsOn: Boolean = true,
     val isWorking: Boolean = false,
     val restoreMessage: String? = null
 )
@@ -65,108 +57,92 @@ class OnboardingViewModel @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
     private val backupManager: com.moneta.app.data.backup.BackupManager,
     private val accountRepository: AccountRepository,
-    private val categoryRepository: CategoryRepository,
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
-    private val form = MutableStateFlow(OnboardingForm())
+    private val form = MutableStateFlow(OnboardingUiState())
+    val uiState: StateFlow<OnboardingUiState> = form.asStateFlow()
+    private var nextKey = 1
 
-    val uiState: StateFlow<OnboardingUiState> = combine(
-        form,
-        accountRepository.observeAllAccounts(),
-        categoryRepository.observeByType(CategoryType.EXPENSE)
-    ) { f, accounts, categories ->
-        OnboardingUiState(
-            step = f.step,
-            name = f.name,
-            accounts = accounts,
-            accountName = f.accountName,
-            accountType = f.accountType,
-            accountBalance = f.accountBalance,
-            accountError = f.accountError,
-            expenseCategories = categories.filter { it.parentCategoryId == null },
-            removedCategoryIds = f.removedCategoryIds,
-            newCategoryName = f.newCategoryName,
-            isWorking = f.isWorking,
-            restoreMessage = f.restoreMessage
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), OnboardingUiState())
+    init {
+        // A new user starts with a Cash and a Bank account already listed; they only need to fill in balances.
+        viewModelScope.launch {
+            if (accountRepository.observeAllAccounts().first().isEmpty()) {
+                form.update {
+                    it.copy(
+                        accounts = listOf(
+                            PendingAccount(nextKey++, "Cash", AccountType.CASH),
+                            PendingAccount(nextKey++, "Bank account", AccountType.BANK)
+                        )
+                    )
+                }
+            }
+        }
+    }
 
     fun onNameChange(value: String) = form.update { it.copy(name = value.take(40)) }
 
     fun next() {
         val f = form.value
-        // If they typed an account but forgot to press "Add", add it for them.
-        if (f.step == 1 && (f.accountName.isNotBlank() || f.accountBalance.isNotBlank())) {
-            addAccount()
-            if (form.value.accountError != null) return
+        if (f.step == 2) {
+            // Added something in the "another account" boxes but forgot to press Add: add it for them.
+            if (f.newAccountName.isNotBlank() || f.newAccountBalance.isNotBlank()) addAccount()
+            val now = form.value
+            val bad = now.accounts.any { it.balance.isNotBlank() && Money.fromDecimalInput(it.balance, DEFAULT_CURRENCY) == null }
+            if (bad || now.accountError != null) {
+                form.update { it.copy(accountError = "Enter balances as numbers, or leave them empty.") }
+                return
+            }
         }
         form.update { it.copy(step = (it.step + 1).coerceAtMost(ONBOARDING_LAST_STEP)) }
     }
 
     fun back() = form.update { it.copy(step = (it.step - 1).coerceAtLeast(0)) }
 
-    fun onAccountNameChange(value: String) = form.update { it.copy(accountName = value.take(40), accountError = null) }
-
-    fun onAccountTypeChange(type: AccountType) = form.update { it.copy(accountType = type, accountError = null) }
-
-    fun onAccountBalanceChange(value: String) {
+    fun onAccountBalanceChange(key: Int, value: String) {
         val cleaned = value.filter { ch -> ch.isDigit() || ch == '.' }.take(12)
-        form.update { it.copy(accountBalance = cleaned, accountError = null) }
+        form.update { f -> f.copy(accounts = f.accounts.map { if (it.key == key) it.copy(balance = cleaned) else it }, accountError = null) }
+    }
+
+    fun onAccountNameChange(key: Int, value: String) {
+        form.update { f -> f.copy(accounts = f.accounts.map { if (it.key == key) it.copy(name = value.take(40)) else it }) }
+    }
+
+    fun removeAccount(key: Int) = form.update { f -> f.copy(accounts = f.accounts.filter { it.key != key }) }
+
+    fun onNewAccountNameChange(value: String) = form.update { it.copy(newAccountName = value.take(40), accountError = null) }
+
+    fun onNewAccountTypeChange(type: AccountType) = form.update { it.copy(newAccountType = type) }
+
+    fun onNewAccountBalanceChange(value: String) {
+        val cleaned = value.filter { ch -> ch.isDigit() || ch == '.' }.take(12)
+        form.update { it.copy(newAccountBalance = cleaned, accountError = null) }
     }
 
     fun addAccount() {
         val f = form.value
-        val name = f.accountName.trim().ifEmpty { defaultAccountName(f.accountType) }
-        val balance = if (f.accountBalance.isBlank()) {
-            Money.zero(DEFAULT_CURRENCY)
-        } else {
-            Money.fromDecimalInput(f.accountBalance, DEFAULT_CURRENCY)
-        }
-        if (balance == null) {
+        val name = f.newAccountName.trim().ifEmpty { defaultAccountName(f.newAccountType) }
+        if (f.newAccountBalance.isNotBlank() && Money.fromDecimalInput(f.newAccountBalance, DEFAULT_CURRENCY) == null) {
             form.update { it.copy(accountError = "Enter a valid balance, or leave it empty.") }
             return
         }
-        viewModelScope.launch {
-            try {
-                accountRepository.createAccount(
-                    name = name,
-                    type = f.accountType,
-                    icon = defaultIconFor(f.accountType),
-                    colorHex = accountColorPalette.first(),
-                    openingBalance = balance
-                )
-                form.update { it.copy(accountName = "", accountBalance = "", accountError = null) }
-            } catch (e: Exception) {
-                form.update { it.copy(accountError = "Couldn't add the account. Try a different name.") }
-            }
+        form.update {
+            it.copy(
+                accounts = it.accounts + PendingAccount(nextKey++, name, f.newAccountType, f.newAccountBalance),
+                newAccountName = "",
+                newAccountBalance = "",
+                accountError = null
+            )
         }
     }
 
-    fun toggleCategory(id: Long) = form.update {
-        val removed = if (id in it.removedCategoryIds) it.removedCategoryIds - id else it.removedCategoryIds + id
-        it.copy(removedCategoryIds = removed)
-    }
-
-    fun onNewCategoryChange(value: String) = form.update { it.copy(newCategoryName = value.take(30)) }
-
-    fun addCategory() {
-        val name = form.value.newCategoryName.trim()
-        if (name.isEmpty()) return
-        viewModelScope.launch {
-            try {
-                categoryRepository.createCategory(
-                    name = name,
-                    type = CategoryType.EXPENSE,
-                    icon = DEFAULT_CATEGORY_ICON,
-                    colorHex = categoryColorPalette.first()
-                )
-                form.update { it.copy(newCategoryName = "") }
-            } catch (e: Exception) {
-                // Ignore a failed add (for example a duplicate name); the field stays so the user can edit it.
-            }
-        }
-    }
+    fun setCurrency(code: String) = form.update { it.copy(currency = code) }
+    fun setShowSymbol(on: Boolean) = form.update { it.copy(showSymbol = on) }
+    fun setDecimals(value: Int) = form.update { it.copy(decimals = value.coerceIn(0, 2)) }
+    fun setCarryForward(on: Boolean) = form.update { it.copy(carryForward = on) }
+    fun setBudgetsOn(on: Boolean) = form.update { it.copy(budgetsOn = on) }
+    fun setGoalsOn(on: Boolean) = form.update { it.copy(goalsOn = on) }
+    fun setBillsOn(on: Boolean) = form.update { it.copy(billsOn = on) }
 
     /** "Do this later": remember it was skipped so Home can show a gentle reminder. */
     fun skip(onExit: (OnboardingExit) -> Unit) {
@@ -181,14 +157,28 @@ class OnboardingViewModel @Inject constructor(
         if (form.value.isWorking) return
         viewModelScope.launch {
             form.update { it.copy(isWorking = true) }
+            val f = form.value
             saveName()
-            form.value.removedCategoryIds.forEach { id ->
+            f.accounts.forEach { pending ->
                 try {
-                    categoryRepository.tryDelete(id)
+                    accountRepository.createAccount(
+                        name = pending.name.trim().ifEmpty { defaultAccountName(pending.type) },
+                        type = pending.type,
+                        icon = defaultIconFor(pending.type),
+                        colorHex = accountColorPalette[(pending.key - 1).coerceAtLeast(0) % accountColorPalette.size],
+                        openingBalance = Money.fromDecimalInput(pending.balance, DEFAULT_CURRENCY) ?: Money.zero(DEFAULT_CURRENCY)
+                    )
                 } catch (e: Exception) {
-                    // A category that can't be removed simply stays; harmless.
+                    // One account failing to save must not stop the rest of the setup.
                 }
             }
+            settingsRepository.setDisplayCurrency(f.currency)
+            settingsRepository.setShowCurrencySymbol(f.showSymbol)
+            settingsRepository.setDecimals(f.decimals)
+            settingsRepository.setCarryForwardBalance(f.carryForward)
+            settingsRepository.setBudgetsEnabled(f.budgetsOn)
+            settingsRepository.setGoalsEnabled(f.goalsOn)
+            settingsRepository.setBillsEnabled(f.billsOn)
             settingsRepository.setOnboardingStatus(OnboardingStatus.COMPLETED)
             form.update { it.copy(isWorking = false) }
             onExit(exit)

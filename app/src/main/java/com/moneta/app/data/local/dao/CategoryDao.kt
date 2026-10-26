@@ -17,6 +17,12 @@ interface CategoryDao {
     @Query("SELECT * FROM categories WHERE is_archived = 0 ORDER BY sort_order ASC")
     fun observeAll(): Flow<List<CategoryEntity>>
 
+    @Query("UPDATE categories SET sort_order = :order WHERE id = :id")
+    suspend fun setSortOrder(id: Long, order: Int)
+
+    @Query("SELECT category_id AS id, COUNT(*) AS uses FROM transactions WHERE is_deleted = 0 AND category_id IS NOT NULL GROUP BY category_id")
+    suspend fun useCounts(): List<UseCount>
+
     @Query("SELECT * FROM categories WHERE id = :id")
     suspend fun getById(id: Long): CategoryEntity?
 

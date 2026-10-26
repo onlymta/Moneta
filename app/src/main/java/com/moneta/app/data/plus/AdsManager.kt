@@ -87,7 +87,14 @@ class AdsManager @Inject constructor(
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     onBusy(false)
-                    onMessage("No ad is available right now. Try again later, or get Plus.")
+                    val reason = when (error.code) {
+                        0 -> "internal error"
+                        1 -> "the ad IDs are not valid"
+                        2 -> "no internet connection"
+                        3 -> "no ad to show yet"
+                        else -> "error " + error.code
+                    }
+                    onMessage("No ad could be loaded ($reason). Try again in a moment, or get Plus.")
                 }
             }
         )

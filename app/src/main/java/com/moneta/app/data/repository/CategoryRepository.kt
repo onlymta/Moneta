@@ -4,6 +4,7 @@ import com.moneta.app.data.local.dao.CategoryDao
 import com.moneta.app.data.local.entity.CategoryEntity
 import com.moneta.app.data.local.entity.CategoryType
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,6 +25,17 @@ class CategoryRepository @Inject constructor(
     fun observeAll(): Flow<List<Category>> =
         categoryDao.observeAll().map { list -> list.map { it.toDomain() } }
 
+    /** Saves the order the user chose: the first id gets position 0, and so on. */
+    suspend fun saveOrder(ids: List<Long>) {
+        ids.forEachIndexed { index, id -> categoryDao.setSortOrder(id, index) }
+    }
+
+    /** The same ids with the most used category first (ties keep their current order). */
+    suspend fun mostUsedFirst(ids: List<Long>): List<Long> {
+        val uses = categoryDao.useCounts().associate { it.id to it.uses }
+        return ids.sortedByDescending { uses[it] ?: 0 }
+    }
+
     suspend fun getById(id: Long): Category? = categoryDao.getById(id)?.toDomain()
 
     suspend fun createCategory(
@@ -32,15 +44,22 @@ class CategoryRepository @Inject constructor(
         icon: String,
         colorHex: String,
         parentCategoryId: Long? = null
-    ): Long = categoryDao.insert(
-        CategoryEntity(
-            name = name,
-            type = type,
-            icon = icon,
-            colorHex = colorHex,
-            parentCategoryId = parentCategoryId
+    ): Long {
+        // Never make a second category with the same name in the same place: use the one already there.
+        val same = categoryDao.observeByType(type).first().firstOrNull {
+            it.parentCategoryId == parentCategoryId && it.name.trim().equals(name.trim(), ignoreCase = true)
+        }
+        if (same != null) return same.id
+        return categoryDao.insert(
+            CategoryEntity(
+                name = name,
+                type = type,
+                icon = icon,
+                colorHex = colorHex,
+                parentCategoryId = parentCategoryId
+            )
         )
-    )
+    }
 
     suspend fun renameOrRestyle(category: Category, parentCategoryId: Long? = category.parentCategoryId) {
         val existing = categoryDao.getById(category.id) ?: return
