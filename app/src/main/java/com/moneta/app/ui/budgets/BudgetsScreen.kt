@@ -2,6 +2,7 @@ package com.moneta.app.ui.budgets
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -67,7 +68,7 @@ private fun statusColor(status: BudgetStatus?): Color = when (status) {
 }
 
 @Composable
-fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, viewModel: BudgetsViewModel = hiltViewModel()) {
+fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, onOpenPlan: () -> Unit = {}, viewModel: BudgetsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     var editing by remember { mutableStateOf<BudgetLine?>(null) }
     var deleting by remember { mutableStateOf<BudgetLine?>(null) }
@@ -178,13 +179,19 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, vie
         }
 
         if (showSetup) item {
+            OutlinedButton(onClick = onOpenPlan, modifier = Modifier.fillMaxWidth()) {
+                Text("Plan income and savings, adjust next month")
+            }
+        }
+
+        if (showSetup) item {
             Text(
                 "Your expense categories",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(top = MonetaSpacing.sm)
             )
             Text(
-                "Tap a category to see its transactions, or to expand it if it has sub-categories. Press and hold to open its report.",
+                "Tap a category to see its transactions, or to expand it if it has sub-categories (use the receipt button to see all its transactions). Press and hold to open its report.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -398,6 +405,9 @@ private fun CategoryBudgetCard(
                     }
                 }
                 if (line.hasChildren) {
+                    IconButton(onClick = onSeeTransactions) {
+                        Icon(Icons.Outlined.Receipt, contentDescription = "See all transactions of " + line.label)
+                    }
                     Icon(
                         if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
                         contentDescription = if (expanded) "Collapse" else "Expand"

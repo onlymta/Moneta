@@ -141,6 +141,7 @@ private fun PlusStatusCard(plusViewModel: com.moneta.app.ui.plus.PlusViewModel =
                     when {
                         plus.purchased -> "Unlocked. Thank you!"
                         plus.trialActive -> "Free trial: ${plus.trialDaysLeft} day(s) left"
+                        plus.trialAvailable -> "Try all features free for 14 days"
                         else -> "No ads and all features, one payment"
                     },
                     style = MaterialTheme.typography.labelMedium,

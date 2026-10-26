@@ -295,8 +295,12 @@ private fun MonetaAppContent(
             composable(MonetaDestination.Budgets.route) {
                 BudgetsScreen(
                     onOpenRecords = { navController.openTabForward(MonetaDestination.Transactions.route) },
-                    onOpenReports = { navController.openTabForward(MonetaDestination.Reports.route) }
+                    onOpenReports = { navController.openTabForward(MonetaDestination.Reports.route) },
+                    onOpenPlan = { navController.navigate(BUDGET_PLAN_ROUTE) }
                 )
+            }
+            composable(BUDGET_PLAN_ROUTE) {
+                com.moneta.app.ui.budgets.BudgetPlanScreen(onBack = goBack)
             }
             composable(MonetaDestination.Reports.route) {
                 ReportsScreen(

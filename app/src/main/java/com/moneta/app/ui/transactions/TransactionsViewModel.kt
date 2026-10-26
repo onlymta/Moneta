@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
@@ -134,21 +135,28 @@ class TransactionsViewModel @Inject constructor(
         launchFilter.clear()
     }
 
-    private val filters = combine(period, queryFlow, typeFlow, accountFilterFlow, categoryIdsFlow) { p, q, t, a, c ->
-        Filters(p, q, t, a, c)
+    private val filters = combine(period, typeFlow, accountFilterFlow, categoryIdsFlow) { p, t, a, c ->
+        Filters(p, t, a, c)
     }
 
     private data class Filters(
         val period: PeriodSelection,
-        val query: String,
         val type: TypeFilter,
         val accountId: Long?,
         val categoryIds: Set<Long>?
     )
 
-    private data class Layout(val group: GroupMode, val sort: SortMode, val categoryTitle: String?)
+    private data class Layout(val group: GroupMode, val sort: SortMode, val categoryTitle: String?, val query: String)
 
-    private val layout = combine(groupModeFlow, sortModeFlow, categoryTitleFlow) { g, s, t -> Layout(g, s, t) }
+    // The search text is applied to rows already loaded (not by re-reading the database on every key),
+    // and waits a moment after typing stops, so typing and deleting stay smooth.
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
+    private val layout = combine(
+        groupModeFlow,
+        sortModeFlow,
+        categoryTitleFlow,
+        queryFlow.debounce(180)
+    ) { g, s, t, q -> Layout(g, s, t, q) }
 
     val uiState: StateFlow<TransactionsUiState> = filters.flatMapLatest { f ->
         val typeArg: TransactionType? = when (f.type) {
@@ -170,7 +178,7 @@ class TransactionsViewModel @Inject constructor(
             if (ids != null) {
                 items = items.filter { item -> item.transaction.categoryId?.let { it in ids } == true }
             }
-            val needle = f.query.trim().lowercase()
+            val needle = lay.query.trim().lowercase()
             if (needle.isNotEmpty()) {
                 items = items.filter { item ->
                     val t = item.transaction
@@ -261,7 +269,7 @@ class TransactionsViewModel @Inject constructor(
             TransactionsUiState(
                 isLoading = false,
                 period = f.period,
-                query = f.query,
+                query = lay.query,
                 typeFilter = f.type,
                 accountFilterId = f.accountId,
                 categoryTitle = if (f.categoryIds != null) lay.categoryTitle else null,
@@ -284,6 +292,8 @@ class TransactionsViewModel @Inject constructor(
     fun onPeriodChange(selection: PeriodSelection) {
         period.value = selection
     }
+
+    fun currentQuery(): String = queryFlow.value
 
     fun onQueryChange(query: String) {
         queryFlow.value = query

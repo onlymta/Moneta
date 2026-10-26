@@ -2,7 +2,7 @@
 
 Last updated: 23 October 2026
 
-Moneta ("the app") is a personal finance tracker. 
+Moneta ("the app") is a personal finance tracker. Replace [YOUR NAME] and [YOUR EMAIL] below before publishing.
 
 **Your financial data stays on your phone.** Accounts, transactions, budgets, goals and bills are stored only on your device. We do not run servers, do not collect them and cannot see them. Backups you create are files you save wherever you choose (for example your own Google Drive); we never receive them.
 
@@ -16,4 +16,4 @@ Moneta ("the app") is a personal finance tracker.
 
 **Your choices.** You can delete all data by clearing the app's storage or uninstalling. You can reset your ad ID or opt out of personalised ads in Android settings.
 
-**Contact.** Tauseef Akram, onlymta18@gmail.com. We may update this policy; the date above changes when we do.
+**Contact.** [YOUR NAME], [YOUR EMAIL]. We may update this policy; the date above changes when we do.

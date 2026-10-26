@@ -74,6 +74,7 @@ fun PlusScreen(onBack: () -> Unit, viewModel: PlusViewModel = hiltViewModel()) {
                         when {
                             state.purchased -> "Thank you for supporting Moneta. Everything below is unlocked for good."
                             state.trialActive -> "Everything below is unlocked during your $TRIAL_DAYS-day trial. No card needed."
+                            state.trialAvailable -> "Try every Plus feature free for $TRIAL_DAYS days. Starts only when you tap the button, no card needed."
                             else -> "One payment, yours for good. No subscription."
                         },
                         style = MaterialTheme.typography.bodyMedium
@@ -102,6 +103,11 @@ fun PlusScreen(onBack: () -> Unit, viewModel: PlusViewModel = hiltViewModel()) {
                         modifier = Modifier.padding(MonetaSpacing.cardPadding),
                         verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
                     ) {
+                        if (state.trialAvailable) {
+                            OutlinedButton(onClick = viewModel::startTrial, modifier = Modifier.fillMaxWidth()) {
+                                Text("Start $TRIAL_DAYS-day free trial")
+                            }
+                        }
                         Button(
                             onClick = { context.findActivity()?.let { viewModel.buy(it) } },
                             modifier = Modifier.fillMaxWidth()

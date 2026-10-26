@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Divider
@@ -73,7 +74,10 @@ fun TransactionsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
-    var searchOpen by remember { mutableStateOf(false) }
+    // The text box keeps its own text so typing and deleting never wait on the list below.
+    var queryText by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(viewModel.currentQuery()) }
+    var searchOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(viewModel.currentQuery().isNotEmpty()) }
+    val searchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     var filterOpen by remember { mutableStateOf(false) }
     var sortOpen by remember { mutableStateOf(false) }
 
@@ -159,12 +163,15 @@ fun TransactionsScreen(
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     IconButton(onClick = {
                         searchOpen = !searchOpen
-                        if (!searchOpen) viewModel.onQueryChange("")
+                        if (!searchOpen) {
+                            queryText = ""
+                            viewModel.onQueryChange("")
+                        }
                     }) {
                         Icon(
                             Icons.Outlined.Search,
                             contentDescription = "Search records",
-                            tint = if (searchOpen || state.query.isNotEmpty()) active else idle
+                            tint = if (searchOpen || queryText.isNotEmpty()) active else idle
                         )
                     }
                 }
@@ -206,11 +213,25 @@ fun TransactionsScreen(
                     }
                 }
             }
-            if (searchOpen || state.query.isNotEmpty()) {
+            if (searchOpen) {
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    runCatching { searchFocus.requestFocus() }
+                }
                 TextField(
-                    value = state.query,
-                    onValueChange = viewModel::onQueryChange,
+                    value = queryText,
+                    onValueChange = { text ->
+                        queryText = text
+                        viewModel.onQueryChange(text)
+                    },
                     placeholder = { Text("Search records") },
+                    trailingIcon = {
+                        if (queryText.isNotEmpty()) {
+                            IconButton(onClick = {
+                                queryText = ""
+                                viewModel.onQueryChange("")
+                            }) { Icon(Icons.Outlined.Close, contentDescription = "Clear search") }
+                        }
+                    },
                     singleLine = true,
                     shape = RoundedCornerShape(28.dp),
                     colors = TextFieldDefaults.colors(
@@ -224,6 +245,7 @@ fun TransactionsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = MonetaSpacing.xs)
+                        .focusRequester(searchFocus)
                 )
             }
         }

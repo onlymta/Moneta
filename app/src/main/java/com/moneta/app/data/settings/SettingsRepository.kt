@@ -114,7 +114,17 @@ data class AppPreferences(
     val lastAutoBackupAt: Long = 0L,
     /** A folder the user chose (as a content URI) that automatic backups are also copied into; empty when unset. */
     val autoBackupFolder: String = "",
-    val dismissedAlertIds: Set<String> = emptySet()
+    val dismissedAlertIds: Set<String> = emptySet(),
+    /** Expected income per month for the budget planner, in minor units (0 = not set). */
+    val planIncomeMinor: Long = 0L,
+    /** How much the user wants to save each month, in minor units (0 = not set). */
+    val planSavingsMinor: Long = 0L,
+    /** Goals page: how goals are ordered (MANUAL, DATE or AMOUNT). */
+    val goalSort: String = "MANUAL",
+    /** Goals page: ids in the user's own order (used when the sort is MANUAL). */
+    val goalOrder: List<Long> = emptyList(),
+    /** Goals page: accounts whose money pays for goals (empty = all Savings accounts). */
+    val goalAccountIds: Set<Long> = emptySet()
 )
 
 val DEFAULT_TAB_ORDER = listOf("home", "transactions", "budgets", "accounts", "reports")
@@ -168,6 +178,11 @@ class SettingsRepository @Inject constructor(
         val LAST_AUTO_BACKUP = longPreferencesKey("last_auto_backup_at")
         val AUTO_BACKUP_FOLDER = stringPreferencesKey("auto_backup_folder")
         val DISMISSED_ALERTS = stringSetPreferencesKey("dismissed_alert_ids")
+        val PLAN_INCOME = longPreferencesKey("plan_income_minor")
+        val PLAN_SAVINGS = longPreferencesKey("plan_savings_minor")
+        val GOAL_SORT = stringPreferencesKey("goal_sort")
+        val GOAL_ORDER = stringPreferencesKey("goal_order")
+        val GOAL_ACCOUNTS = stringPreferencesKey("goal_accounts")
     }
 
     val preferences: Flow<AppPreferences> = kotlinx.coroutines.flow.combine(
@@ -226,7 +241,12 @@ class SettingsRepository @Inject constructor(
                 ?: BackupFrequency.OFF,
             lastAutoBackupAt = prefs[Keys.LAST_AUTO_BACKUP] ?: 0L,
             autoBackupFolder = if (hasPlus) (prefs[Keys.AUTO_BACKUP_FOLDER] ?: "") else "",
-            dismissedAlertIds = prefs[Keys.DISMISSED_ALERTS] ?: emptySet()
+            dismissedAlertIds = prefs[Keys.DISMISSED_ALERTS] ?: emptySet(),
+            planIncomeMinor = prefs[Keys.PLAN_INCOME] ?: 0L,
+            planSavingsMinor = prefs[Keys.PLAN_SAVINGS] ?: 0L,
+            goalSort = prefs[Keys.GOAL_SORT] ?: "MANUAL",
+            goalOrder = prefs[Keys.GOAL_ORDER]?.split(",")?.mapNotNull { it.toLongOrNull() } ?: emptyList(),
+            goalAccountIds = prefs[Keys.GOAL_ACCOUNTS]?.split(",")?.mapNotNull { it.toLongOrNull() }?.toSet() ?: emptySet()
         )
     }
 
@@ -365,6 +385,17 @@ class SettingsRepository @Inject constructor(
     suspend fun setAutoBackupFolder(uri: String) = context.dataStore.edit { it[Keys.AUTO_BACKUP_FOLDER] = uri }
 
     suspend fun setLastAutoBackupAt(timeMillis: Long) = context.dataStore.edit { it[Keys.LAST_AUTO_BACKUP] = timeMillis }
+
+    suspend fun setPlan(incomeMinor: Long, savingsMinor: Long) = context.dataStore.edit {
+        it[Keys.PLAN_INCOME] = incomeMinor.coerceAtLeast(0L)
+        it[Keys.PLAN_SAVINGS] = savingsMinor.coerceAtLeast(0L)
+    }
+
+    suspend fun setGoalSort(sort: String) = context.dataStore.edit { it[Keys.GOAL_SORT] = sort }
+
+    suspend fun setGoalOrder(order: List<Long>) = context.dataStore.edit { it[Keys.GOAL_ORDER] = order.joinToString(",") }
+
+    suspend fun setGoalAccounts(ids: Set<Long>) = context.dataStore.edit { it[Keys.GOAL_ACCOUNTS] = ids.joinToString(",") }
 
     suspend fun setDismissedAlertIds(ids: Set<String>) = context.dataStore.edit { it[Keys.DISMISSED_ALERTS] = ids }
 

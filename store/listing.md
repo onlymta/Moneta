@@ -22,4 +22,4 @@ MONETA PLUS (one-time purchase, no subscription): no ads, always-on charts, PDF 
 Your records and exports are never locked behind payment.
 
 **Category:** Finance. **Tags:** budget, expense tracker, money manager.
-**Contact email / website / privacy policy URL:** onlymta18@gmail.com.
+**Contact email / website / privacy policy URL:** yours.

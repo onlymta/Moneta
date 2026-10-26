@@ -14,11 +14,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class PlusViewModel @Inject constructor(
-    plusRepository: PlusRepository,
+    private val plusRepository: PlusRepository,
     private val billing: BillingManager,
     private val ads: AdsManager
 ) : ViewModel() {
@@ -33,6 +34,10 @@ class PlusViewModel @Inject constructor(
 
     private val _adMessage = MutableStateFlow<String?>(null)
     val adMessage: StateFlow<String?> = _adMessage.asStateFlow()
+
+    fun startTrial() {
+        viewModelScope.launch { plusRepository.startTrial() }
+    }
 
     fun loadPrice() = billing.refresh(userInitiated = false)
 

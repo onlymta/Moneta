@@ -47,7 +47,7 @@ That `.aab` is what you upload. Each run raises the version code automatically.
 
 ## 5. Things to double check before you press Publish
 - Install from the Internal testing link on a real phone: purchase, restore, ad unlock, backup to Drive via the "Download backup" picker.
-- The trial is 14 days from first launch; the Plus screen says so.
+- The 14-day trial starts only when the user taps "Start free trial" on the Plus screen.
 - Price shown on the Plus screen comes from Play, so it is always correct per country.
 
 ## Not done in this build (honest list)

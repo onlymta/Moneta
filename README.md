@@ -197,3 +197,10 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Free tier: rewarded ad unlocks charts and PDF report for 24 hours. Plus: no ads, sub-categories, compact Home and card order, scheduled backups and folder copy.
 - Entitlement kept in its own DataStore (not in backups, excluded from Android auto-backup).
 - CI builds a signed Play Store bundle; see PLAY_STORE_SETUP.md and the `store/` folder.
+
+## v1.1.0
+- Plus trial is now opt-in (starts when the user taps "Start free trial").
+- Records search rewritten: own text state, debounced filtering of loaded rows, clear button.
+- Budgets: parent categories have a receipt button to open all their transactions.
+- New "Plan and adjust" page (from Budgets): expected income, savings target, how last month went, and suggested next-month budgets (overspend is taken back; optionally add back underspend).
+- Goals: optional target date (picker), order by My order / Earliest date / Smallest first, choose the accounts that pay for goals, and per-goal "savings can cover it / needs X more" in priority order.

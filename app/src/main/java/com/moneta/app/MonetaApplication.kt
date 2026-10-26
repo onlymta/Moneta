@@ -26,8 +26,7 @@ class MonetaApplication : Application() {
         // startup (Section 42: startup performance matters for Play Store
         // quality).
         ProcessLifecycleOwner.get().lifecycleScope.launch {
-            // Starts the free Plus trial on the very first run, then re-checks the Play purchase.
-            plusRepository.ensureTrialStarted()
+            // Re-checks the Play purchase.
             try {
                 billingManager.refresh()
             } catch (e: Exception) {

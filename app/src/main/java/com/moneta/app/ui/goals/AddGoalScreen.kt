@@ -47,13 +47,26 @@ fun AddGoalScreen(
             modifier = Modifier.fillMaxWidth()
         )
 
-        // A full date picker dialog is deferred; this phase supports an optional
-        // "no target date" goal, which still satisfies Section 14's core ask.
-        Text(
-            "Target date isn't set from this screen yet - goals track progress without one for now.",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        var pickingDate by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+        androidx.compose.material3.OutlinedButton(
+            onClick = { pickingDate = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                state.targetDate?.format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy"))
+                    ?.let { "Target date: $it" } ?: "Set a target date (optional)"
+            )
+        }
+        if (pickingDate) {
+            GoalDatePickerDialog(
+                initial = state.targetDate,
+                onPick = { date ->
+                    viewModel.onTargetDateChange(date)
+                    pickingDate = false
+                },
+                onDismiss = { pickingDate = false }
+            )
+        }
 
         Spacer(Modifier.height(0.dp))
 

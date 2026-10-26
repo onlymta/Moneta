@@ -29,7 +29,9 @@ data class PlusState(
     val trialDaysLeft: Int = 0,
     val hasPlus: Boolean = false,
     val insightsUnlocked: Boolean = false,
-    val adUnlockUntil: Long = 0L
+    val adUnlockUntil: Long = 0L,
+    /** True until the user chooses to start the free trial. */
+    val trialAvailable: Boolean = false
 ) {
     val trialActive: Boolean get() = !purchased && trialDaysLeft > 0
 
@@ -62,10 +64,10 @@ class PlusRepository @Inject constructor(
     val state: Flow<PlusState> = combine(context.plusStore.data, clock) { prefs, now ->
         val purchased = prefs[Keys.PURCHASED] ?: false
         val trialEnds = prefs[Keys.TRIAL_ENDS_AT]
-        // Not started yet (very first moments after install): treat as inside the trial.
-        val trialActive = trialEnds == null || now < trialEnds
+        // The trial only runs after the user taps "Start free trial".
+        val trialActive = trialEnds != null && now < trialEnds
         val daysLeft = when {
-            trialEnds == null -> TRIAL_DAYS
+            trialEnds == null -> 0
             now >= trialEnds -> 0
             else -> (((trialEnds - now) + DAY_MILLIS - 1) / DAY_MILLIS).toInt()
         }
@@ -76,14 +78,15 @@ class PlusRepository @Inject constructor(
             trialDaysLeft = daysLeft,
             hasPlus = hasPlus,
             insightsUnlocked = hasPlus || now < adUntil,
-            adUnlockUntil = adUntil
+            adUnlockUntil = adUntil,
+            trialAvailable = !purchased && trialEnds == null
         )
     }.distinctUntilChanged()
 
     val hasPlus: Flow<Boolean> = state.map { it.hasPlus }.distinctUntilChanged()
 
-    /** Starts the free trial the first time the app runs. Later calls do nothing. */
-    suspend fun ensureTrialStarted() {
+    /** Starts the free trial when the user asks for it. It can only be started once. */
+    suspend fun startTrial() {
         if (context.plusStore.data.first()[Keys.TRIAL_ENDS_AT] == null) {
             context.plusStore.edit { it[Keys.TRIAL_ENDS_AT] = System.currentTimeMillis() + TRIAL_DAYS * DAY_MILLIS }
         }
