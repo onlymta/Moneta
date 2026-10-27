@@ -3,6 +3,7 @@
 package com.moneta.app.ui.navigation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -280,7 +281,7 @@ private fun MonetaAppContent(
             composable(MonetaDestination.Home.route) {
                 HomeScreen(
                     navController,
-                    userName = prefs.userName,
+                    userName = if (prefs.showGreeting) prefs.userName else "",
                     onTransactionClick = { detailId.value = it },
                     onOpenBudgets = { navController.openTabForward(MonetaDestination.Budgets.route) }
                 )
@@ -320,14 +321,21 @@ private fun MonetaAppContent(
             // --- Quick Add (add new, or edit an existing transaction) ---
             composable(
                 QUICK_ADD_ROUTE_PATTERN,
-                arguments = listOf(navArgument(ARG_TRANSACTION_ID) {
-                    type = NavType.LongType
-                    defaultValue = -1L
-                })
+                arguments = listOf(
+                    navArgument(ARG_TRANSACTION_ID) {
+                        type = NavType.LongType
+                        defaultValue = -1L
+                    },
+                    navArgument(ARG_DUPLICATE) {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    }
+                )
             ) { backStackEntry ->
                 val transactionId = backStackEntry.arguments?.getLong(ARG_TRANSACTION_ID)?.takeIf { it >= 0 }
                 QuickAddScreen(
                     transactionId = transactionId,
+                    duplicate = backStackEntry.arguments?.getBoolean(ARG_DUPLICATE) ?: false,
                     onDone = { navController.popBackStack() }
                 )
             }
@@ -485,6 +493,10 @@ private fun MonetaAppContent(
             onEdit = { txId ->
                 detailId.value = null
                 navController.navigate(quickAddEditRoute(txId))
+            },
+            onDuplicate = { txId ->
+                detailId.value = null
+                navController.navigate(quickAddDuplicateRoute(txId))
             }
         )
     }
@@ -625,7 +637,8 @@ private fun MonetaDrawerContent(
     extraTabs: List<MonetaDestination>,
     onItem: (String) -> Unit
 ) {
-    val entries = buildList {
+    // Notifications are opened from the bell on Home, so they are not listed here.
+    val manage = buildList {
         extraTabs.forEach { tab ->
             add(DrawerEntry(stringResource(tab.labelRes), tab.icon, tab.route))
         }
@@ -633,40 +646,102 @@ private fun MonetaDrawerContent(
         if (billsEnabled) add(DrawerEntry("Bills", Icons.Outlined.Receipt, BILLS_ROUTE))
         add(DrawerEntry("Scheduled & recurring", Icons.Outlined.Repeat, RECURRING_ROUTE))
         if (goalsEnabled) add(DrawerEntry("Goals", Icons.Outlined.Flag, GOALS_ROUTE))
-        add(
-            DrawerEntry(
-                if (alertCount > 0) "Notifications ($alertCount)" else "Notifications",
-                Icons.Outlined.Notifications,
-                NOTIFICATIONS_ROUTE
-            )
-        )
-        add(DrawerEntry("Import", Icons.Outlined.FileUpload, IMPORT_ROUTE))
-        add(DrawerEntry("Export", Icons.Outlined.FileDownload, EXPORT_ROUTE))
-        add(DrawerEntry("Backup & restore", Icons.Outlined.Backup, BACKUP_ROUTE))
-        add(DrawerEntry("Moneta Plus", androidx.compose.material.icons.Icons.Outlined.Star, PLUS_ROUTE))
-        add(DrawerEntry("Settings", Icons.Outlined.Settings, SETTINGS_ROUTE))
-        add(DrawerEntry("Help and FAQs", androidx.compose.material.icons.Icons.Outlined.Lightbulb, GUIDE_ROUTE))
-        add(DrawerEntry("About", Icons.Outlined.Info, ABOUT_ROUTE))
     }
+    val data = listOf(
+        DrawerEntry("Import", Icons.Outlined.FileUpload, IMPORT_ROUTE),
+        DrawerEntry("Export", Icons.Outlined.FileDownload, EXPORT_ROUTE),
+        DrawerEntry("Backup & restore", Icons.Outlined.Backup, BACKUP_ROUTE)
+    )
+    val app = listOf(
+        DrawerEntry("Settings", Icons.Outlined.Settings, SETTINGS_ROUTE),
+        DrawerEntry("Help and FAQs", androidx.compose.material.icons.Icons.Outlined.Lightbulb, GUIDE_ROUTE),
+        DrawerEntry("About", Icons.Outlined.Info, ABOUT_ROUTE)
+    )
     ModalDrawerSheet {
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-            Text(
-                stringResource(com.moneta.app.R.string.app_name),
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp)
-            )
-            entries.forEach { entry ->
-                NavigationDrawerItem(
-                    label = { Text(entry.label) },
-                    icon = { Icon(entry.icon, contentDescription = null) },
-                    selected = false,
-                    onClick = { onItem(entry.route) },
-                    modifier = Modifier.padding(horizontal = 12.dp)
-                )
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .padding(horizontal = 28.dp, vertical = 28.dp)
+            ) {
+                Column {
+                    Text(
+                        stringResource(com.moneta.app.R.string.app_name),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        "Your money, private on this phone",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
+            DrawerGroup("Manage", manage, onItem)
+            DrawerGroup("Your data", data, onItem)
+
+            androidx.compose.material3.Surface(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .clickable { onItem(PLUS_ROUTE) }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        androidx.compose.material.icons.Icons.Outlined.Star,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Text(
+                            "Moneta Plus",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Text(
+                            "No ads, all features, one-time",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    }
+                }
+            }
+
+            androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
+            app.forEach { entry -> DrawerItem(entry, onItem) }
             Spacer(Modifier.height(24.dp))
         }
     }
+}
+
+@Composable
+private fun DrawerGroup(title: String, entries: List<DrawerEntry>, onItem: (String) -> Unit) {
+    Text(
+        title.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = 16.dp, bottom = 4.dp)
+    )
+    entries.forEach { entry -> DrawerItem(entry, onItem) }
+}
+
+@Composable
+private fun DrawerItem(entry: DrawerEntry, onItem: (String) -> Unit) {
+    NavigationDrawerItem(
+        label = { Text(entry.label) },
+        icon = { Icon(entry.icon, contentDescription = null) },
+        selected = false,
+        onClick = { onItem(entry.route) },
+        modifier = Modifier.padding(horizontal = 12.dp)
+    )
 }
 
 @Composable

@@ -113,10 +113,13 @@ import java.time.format.DateTimeFormatter
 fun QuickAddScreen(
     onDone: () -> Unit,
     transactionId: Long? = null,
+    duplicate: Boolean = false,
     viewModel: QuickAddViewModel = hiltViewModel()
 ) {
-    LaunchedEffect(transactionId) {
-        if (transactionId != null) viewModel.loadForEdit(transactionId)
+    LaunchedEffect(transactionId, duplicate) {
+        if (transactionId != null) {
+            if (duplicate) viewModel.loadForDuplicate(transactionId) else viewModel.loadForEdit(transactionId)
+        }
     }
     val state by viewModel.uiState.collectAsState()
     val isEditing = viewModel.isEditing

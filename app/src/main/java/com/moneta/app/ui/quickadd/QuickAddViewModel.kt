@@ -283,6 +283,32 @@ class QuickAddViewModel @Inject constructor(
         }
     }
 
+    private var duplicatedFromId: Long? = null
+
+    /**
+     * Opens the form pre-filled from an existing transaction as a NEW record: everything is
+     * copied except the date and time, which are set to now. Nothing is saved until the user taps Save.
+     */
+    fun loadForDuplicate(transactionId: Long) {
+        if (duplicatedFromId == transactionId) return
+        duplicatedFromId = transactionId
+        viewModelScope.launch {
+            val existing = transactionRepository.getById(transactionId) ?: return@launch
+            form.update {
+                it.copy(
+                    type = existing.type,
+                    amountInput = existing.amount.toEditableDecimalString(),
+                    selectedAccountId = existing.accountId,
+                    selectedToAccountId = existing.toAccountId,
+                    selectedCategoryId = existing.categoryId,
+                    notes = existing.notes.orEmpty(),
+                    date = LocalDate.now(),
+                    timeMinutes = nowMinutes()
+                )
+            }
+        }
+    }
+
     val isEditing: Boolean get() = editingTransactionId != null
 
     /** A plain number, or a calculation like 250+80×2, turned into the amount to save. */

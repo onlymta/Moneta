@@ -78,6 +78,8 @@ class AdsManager @Inject constructor(
                             onMessage("The ad couldn't be shown. Try again in a moment.")
                         }
                     }
+                    // Hide the system bars while the ad plays so it fills the whole screen.
+                    ad.setImmersiveMode(true)
                     ad.show(activity) { _ ->
                         rewarded = true
                         scope.launch { plusRepository.unlockInsights() }

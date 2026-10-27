@@ -115,7 +115,7 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
         ) {
             PlusStatusCard()
-            ProfileSection(prefs.userName, viewModel)
+            ProfileSection(prefs.userName, prefs.showGreeting, viewModel)
             GeneralSection(prefs, viewModel)
             MoneySection(prefs, viewModel)
             HomeSection(prefs, viewModel)
@@ -278,7 +278,7 @@ private fun RowDivider() {
 // ---- sections -------------------------------------------------------------------------------------
 
 @Composable
-private fun ProfileSection(userName: String, viewModel: SettingsViewModel) {
+private fun ProfileSection(userName: String, showGreeting: Boolean, viewModel: SettingsViewModel) {
     val context = LocalContext.current
     var nameInput by remember(userName) { mutableStateOf(userName) }
     val latestInput by rememberUpdatedState(nameInput)
@@ -330,6 +330,8 @@ private fun ProfileSection(userName: String, viewModel: SettingsViewModel) {
                 modifier = Modifier.weight(1f)
             )
         }
+        RowDivider()
+        SwitchRow("Show greeting on Home", "\"Hello, name\" at the top of the Home page", showGreeting, viewModel::setShowGreeting)
     }
 }
 

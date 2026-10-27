@@ -47,6 +47,9 @@ class SettingsViewModel @Inject constructor(
     fun setCarryForwardBalance(enabled: Boolean) =
         viewModelScope.launch { settingsRepository.setCarryForwardBalance(enabled) }
 
+    fun setShowGreeting(on: Boolean) =
+        viewModelScope.launch { settingsRepository.setShowGreeting(on) }
+
     fun setCarryOverspend(enabled: Boolean) =
         viewModelScope.launch { settingsRepository.setCarryOverspend(enabled) }
 

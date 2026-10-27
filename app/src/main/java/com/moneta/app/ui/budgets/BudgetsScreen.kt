@@ -180,9 +180,18 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, vie
 
         if (showSetup) item {
             var sortMenuOpen by remember { mutableStateOf(false) }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Your expense categories", style = MaterialTheme.typography.titleMedium)
                 Box {
-                    TextButton(onClick = { sortMenuOpen = true }) {
+                    TextButton(
+                        onClick = { sortMenuOpen = true },
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
                         Text(
                             "Order: " + (if (state.sortMode == "ORDER") "mine" else "smart"),
                             style = MaterialTheme.typography.labelMedium
@@ -213,19 +222,12 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, vie
                     }
                 }
             }
-        }
-
-        if (showSetup) item {
-            Text(
-                "Your expense categories",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(top = MonetaSpacing.sm)
-            )
             Text(
                 "Tap a category's name or icon to see its transactions. Use the arrow to open its sub-categories. Press and hold the name to open its report.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            }
         }
 
         if (showSetup && !state.isLoading && state.lines.isEmpty()) {
@@ -303,7 +305,14 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, vie
 }
 
 @Composable
-private fun OutlookTile(label: String, value: Money, color: Color, modifier: Modifier = Modifier, note: String? = null) {
+private fun OutlookTile(
+    label: String,
+    value: Money,
+    color: Color,
+    modifier: Modifier = Modifier,
+    note: String? = null,
+    income: Money? = null
+) {
     androidx.compose.material3.Surface(
         modifier = modifier,
         shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
@@ -311,17 +320,36 @@ private fun OutlookTile(label: String, value: Money, color: Color, modifier: Mod
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(
-                value.formatted(),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.ExtraBold,
-                color = color
-            )
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    value.formatted(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = color
+                )
+                val share = incomeShare(value, income)
+                if (share != null) {
+                    Text(
+                        share,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 6.dp, bottom = 2.dp)
+                    )
+                }
+            }
             if (note != null) {
                 Text(note, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
+}
+
+/** [value] as a share of [income], like "35%" (one decimal under 10%); null when there is no income. */
+private fun incomeShare(value: Money, income: Money?): String? {
+    if (income == null || income.minorUnits <= 0L) return null
+    val p = value.minorUnits.toDouble() / income.minorUnits.toDouble() * 100.0
+    return if (kotlin.math.abs(p) < 10.0) String.format(java.util.Locale.US, "%.1f%%", p)
+    else String.format(java.util.Locale.US, "%.0f%%", p)
 }
 
 /** The budget outlook for the month. Income is not part of it: only budgets and spending. */
@@ -338,11 +366,21 @@ private fun SummaryCard(state: BudgetsUiState) {
     ) {
         Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
             Text("Total budget", style = MaterialTheme.typography.labelLarge)
-            Text(
-                state.totalBudget.formatted(),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.ExtraBold
-            )
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    state.totalBudget.formatted(),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                val budgetShare = incomeShare(state.totalBudget, state.monthIncome)
+                if (budgetShare != null) {
+                    Text(
+                        budgetShare,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
+                    )
+                }
+            }
             Spacer(Modifier.height(MonetaSpacing.sm))
             LinearProgressIndicator(
                 progress = { (percent / 100.0).toFloat().coerceIn(0f, 1f) },
@@ -356,12 +394,13 @@ private fun SummaryCard(state: BudgetsUiState) {
             )
             Spacer(Modifier.height(MonetaSpacing.md))
             Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
-                OutlookTile("Spent", state.totalSpentOnBudgeted, ExpenseRed, Modifier.weight(1f))
+                OutlookTile("Spent", state.totalSpentOnBudgeted, ExpenseRed, Modifier.weight(1f), income = state.monthIncome)
                 OutlookTile(
                     if (over) "Exceeded by" else "Remaining",
                     state.totalRemaining.abs(),
                     color,
-                    Modifier.weight(1f)
+                    Modifier.weight(1f),
+                    income = state.monthIncome
                 )
             }
             if (state.hasAnyBudget) {
@@ -373,14 +412,16 @@ private fun SummaryCard(state: BudgetsUiState) {
                         state.yetToSpend,
                         WarningAmber,
                         Modifier.weight(1f),
-                        note = if (state.isClosed) "Budget left over" else "Budgeted, not spent"
+                        note = if (state.isClosed) "Budget left over" else "Budgeted, not spent",
+                        income = state.monthIncome
                     )
                     OutlookTile(
                         if (state.isClosed) "Final deviation" else "Expected deviation",
                         Money(if (excess) -variance.minorUnits else 0L, variance.currencyCode),
                         verdictColor,
                         Modifier.weight(1f),
-                        note = if (excess) "Over budget" else "On track"
+                        note = if (excess) "Over budget" else "On track",
+                        income = state.monthIncome
                     )
                 }
             }

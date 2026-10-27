@@ -51,6 +51,7 @@ fun TransactionDetailPopup(
     transactionId: Long,
     onDismiss: () -> Unit,
     onEdit: (Long) -> Unit,
+    onDuplicate: (Long) -> Unit,
     viewModel: TransactionDetailViewModel = hiltViewModel(key = "detail-$transactionId")
 ) {
     LaunchedEffect(transactionId) { viewModel.load(transactionId) }
@@ -123,7 +124,7 @@ fun TransactionDetailPopup(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             ActionButton("Edit", Icons.Outlined.Edit) { onEdit(transactionId) }
-                            ActionButton("Duplicate", Icons.Outlined.ContentCopy) { viewModel.duplicate() }
+                            ActionButton("Duplicate", Icons.Outlined.ContentCopy) { onDuplicate(transactionId) }
                             ActionButton("Delete", Icons.Outlined.Delete, ExpenseRed) { confirmDelete = true }
                         }
                     }

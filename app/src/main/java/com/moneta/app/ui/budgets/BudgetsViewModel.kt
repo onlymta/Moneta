@@ -97,7 +97,9 @@ data class BudgetsUiState(
     /** Budgeted money not yet spent, category by category. */
     val yetToSpend: Money = Money.zero("PKR"),
     /** True when the month on screen has ended, so the figures are final rather than expected. */
-    val isClosed: Boolean = false
+    val isClosed: Boolean = false,
+    /** Income received in the month on screen, used only to show figures as a share of income. */
+    val monthIncome: Money = Money.zero("PKR")
 ) {
     val totalRemaining: Money get() = totalBudget - totalSpentOnBudgeted
     val hasAnyBudget: Boolean get() = lines.any { it.budgetId != null }
@@ -132,8 +134,13 @@ class BudgetsViewModel @Inject constructor(
                 categoriesFlow,
                 transactionRepository.observeTotalsByCategory(TransactionType.EXPENSE, range),
                 transactionRepository.observeTotalsByCategory(TransactionType.EXPENSE, prevRange),
-                transactionRepository.observeTotalForTypeInRange(TransactionType.EXPENSE, range, prefs.currencyCode)
-            ) { allBudgets, categories, totals, prevTotals, totalExpense ->
+                combine(
+                    transactionRepository.observeTotalForTypeInRange(TransactionType.EXPENSE, range, prefs.currencyCode),
+                    transactionRepository.observeTotalForTypeInRange(TransactionType.INCOME, range, prefs.currencyCode)
+                ) { expense, income -> expense to income }
+            ) { allBudgets, categories, totals, prevTotals, expenseAndIncome ->
+                val totalExpense = expenseAndIncome.first
+                val monthIncome = expenseAndIncome.second
                 val currency = prefs.currencyCode
                 fun forMonth(start: LocalDate) = allBudgets.filter {
                     it.isEnabled && it.period == BudgetPeriod.CUSTOM && it.customPeriodStart == start
@@ -268,7 +275,8 @@ class BudgetsViewModel @Inject constructor(
                     projectedSpend = Money(summary.projectedSpend, currency),
                     expectedVariance = Money(summary.spent + summary.yetToSpend - summary.totalBudget, currency),
                     yetToSpend = Money(summary.yetToSpend, currency),
-                    isClosed = !range.endExclusive.isAfter(LocalDate.now())
+                    isClosed = !range.endExclusive.isAfter(LocalDate.now()),
+                    monthIncome = monthIncome
                 )
             }
         }

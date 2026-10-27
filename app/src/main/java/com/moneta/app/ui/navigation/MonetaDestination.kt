@@ -50,8 +50,11 @@ fun destinationForKey(key: String): MonetaDestination? = when (key) {
 /** Quick Add sheet destination, opened from the center FAB - not part of the bottom bar. */
 const val QUICK_ADD_ROUTE = "quick_add"
 private const val TRANSACTION_ID_ARG = "transactionId"
-const val QUICK_ADD_ROUTE_PATTERN = "$QUICK_ADD_ROUTE?$TRANSACTION_ID_ARG={$TRANSACTION_ID_ARG}"
+private const val DUPLICATE_ARG = "duplicate"
+const val QUICK_ADD_ROUTE_PATTERN = "$QUICK_ADD_ROUTE?$TRANSACTION_ID_ARG={$TRANSACTION_ID_ARG}&$DUPLICATE_ARG={$DUPLICATE_ARG}"
 fun quickAddEditRoute(transactionId: Long) = "$QUICK_ADD_ROUTE?$TRANSACTION_ID_ARG=$transactionId"
+/** Opens Quick Add pre-filled from a transaction as a new record (date and time = now). */
+fun quickAddDuplicateRoute(transactionId: Long) = "$QUICK_ADD_ROUTE?$TRANSACTION_ID_ARG=$transactionId&$DUPLICATE_ARG=true"
 
 const val TRANSACTION_DETAIL_ROUTE_PATTERN = "transaction_detail/{$TRANSACTION_ID_ARG}"
 fun transactionDetailRoute(transactionId: Long) = "transaction_detail/$transactionId"
@@ -106,6 +109,7 @@ const val GUIDE_ROUTE = "guide"
 const val ONBOARDING_ROUTE = "onboarding"
 
 internal const val ARG_TRANSACTION_ID = TRANSACTION_ID_ARG
+internal const val ARG_DUPLICATE = DUPLICATE_ARG
 internal const val ARG_ACCOUNT_ID = ACCOUNT_ID_ARG
 internal const val ARG_HISTORY_ACCOUNT_ID = HISTORY_ACCOUNT_ARG
 internal const val ARG_CATEGORY_TYPE = CATEGORY_TYPE_ARG

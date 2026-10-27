@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -236,14 +237,19 @@ private fun HomeContent(
                 onBalance = { dialog = HomeDialog.BALANCE }
             )
         } else items(cards.chunked(2), key = { row -> row.first().name }) { row ->
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.md)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(androidx.compose.foundation.layout.IntrinsicSize.Max),
+                horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.md)
+            ) {
                 row.forEach { card ->
                     when (card) {
                         com.moneta.app.data.settings.HomeCard.OPENING -> FigureTile(
                             label = if (state.isCurrentMonth) "Opening (B/F)" else "Opening",
                             amount = state.openingBalance ?: Money.zero(state.currencyCode),
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
                             caption = "Tap for accounts",
                             onClick = { dialog = HomeDialog.OPENING }
                         )
@@ -251,7 +257,7 @@ private fun HomeContent(
                             label = "Income",
                             amount = state.monthIncome,
                             color = IncomeGreen,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
                             caption = "Tap for sources",
                             onClick = { dialog = HomeDialog.INCOME }
                         )
@@ -259,7 +265,7 @@ private fun HomeContent(
                             label = "Expenses",
                             amount = state.monthExpense,
                             color = ExpenseRed,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
                             caption = "Tap for records",
                             onClick = { onOpenRecords(TypeFilter.EXPENSE) }
                         )
@@ -267,7 +273,7 @@ private fun HomeContent(
                             label = if (state.isCurrentMonth) "Expected closing" else "Closing balance",
                             amount = state.expectedClosing,
                             color = if (state.expectedClosing.isNegative) ExpenseRed else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
                             caption = if (state.isCurrentMonth) "Balance less budget still to spend" else "Tap for accounts",
                             onClick = { dialog = HomeDialog.BALANCE }
                         )
@@ -275,7 +281,7 @@ private fun HomeContent(
                             label = "Budgeted",
                             amount = state.budgetTotal,
                             color = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
                             caption = "Tap for budgets",
                             onClick = onOpenBudgets
                         )
@@ -283,7 +289,7 @@ private fun HomeContent(
                             label = "Yet to spend",
                             amount = state.yetToSpend,
                             color = WarningAmber,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
                             caption = "Tap for breakdown",
                             onClick = { dialog = HomeDialog.YET }
                         )
@@ -341,21 +347,16 @@ private fun CompactHomeCards(
         if (showMonth) {
             Card(colors = CardDefaults.cardColors(containerColor = primary.copy(alpha = 0.12f)), modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
+                    val totalIn = (state.openingBalance ?: Money.zero(state.currencyCode)) + state.monthIncome
                     Text(
-                        if (state.isCurrentMonth) "This month so far" else "Month total",
+                        "Opening + income",
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     androidx.compose.runtime.CompositionLocalProvider(
                         androidx.compose.material3.LocalTextStyle provides MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold)
                     ) {
-                        MoneyText(state.currentBalance, color = if (state.currentBalance.isNegative) ExpenseRed else primary)
-                    }
-                    Spacer(Modifier.height(MonetaSpacing.sm))
-                    Row(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
-                        if ("OPENING" !in hidden) CompactFigure("Opening", state.openingBalance ?: Money.zero(state.currencyCode), primary, Modifier.weight(1f), onOpening)
-                        if ("INCOME" !in hidden) CompactFigure("Income", state.monthIncome, IncomeGreen, Modifier.weight(1f), onIncome)
-                        if ("EXPENSES" !in hidden) CompactFigure("Expenses", state.monthExpense, ExpenseRed, Modifier.weight(1f), onExpenses)
+                        MoneyText(totalIn, color = primary)
                     }
                 }
             }
@@ -455,7 +456,7 @@ private fun FigureTile(
         modifier = modifier.clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.12f))
     ) {
-        Row(modifier = Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
+        Row(modifier = Modifier.fillMaxHeight()) {
             androidx.compose.foundation.layout.Box(
                 modifier = Modifier
                     .width(5.dp)

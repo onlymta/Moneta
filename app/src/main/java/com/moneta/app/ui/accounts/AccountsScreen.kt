@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -99,13 +100,6 @@ fun AccountsScreen(
                 val savingsType = com.moneta.app.data.local.entity.AccountType.SAVINGS
                 val currentList = active.filter { it.type != savingsType }
                 val savingsList = active.filter { it.type == savingsType }
-                if (active.size > 1) {
-                    item(key = "reorder") {
-                        androidx.compose.material3.TextButton(onClick = { reordering = true }) {
-                            Text("Reorder or sort accounts")
-                        }
-                    }
-                }
                 if (active.isNotEmpty()) {
                     item(key = "dashboard") {
                         val cur = active.filter { it.includeInNetWorth }
@@ -115,7 +109,13 @@ fun AccountsScreen(
                         AccountsDashboard(
                             all = com.moneta.app.core.money.Money(allMinor, code),
                             current = com.moneta.app.core.money.Money(allMinor - savMinor, code),
-                            savings = com.moneta.app.core.money.Money(savMinor, code)
+                            savings = com.moneta.app.core.money.Money(savMinor, code),
+                            onMostUsed = if (active.size > 1) ({
+                                scope.launch {
+                                    viewModel.saveOrder(viewModel.mostUsedFirst(active.map { it.id }))
+                                }
+                            }) else null,
+                            onReorder = if (active.size > 1) ({ reordering = true }) else null
                         )
                     }
                 }
@@ -185,12 +185,46 @@ fun AccountsScreen(
 private fun AccountsDashboard(
     all: com.moneta.app.core.money.Money,
     current: com.moneta.app.core.money.Money,
-    savings: com.moneta.app.core.money.Money
+    savings: com.moneta.app.core.money.Money,
+    onMostUsed: (() -> Unit)?,
+    onReorder: (() -> Unit)?
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
+      androidx.compose.foundation.layout.Box {
+        if (onMostUsed != null && onReorder != null) {
+            var menuOpen by remember { mutableStateOf(false) }
+            androidx.compose.foundation.layout.Box(modifier = Modifier.align(Alignment.TopEnd)) {
+                androidx.compose.material3.IconButton(
+                    onClick = { menuOpen = true },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.AutoMirrored.Outlined.Sort,
+                        contentDescription = "Sort accounts",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("Most used") },
+                        onClick = {
+                            menuOpen = false
+                            onMostUsed()
+                        }
+                    )
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("Reorder") },
+                        onClick = {
+                            menuOpen = false
+                            onReorder()
+                        }
+                    )
+                }
+            }
+        }
         Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
             Text("All accounts", style = MaterialTheme.typography.titleSmall)
             androidx.compose.runtime.CompositionLocalProvider(
@@ -206,6 +240,7 @@ private fun AccountsDashboard(
                 DashboardTile("Savings", savings, MaterialTheme.colorScheme.tertiary, Modifier.weight(1f))
             }
         }
+      }
     }
 }
 

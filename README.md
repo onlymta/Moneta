@@ -221,3 +221,13 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Budget plan page removed. "Take overspending off next month" is now a switch in Settings next to the roll-over switch.
 - Budgets: one small "Order" button (smart, mine, reorder).
 - Help is now expandable FAQs.
+
+## v1.2.3
+- Duplicate opens a new record form pre-filled from the transaction (date and time set to now); nothing is saved until you tap Save.
+- Budgets: figures show their share of the month's income; the sort button sits next to "Your expense categories".
+- Home: the compact first card shows only opening + income; the two columns of cards have equal row heights.
+- About page: version, check for updates (opens Google Play), rate, share, contact. Set `CONTACT_EMAIL` in AboutScreen.kt.
+- Accounts: small sort icon (Most used / Reorder) on the top-right of the main card.
+- Settings: switch to hide the Home greeting.
+- Side menu regrouped (Manage / Your data / Plus / app pages); Notifications open from the bell on Home.
+- Rewarded ads play in immersive mode to fill the screen. Test ads are forced on (see forceTestAds in app/build.gradle.kts).
