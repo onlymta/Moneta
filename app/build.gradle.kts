@@ -11,8 +11,13 @@ plugins {
 fun secretOf(name: String): String? =
     (project.findProperty(name) as String?)?.takeIf { it.isNotBlank() }
         ?: System.getenv(name)?.takeIf { it.isNotBlank() }
-val admobAppId: String = secretOf("ADMOB_APP_ID") ?: "ca-app-pub-3940256099942544~3347511713"
-val admobRewardedId: String = secretOf("ADMOB_REWARDED_ID") ?: "ca-app-pub-3940256099942544/5224354917"
+// TEMPORARY: always use Google's test ads until the AdMob account is reviewed.
+// Set to false later to use the ADMOB_APP_ID / ADMOB_REWARDED_ID secrets again.
+val forceTestAds = true
+val testAppId = "ca-app-pub-3940256099942544~3347511713"
+val testRewardedId = "ca-app-pub-3940256099942544/5224354917"
+val admobAppId: String = if (forceTestAds) testAppId else (secretOf("ADMOB_APP_ID") ?: testAppId)
+val admobRewardedId: String = if (forceTestAds) testRewardedId else (secretOf("ADMOB_REWARDED_ID") ?: testRewardedId)
 
 android {
     namespace = "com.moneta.app"
@@ -23,7 +28,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = secretOf("VERSION_CODE")?.toIntOrNull() ?: 34
-        versionName = "1.2.1"
+        versionName = "1.2.2"
         manifestPlaceholders["admobAppId"] = admobAppId
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobRewardedId\"")
 
