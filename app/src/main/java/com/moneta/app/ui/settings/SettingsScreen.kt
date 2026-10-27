@@ -375,6 +375,13 @@ private fun MoneySection(prefs: com.moneta.app.data.settings.AppPreferences, vie
         )
         RowDivider()
         SwitchRow(
+            "Take overspending off next month",
+            "Spent more than a budget? Next month's budget for it is reduced by the extra",
+            prefs.carryOverspend,
+            viewModel::setCarryOverspend
+        )
+        RowDivider()
+        SwitchRow(
             "Sub-categories",
             if (hasPlus) "Categories inside categories, each with its own budget and analysis" else "Plus feature: categories inside categories, each with its own budget",
             prefs.subcategoriesEnabled,

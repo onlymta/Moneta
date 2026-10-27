@@ -47,6 +47,9 @@ class SettingsViewModel @Inject constructor(
     fun setCarryForwardBalance(enabled: Boolean) =
         viewModelScope.launch { settingsRepository.setCarryForwardBalance(enabled) }
 
+    fun setCarryOverspend(enabled: Boolean) =
+        viewModelScope.launch { settingsRepository.setCarryOverspend(enabled) }
+
     fun setRolloverBudgets(enabled: Boolean) =
         viewModelScope.launch { settingsRepository.setRolloverBudgets(enabled) }
 

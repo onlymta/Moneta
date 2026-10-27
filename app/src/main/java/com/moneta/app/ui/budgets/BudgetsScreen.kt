@@ -67,7 +67,7 @@ private fun statusColor(status: BudgetStatus?): Color = when (status) {
 }
 
 @Composable
-fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, onOpenPlan: () -> Unit = {}, viewModel: BudgetsViewModel = hiltViewModel()) {
+fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, viewModel: BudgetsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     var editing by remember { mutableStateOf<BudgetLine?>(null) }
     var deleting by remember { mutableStateOf<BudgetLine?>(null) }
@@ -179,22 +179,39 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, onO
         }
 
         if (showSetup) item {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                androidx.compose.material3.FilterChip(
-                    selected = state.sortMode != "ORDER",
-                    onClick = { viewModel.setSort("SMART") },
-                    label = { Text("Smart order") }
-                )
-                androidx.compose.material3.FilterChip(
-                    selected = state.sortMode == "ORDER",
-                    onClick = { viewModel.setSort("ORDER") },
-                    label = { Text("My order") }
-                )
-                TextButton(onClick = { reorderingBudgets = true }) { Text("Reorder") }
-                TextButton(onClick = onOpenPlan) { Text("Plan") }
+            var sortMenuOpen by remember { mutableStateOf(false) }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Box {
+                    TextButton(onClick = { sortMenuOpen = true }) {
+                        Text(
+                            "Order: " + (if (state.sortMode == "ORDER") "mine" else "smart"),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                    DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Smart order") },
+                            onClick = {
+                                sortMenuOpen = false
+                                viewModel.setSort("SMART")
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("My order") },
+                            onClick = {
+                                sortMenuOpen = false
+                                viewModel.setSort("ORDER")
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Reorder...") },
+                            onClick = {
+                                sortMenuOpen = false
+                                reorderingBudgets = true
+                            }
+                        )
+                    }
+                }
             }
         }
 

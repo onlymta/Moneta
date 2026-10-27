@@ -325,7 +325,7 @@ private fun GuideStep(
 ) {
     Text("You're all set", style = MaterialTheme.typography.headlineMedium)
     Text(
-        "Here is what Moneta can do. You can read this again any time from the side menu under Help and guide.",
+        "Tap a question to see the answer. You can come back to these any time from the side menu under Help and FAQs.",
         style = MaterialTheme.typography.bodyLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )

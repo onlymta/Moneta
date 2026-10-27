@@ -78,31 +78,6 @@ class BudgetRepository @Inject constructor(
         )
     }
 
-    /** Sets a category's budget for one month: updates it if it exists there, otherwise creates it. */
-    suspend fun setCategoryBudgetForMonth(categoryId: Long, amount: Money, month: LocalDate) {
-        val start = month.withDayOfMonth(1)
-        val existing = budgetDao.observeAll().first().firstOrNull {
-            it.scope == BudgetScope.CATEGORY && it.categoryId == categoryId &&
-                it.period == BudgetPeriod.CUSTOM && it.customPeriodStart == start.toEpochDay()
-        }
-        if (existing != null) {
-            budgetDao.update(existing.copy(amountMinor = amount.minorUnits, isEnabled = true))
-        } else {
-            createCategoryBudgetForMonth(categoryId, amount, start)
-        }
-    }
-
-    /** Removes a category's budget for one month, if it has one. */
-    suspend fun clearCategoryBudgetForMonth(categoryId: Long, month: LocalDate) {
-        val start = month.withDayOfMonth(1)
-        budgetDao.observeAll().first()
-            .filter {
-                it.scope == BudgetScope.CATEGORY && it.categoryId == categoryId &&
-                    it.period == BudgetPeriod.CUSTOM && it.customPeriodStart == start.toEpochDay()
-            }
-            .forEach { budgetDao.delete(it.id) }
-    }
-
     /** Copies every budget of [fromMonth] into [toMonth] (skipping ones already there). Returns how many were added. */
     suspend fun copyBudgets(fromMonth: LocalDate, toMonth: LocalDate): Int {
         val from = fromMonth.withDayOfMonth(1)

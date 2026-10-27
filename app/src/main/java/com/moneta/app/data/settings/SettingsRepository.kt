@@ -115,10 +115,6 @@ data class AppPreferences(
     /** A folder the user chose (as a content URI) that automatic backups are also copied into; empty when unset. */
     val autoBackupFolder: String = "",
     val dismissedAlertIds: Set<String> = emptySet(),
-    /** Expected income per month for the budget planner, in minor units (0 = not set). */
-    val planIncomeMinor: Long = 0L,
-    /** How much the user wants to save each month, in minor units (0 = not set). */
-    val planSavingsMinor: Long = 0L,
     /** Goals page: how goals are ordered (MANUAL, DATE or AMOUNT). */
     val goalSort: String = "MANUAL",
     /** Goals page: ids in the user's own order (used when the sort is MANUAL). */
@@ -182,8 +178,6 @@ class SettingsRepository @Inject constructor(
         val LAST_AUTO_BACKUP = longPreferencesKey("last_auto_backup_at")
         val AUTO_BACKUP_FOLDER = stringPreferencesKey("auto_backup_folder")
         val DISMISSED_ALERTS = stringSetPreferencesKey("dismissed_alert_ids")
-        val PLAN_INCOME = longPreferencesKey("plan_income_minor")
-        val PLAN_SAVINGS = longPreferencesKey("plan_savings_minor")
         val BUDGET_SORT = stringPreferencesKey("budget_sort")
         val CARRY_OVERSPEND = booleanPreferencesKey("carry_overspend")
         val GOAL_SORT = stringPreferencesKey("goal_sort")
@@ -248,8 +242,6 @@ class SettingsRepository @Inject constructor(
             lastAutoBackupAt = prefs[Keys.LAST_AUTO_BACKUP] ?: 0L,
             autoBackupFolder = if (hasPlus) (prefs[Keys.AUTO_BACKUP_FOLDER] ?: "") else "",
             dismissedAlertIds = prefs[Keys.DISMISSED_ALERTS] ?: emptySet(),
-            planIncomeMinor = prefs[Keys.PLAN_INCOME] ?: 0L,
-            planSavingsMinor = prefs[Keys.PLAN_SAVINGS] ?: 0L,
             budgetSort = prefs[Keys.BUDGET_SORT] ?: "SMART",
             carryOverspend = prefs[Keys.CARRY_OVERSPEND] ?: false,
             goalSort = prefs[Keys.GOAL_SORT] ?: "MANUAL",
@@ -393,11 +385,6 @@ class SettingsRepository @Inject constructor(
     suspend fun setAutoBackupFolder(uri: String) = context.dataStore.edit { it[Keys.AUTO_BACKUP_FOLDER] = uri }
 
     suspend fun setLastAutoBackupAt(timeMillis: Long) = context.dataStore.edit { it[Keys.LAST_AUTO_BACKUP] = timeMillis }
-
-    suspend fun setPlan(incomeMinor: Long, savingsMinor: Long) = context.dataStore.edit {
-        it[Keys.PLAN_INCOME] = incomeMinor.coerceAtLeast(0L)
-        it[Keys.PLAN_SAVINGS] = savingsMinor.coerceAtLeast(0L)
-    }
 
     suspend fun setBudgetSort(sort: String) = context.dataStore.edit { it[Keys.BUDGET_SORT] = sort }
 

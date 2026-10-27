@@ -140,7 +140,7 @@ class BackupManager @Inject constructor(
 
                 // Dependency-safe insert order (parents before children).
                 accountDao.insertAll(accounts)
-                categoryDao.insertAll(categories)
+                categoryDao.insertAll(parentsFirst(categories))
                 transactionDao.insertAll(transactions)
                 tagDao.insertAllTags(tags)
                 tagDao.insertAllCrossRefs(crossRefs)
@@ -156,6 +156,32 @@ class BackupManager @Inject constructor(
             RestoreResult.Failed("Restore failed: ${e.message ?: "the backup file may be corrupted."}")
         }
     }
+}
+
+/**
+ * Puts parent categories before their sub-categories. A category row points at its parent, so inserting a
+ * child first fails the database's foreign key check; the saved order can have a child ahead of its parent
+ * once categories have been reordered. A parent that is missing from the file is cleared.
+ */
+private fun parentsFirst(categories: List<CategoryEntity>): List<CategoryEntity> {
+    val known = categories.map { it.id }.toSet()
+    val placed = HashSet<Long>()
+    val result = ArrayList<CategoryEntity>(categories.size)
+    var waiting = categories.map { c ->
+        if (c.parentCategoryId != null && c.parentCategoryId !in known) c.copy(parentCategoryId = null) else c
+    }
+    while (waiting.isNotEmpty()) {
+        val ready = waiting.filter { it.parentCategoryId == null || it.parentCategoryId in placed }
+        if (ready.isEmpty()) {
+            // A loop of parents (should never happen): flatten what is left so the restore still works.
+            result.addAll(waiting.map { it.copy(parentCategoryId = null) })
+            break
+        }
+        ready.forEach { placed.add(it.id) }
+        result.addAll(ready)
+        waiting = waiting.filter { it.id !in placed }
+    }
+    return result
 }
 
 // --- Entity <-> JSON mapping ---

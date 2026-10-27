@@ -215,3 +215,9 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Categories: Sub-categories switch on the page, Reorder, and duplicate names are refused.
 - Accounts: Reorder with "most used first". Record form lists follow this order.
 - New welcome flow (new or backup file, name, accounts with Cash and Bank, basic settings, guide) and a Help and guide page.
+
+## v1.2.1
+- Restore fix: a sub-category listed before its parent in a backup (possible after reordering) broke the foreign key check. Categories are now restored parents first.
+- Budget plan page removed. "Take overspending off next month" is now a switch in Settings next to the roll-over switch.
+- Budgets: one small "Order" button (smart, mine, reorder).
+- Help is now expandable FAQs.

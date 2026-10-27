@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material.icons.outlined.Savings
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AccountBalanceWallet
@@ -297,12 +296,8 @@ private fun MonetaAppContent(
             composable(MonetaDestination.Budgets.route) {
                 BudgetsScreen(
                     onOpenRecords = { navController.openTabForward(MonetaDestination.Transactions.route) },
-                    onOpenReports = { navController.openTabForward(MonetaDestination.Reports.route) },
-                    onOpenPlan = { navController.navigate(BUDGET_PLAN_ROUTE) }
+                    onOpenReports = { navController.openTabForward(MonetaDestination.Reports.route) }
                 )
-            }
-            composable(BUDGET_PLAN_ROUTE) {
-                com.moneta.app.ui.budgets.BudgetPlanScreen(onBack = goBack)
             }
             composable(MonetaDestination.Reports.route) {
                 ReportsScreen(
@@ -635,7 +630,6 @@ private fun MonetaDrawerContent(
             add(DrawerEntry(stringResource(tab.labelRes), tab.icon, tab.route))
         }
         add(DrawerEntry("Categories", Icons.Outlined.Category, CATEGORIES_ROUTE))
-        add(DrawerEntry("Budget plan", androidx.compose.material.icons.Icons.Outlined.Savings, BUDGET_PLAN_ROUTE))
         if (billsEnabled) add(DrawerEntry("Bills", Icons.Outlined.Receipt, BILLS_ROUTE))
         add(DrawerEntry("Scheduled & recurring", Icons.Outlined.Repeat, RECURRING_ROUTE))
         if (goalsEnabled) add(DrawerEntry("Goals", Icons.Outlined.Flag, GOALS_ROUTE))
@@ -651,7 +645,7 @@ private fun MonetaDrawerContent(
         add(DrawerEntry("Backup & restore", Icons.Outlined.Backup, BACKUP_ROUTE))
         add(DrawerEntry("Moneta Plus", androidx.compose.material.icons.Icons.Outlined.Star, PLUS_ROUTE))
         add(DrawerEntry("Settings", Icons.Outlined.Settings, SETTINGS_ROUTE))
-        add(DrawerEntry("Help and guide", androidx.compose.material.icons.Icons.Outlined.Lightbulb, GUIDE_ROUTE))
+        add(DrawerEntry("Help and FAQs", androidx.compose.material.icons.Icons.Outlined.Lightbulb, GUIDE_ROUTE))
         add(DrawerEntry("About", Icons.Outlined.Info, ABOUT_ROUTE))
     }
     ModalDrawerSheet {
