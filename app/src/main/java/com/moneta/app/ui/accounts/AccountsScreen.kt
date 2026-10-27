@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Edit
@@ -202,7 +203,7 @@ private fun AccountsDashboard(
                     modifier = Modifier.size(36.dp)
                 ) {
                     androidx.compose.material3.Icon(
-                        androidx.compose.material.icons.Icons.Filled.SwapVert,
+                        Icons.Filled.SwapVert,
                         contentDescription = "Sort accounts",
                         modifier = Modifier.size(20.dp)
                     )
