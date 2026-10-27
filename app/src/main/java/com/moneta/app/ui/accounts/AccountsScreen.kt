@@ -202,7 +202,7 @@ private fun AccountsDashboard(
                     modifier = Modifier.size(36.dp)
                 ) {
                     androidx.compose.material3.Icon(
-                        androidx.compose.material.icons.Icons.AutoMirrored.Outlined.Sort,
+                        androidx.compose.material.icons.Icons.Filled.Sort,
                         contentDescription = "Sort accounts",
                         modifier = Modifier.size(20.dp)
                     )
