@@ -61,7 +61,8 @@ class BackupManager @Inject constructor(
     private val goalDao: GoalDao,
     private val billDao: BillDao,
     private val recurringTransactionDao: RecurringTransactionDao,
-    private val settingsRepository: com.moneta.app.data.settings.SettingsRepository
+    private val settingsRepository: com.moneta.app.data.settings.SettingsRepository,
+    private val plusRepository: com.moneta.app.data.plus.PlusRepository
 ) {
 
     suspend fun createBackup(outputStream: OutputStream) {
@@ -98,6 +99,9 @@ class BackupManager @Inject constructor(
         })
 
         root.put("settings", settingsRepository.exportAllJson())
+        // Only the date the free trial ends, so restoring this file can't be used to get a fresh trial.
+        // It never carries a purchase or any other Plus state.
+        plusRepository.trialEndsAt()?.let { root.put("trialEndsAt", it) }
 
         outputStream.writer(Charsets.UTF_8).use { it.write(root.toString()) }
     }
@@ -151,6 +155,7 @@ class BackupManager @Inject constructor(
             }
             // Settings come last and only after the data restored cleanly. Older backups simply have none.
             root.optJSONObject("settings")?.let { settingsRepository.importAllJson(it) }
+            if (root.has("trialEndsAt")) plusRepository.adoptTrialEnd(root.optLong("trialEndsAt"))
             RestoreResult.Success
         } catch (e: Exception) {
             RestoreResult.Failed("Restore failed: ${e.message ?: "the backup file may be corrupted."}")

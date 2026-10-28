@@ -141,7 +141,8 @@ fun MonetaApp(startupViewModel: StartupViewModel = hiltViewModel()) {
 private fun MonetaAppContent(
     startRoute: String,
     settingsViewModel: SettingsViewModel = hiltViewModel(),
-    notificationsViewModel: NotificationsViewModel = hiltViewModel()
+    notificationsViewModel: NotificationsViewModel = hiltViewModel(),
+    plusViewModel: com.moneta.app.ui.plus.PlusViewModel = hiltViewModel()
 ) {
     val navController = rememberNavController()
     val prefs by settingsViewModel.preferences.collectAsState()
@@ -201,6 +202,7 @@ private fun MonetaAppContent(
         gesturesEnabled = isMainTab,
         drawerContent = {
             MonetaDrawerContent(
+                plan = plusViewModel.state.collectAsState().value,
                 goalsEnabled = prefs.goalsEnabled,
                 billsEnabled = prefs.billsEnabled,
                 alertCount = alertCount,
@@ -631,6 +633,7 @@ private class DrawerEntry(val label: String, val icon: ImageVector, val route: S
 
 @Composable
 private fun MonetaDrawerContent(
+    plan: com.moneta.app.data.plus.PlusState,
     goalsEnabled: Boolean,
     billsEnabled: Boolean,
     alertCount: Int,
@@ -659,10 +662,14 @@ private fun MonetaDrawerContent(
     )
     ModalDrawerSheet {
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+            // Plus users get a solid header with a Plus badge; free users get the lighter header with an Upgrade badge.
+            val hasPlusPlan = plan.purchased || plan.trialActive
+            val headerBg = if (hasPlusPlan) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer
+            val headerText = if (hasPlusPlan) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer
             androidx.compose.foundation.layout.Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .background(headerBg)
                     .padding(horizontal = 28.dp, vertical = 28.dp)
             ) {
                 Column {
@@ -670,47 +677,67 @@ private fun MonetaDrawerContent(
                         stringResource(com.moneta.app.R.string.app_name),
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = headerText
                     )
                     Text(
-                        "Your money, private on this phone",
+                        "Know where your money goes",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = headerText
                     )
+                    Spacer(Modifier.height(12.dp))
+                    androidx.compose.material3.Surface(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
+                        color = headerText.copy(alpha = 0.16f),
+                        modifier = Modifier.clickable { onItem(PLUS_ROUTE) }
+                    ) {
+                        Text(
+                            when {
+                                plan.purchased -> "\u2605 Plus"
+                                plan.trialActive -> "\u2605 Plus trial \u00b7 ${plan.trialDaysLeft} day(s) left"
+                                else -> "Free plan \u00b7 Upgrade"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            color = headerText,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                        )
+                    }
                 }
             }
             DrawerGroup("Manage", manage, onItem)
             DrawerGroup("Your data", data, onItem)
 
-            androidx.compose.material3.Surface(
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.tertiaryContainer,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .clickable { onItem(PLUS_ROUTE) }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            if (!plan.purchased) {
+                androidx.compose.material3.Surface(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clickable { onItem(PLUS_ROUTE) }
                 ) {
-                    Icon(
-                        androidx.compose.material.icons.Icons.Outlined.Star,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
-                    Spacer(Modifier.width(16.dp))
-                    Column {
-                        Text(
-                            "Moneta Plus",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            androidx.compose.material.icons.Icons.Outlined.Star,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
                         )
-                        Text(
-                            "No ads, all features, one-time",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer
-                        )
+                        Spacer(Modifier.width(16.dp))
+                        Column {
+                            Text(
+                                "Get Moneta Plus",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "No ads, all features, one-time payment",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }

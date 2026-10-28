@@ -16,8 +16,24 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val dataResetManager: com.moneta.app.data.backup.DataResetManager
 ) : ViewModel() {
+
+    fun deleteTransactions(onDone: () -> Unit) = viewModelScope.launch {
+        dataResetManager.deleteTransactions()
+        onDone()
+    }
+
+    fun resetSettings(onDone: () -> Unit) = viewModelScope.launch {
+        dataResetManager.resetSettings()
+        onDone()
+    }
+
+    fun deleteEverything(onDone: () -> Unit) = viewModelScope.launch {
+        dataResetManager.deleteEverything()
+        onDone()
+    }
 
     val preferences: StateFlow<AppPreferences> = settingsRepository.preferences
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppPreferences())

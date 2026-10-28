@@ -349,6 +349,19 @@ class SettingsRepository @Inject constructor(
         return out
     }
 
+    /**
+     * Puts every setting back to its default. [keepOnboarding] keeps the "welcome flow finished" mark, so a plain
+     * settings reset doesn't send the user back through the welcome screens. Plus and trial state live in a separate
+     * file and are never touched.
+     */
+    suspend fun resetAll(keepOnboarding: Boolean) {
+        context.dataStore.edit { prefs ->
+            val onboarding = prefs[Keys.ONBOARDING_STATUS]
+            prefs.clear()
+            if (keepOnboarding && onboarding != null) prefs[Keys.ONBOARDING_STATUS] = onboarding
+        }
+    }
+
     /** Applies settings from [exportAllJson]; keys it doesn't know how to read are skipped. */
     suspend fun importAllJson(json: org.json.JSONObject) {
         context.dataStore.edit { prefs ->

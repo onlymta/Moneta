@@ -92,6 +92,20 @@ class PlusRepository @Inject constructor(
         }
     }
 
+    /** When this device's free trial ends (or ended), or null if it was never started. Written into backup files. */
+    suspend fun trialEndsAt(): Long? = context.plusStore.data.first()[Keys.TRIAL_ENDS_AT]
+
+    /**
+     * Used when a backup file is restored: if the backup remembers a trial and this install has not started one,
+     * the same trial dates are kept, so restoring a backup on a fresh install does not hand out a second trial.
+     * It only ever fills in a missing value; it never extends or replaces a trial that already exists.
+     */
+    suspend fun adoptTrialEnd(endsAt: Long) {
+        if (context.plusStore.data.first()[Keys.TRIAL_ENDS_AT] == null) {
+            context.plusStore.edit { it[Keys.TRIAL_ENDS_AT] = endsAt }
+        }
+    }
+
     suspend fun setPurchased(purchased: Boolean) {
         context.plusStore.edit { it[Keys.PURCHASED] = purchased }
     }

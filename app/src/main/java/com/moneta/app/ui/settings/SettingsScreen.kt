@@ -76,6 +76,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -104,12 +106,15 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val prefs by viewModel.preferences.collectAsState()
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
 
     Column(modifier = Modifier.fillMaxSize()) {
         SubPageHeader(title = "Settings", onBack = onBack)
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // Tapping anywhere outside a text field ends editing, so the cursor stops blinking.
+                .pointerInput(Unit) { detectTapGestures(onTap = { focusManager.clearFocus() }) }
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = MonetaSpacing.screenHorizontal, vertical = MonetaSpacing.sm),
             verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
@@ -121,6 +126,7 @@ fun SettingsScreen(
             HomeSection(prefs, viewModel)
             LayoutSection(prefs, viewModel)
             RemindersSection(prefs.reminderEnabled, prefs.reminderHour, prefs.reminderMinute, viewModel)
+            DataSection(viewModel)
             Spacer(Modifier.height(MonetaSpacing.xl))
         }
     }
@@ -281,6 +287,7 @@ private fun RowDivider() {
 private fun ProfileSection(userName: String, showGreeting: Boolean, viewModel: SettingsViewModel) {
     val context = LocalContext.current
     var nameInput by remember(userName) { mutableStateOf(userName) }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val latestInput by rememberUpdatedState(nameInput)
     val latestSaved by rememberUpdatedState(userName)
     val save = {
@@ -321,7 +328,10 @@ private fun ProfileSection(userName: String, showGreeting: Boolean, viewModel: S
                 label = { Text("Your name") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { save() }),
+                keyboardActions = KeyboardActions(onDone = {
+                    save()
+                    focusManager.clearFocus()
+                }),
                 trailingIcon = {
                     IconButton(onClick = { save() }, enabled = nameInput.trim() != userName) {
                         Icon(Icons.Filled.Check, contentDescription = "Save name")
@@ -381,13 +391,6 @@ private fun MoneySection(prefs: com.moneta.app.data.settings.AppPreferences, vie
             "Spent more than a budget? Next month's budget for it is reduced by the extra",
             prefs.carryOverspend,
             viewModel::setCarryOverspend
-        )
-        RowDivider()
-        SwitchRow(
-            "Sub-categories",
-            if (hasPlus) "Categories inside categories, each with its own budget and analysis" else "Plus feature: categories inside categories, each with its own budget",
-            prefs.subcategoriesEnabled,
-            { on -> if (hasPlus) viewModel.setSubcategoriesEnabled(on) else openPlus() }
         )
         RowDivider()
         SwitchRow("Budgets", "Show the Budgets tab", prefs.budgetsEnabled, viewModel::setBudgetsEnabled)
@@ -578,6 +581,107 @@ private fun RemindersSection(enabled: Boolean, hour: Int, minute: Int, viewModel
             },
             dismissButton = { TextButton(onClick = { showTime = false }) { Text("Cancel") } },
             text = { TimePicker(state = timeState) }
+        )
+    }
+}
+
+private enum class DataAction { NONE, TRANSACTIONS, SETTINGS, EVERYTHING }
+
+/** Start-over tools. Each one asks first; deleting everything also asks you to type DELETE. */
+@Composable
+private fun DataSection(viewModel: SettingsViewModel) {
+    val context = LocalContext.current
+    var action by remember { mutableStateOf(DataAction.NONE) }
+    var typed by remember { mutableStateOf("") }
+    val close = {
+        action = DataAction.NONE
+        typed = ""
+    }
+    SectionCard("Your data") {
+        Text(
+            "Make a backup first (side menu, Backup & restore). Deleted data cannot be brought back without one. Your Moneta Plus and free trial are never affected.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+        OutlinedButton(
+            onClick = { action = DataAction.TRANSACTIONS },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Delete all transactions") }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = { action = DataAction.SETTINGS },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Reset settings to defaults") }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = { action = DataAction.EVERYTHING },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Delete everything and start over", color = MaterialTheme.colorScheme.error) }
+        Spacer(Modifier.height(8.dp))
+    }
+
+    when (action) {
+        DataAction.NONE -> Unit
+        DataAction.TRANSACTIONS -> AlertDialog(
+            onDismissRequest = close,
+            title = { Text("Delete all transactions?") },
+            text = {
+                Text("Every transaction is removed. Your accounts, categories, budgets, goals and bills stay. Account balances go back to their opening balance.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteTransactions {
+                        Toast.makeText(context, "All transactions deleted", Toast.LENGTH_SHORT).show()
+                    }
+                    close()
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = close) { Text("Cancel") } }
+        )
+        DataAction.SETTINGS -> AlertDialog(
+            onDismissRequest = close,
+            title = { Text("Reset settings?") },
+            text = {
+                Text("Currency, appearance, Home layout, reminders and other settings return to their defaults. Your transactions, accounts and budgets are not touched.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.resetSettings {
+                        Toast.makeText(context, "Settings reset", Toast.LENGTH_SHORT).show()
+                    }
+                    close()
+                }) { Text("Reset") }
+            },
+            dismissButton = { TextButton(onClick = close) { Text("Cancel") } }
+        )
+        DataAction.EVERYTHING -> AlertDialog(
+            onDismissRequest = close,
+            title = { Text("Delete everything?") },
+            text = {
+                Column {
+                    Text("All transactions, accounts, budgets, goals, bills and settings are deleted, and Moneta starts over with the welcome screens. This cannot be undone.")
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = typed,
+                        onValueChange = { typed = it },
+                        label = { Text("Type DELETE to confirm") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = typed.trim().equals("DELETE", ignoreCase = true),
+                    onClick = {
+                        viewModel.deleteEverything {
+                            Toast.makeText(context, "Everything deleted", Toast.LENGTH_SHORT).show()
+                        }
+                        close()
+                    }
+                ) { Text("Delete everything", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = close) { Text("Cancel") } }
         )
     }
 }

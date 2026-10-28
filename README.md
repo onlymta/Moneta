@@ -231,3 +231,9 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Settings: switch to hide the Home greeting.
 - Side menu regrouped (Manage / Your data / Plus / app pages); Notifications open from the bell on Home.
 - Rewarded ads play in immersive mode to fill the screen. Test ads are forced on (see forceTestAds in app/build.gradle.kts).
+
+## v1.2.7
+- Settings: tapping outside the name field ends editing; the sub-categories switch now lives only on the Categories page; new "Your data" section (delete transactions, reset settings, delete everything).
+- Side menu: colours match the app, new tagline, and a Plus / Free badge. Home shows the same badge.
+- Trial: the trial end date is saved in backup files and restored with them, so restoring a backup does not start a new trial.
+- Home compact card 1: "Total Inflow this Month".

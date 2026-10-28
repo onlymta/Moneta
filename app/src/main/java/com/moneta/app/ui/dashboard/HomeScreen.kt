@@ -81,9 +81,11 @@ fun HomeScreen(
     userName: String = "",
     onTransactionClick: (Long) -> Unit = {},
     onOpenBudgets: () -> Unit = {},
-    viewModel: HomeViewModel = hiltViewModel()
+    viewModel: HomeViewModel = hiltViewModel(),
+    plusViewModel: com.moneta.app.ui.plus.PlusViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val plan by plusViewModel.state.collectAsState()
 
     when {
         state.isLoading -> LoadingState()
@@ -91,6 +93,7 @@ fun HomeScreen(
         else -> HomeContent(
             state = state,
             userName = userName,
+            plan = plan,
             onPeriodChange = viewModel::onPeriodChange,
             onScopeChange = { sc -> viewModel.setBalanceScope(sc) },
             onToggleHide = { viewModel.toggleHideBalance() },
@@ -152,6 +155,7 @@ private fun HomeEmptyState(navController: NavHostController) {
 private fun HomeContent(
     state: HomeUiState,
     userName: String,
+    plan: com.moneta.app.data.plus.PlusState,
     onPeriodChange: (com.moneta.app.ui.common.PeriodSelection) -> Unit,
     onScopeChange: (com.moneta.app.data.settings.BalanceScope) -> Unit,
     onOpenAccount: (Long) -> Unit,
@@ -208,8 +212,19 @@ private fun HomeContent(
         ),
         verticalArrangement = Arrangement.spacedBy(MonetaSpacing.md)
     ) {
-        if (userName.isNotBlank()) {
-            item { Text("Hello, $userName", style = MaterialTheme.typography.headlineSmall) }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (userName.isNotBlank()) {
+                    Text("Hello, $userName", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                PlanPill(plan)
+            }
         }
         item { BalanceCard(state, onOpenAccount, onScopeChange, onToggleHide) }
         item {
@@ -328,6 +343,31 @@ private fun HomeContent(
     }
 }
 
+/** A small badge showing which plan is active; tapping it opens the Moneta Plus page. */
+@Composable
+private fun PlanPill(plan: com.moneta.app.data.plus.PlusState) {
+    val openPlus = com.moneta.app.ui.plus.LocalOpenPlus.current
+    val hasPlan = plan.purchased || plan.trialActive
+    val color = MaterialTheme.colorScheme.primary
+    androidx.compose.material3.Surface(
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
+        color = if (hasPlan) color.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.clickable { openPlus() }
+    ) {
+        Text(
+            when {
+                plan.purchased -> "\u2605 Plus"
+                plan.trialActive -> "\u2605 Plus trial \u00b7 ${plan.trialDaysLeft}d left"
+                else -> "Free \u00b7 Get Plus"
+            },
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (hasPlan) color else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+        )
+    }
+}
+
 /** Three wide cards: the month's total (with opening, income and expenses beneath), the budget in one card, and expected closing. */
 @Composable
 private fun CompactHomeCards(
@@ -347,9 +387,10 @@ private fun CompactHomeCards(
         if (showMonth) {
             Card(colors = CardDefaults.cardColors(containerColor = primary.copy(alpha = 0.12f)), modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
-                    val totalIn = (state.openingBalance ?: Money.zero(state.currencyCode)) + state.monthIncome
+                    val opening = state.openingBalance ?: Money.zero(state.currencyCode)
+                    val totalIn = opening + state.monthIncome
                     Text(
-                        "Opening + income",
+                        "Total Inflow this Month",
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -358,6 +399,11 @@ private fun CompactHomeCards(
                     ) {
                         MoneyText(totalIn, color = primary)
                     }
+                    Text(
+                        opening.formatted() + " op. + " + state.monthIncome.formatted() + " income this month",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
