@@ -295,6 +295,7 @@ private fun BillEntity.toJson() = JSONObject().apply {
     put("dueDate", dueDate); put("accountId", accountId ?: JSONObject.NULL)
     put("categoryId", categoryId ?: JSONObject.NULL); put("status", status.name)
     put("paidTransactionId", paidTransactionId ?: JSONObject.NULL)
+    put("reminderDaysBefore", reminderDaysBefore); put("notes", notes ?: JSONObject.NULL)
 }
 private fun JSONObject.toBillEntity() = BillEntity(
     id = getLong("id"), name = getString("name"), amountMinor = getLong("amountMinor"),
@@ -302,6 +303,8 @@ private fun JSONObject.toBillEntity() = BillEntity(
     accountId = if (isNull("accountId")) null else getLong("accountId"),
     categoryId = if (isNull("categoryId")) null else getLong("categoryId"),
     status = BillStatus.valueOf(getString("status")),
+    reminderDaysBefore = optInt("reminderDaysBefore", -1),
+    notes = if (isNull("notes")) null else optString("notes", ""),
     paidTransactionId = if (isNull("paidTransactionId")) null else getLong("paidTransactionId")
 )
 
@@ -313,6 +316,7 @@ private fun RecurringTransactionEntity.toJson() = JSONObject().apply {
     put("nextOccurrenceDate", nextOccurrenceDate); put("reminderEnabled", reminderEnabled)
     put("reminderOffsetDays", reminderOffsetDays); put("isActive", isActive)
     put("notes", notes ?: JSONObject.NULL); put("payee", payee ?: JSONObject.NULL)
+    put("anchorDay", anchorDay)
 }
 private fun JSONObject.toRecurringEntity() = RecurringTransactionEntity(
     id = getLong("id"), templateType = TransactionType.valueOf(getString("templateType")),
@@ -324,7 +328,8 @@ private fun JSONObject.toRecurringEntity() = RecurringTransactionEntity(
     nextOccurrenceDate = getLong("nextOccurrenceDate"), reminderEnabled = getBoolean("reminderEnabled"),
     reminderOffsetDays = getInt("reminderOffsetDays"), isActive = getBoolean("isActive"),
     notes = if (isNull("notes")) null else getString("notes"),
-    payee = if (isNull("payee")) null else getString("payee")
+    payee = if (isNull("payee")) null else getString("payee"),
+    anchorDay = optInt("anchorDay", 0)
 )
 
 /** Small JSONArray helper so call sites read as a normal Kotlin `.map`. */

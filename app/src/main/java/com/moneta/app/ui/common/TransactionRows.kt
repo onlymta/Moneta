@@ -1,6 +1,7 @@
 package com.moneta.app.ui.common
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -88,12 +89,15 @@ fun formatMinutes(minutesSinceMidnight: Int): String =
     LocalTime.of((minutesSinceMidnight / 60).coerceIn(0, 23), (minutesSinceMidnight % 60).coerceIn(0, 59))
         .format(DateTimeFormatter.ofPattern("h:mm a"))
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun TransactionRowCard(
     item: TransactionListItem,
     showDate: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    onLongClick: (() -> Unit)? = null
 ) {
     val t = item.transaction
     val color = when (t.type) {
@@ -102,9 +106,16 @@ fun TransactionRowCard(
         TransactionType.TRANSFER -> TransferGray
     }
     val shown: Money = if (t.type == TransactionType.EXPENSE) -t.amount else t.amount
-    Card(modifier = modifier
-        .fillMaxWidth()
-        .clickable(onClick = onClick)) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        colors = if (selected) {
+            androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        } else {
+            androidx.compose.material3.CardDefaults.cardColors()
+        }
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()

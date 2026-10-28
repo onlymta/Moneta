@@ -92,6 +92,8 @@ fun contributeGoalRoute(goalId: Long) = "contribute_goal/$goalId"
 
 const val BILLS_ROUTE = "bills"
 const val ADD_BILL_ROUTE = "add_bill"
+const val ADD_BILL_ROUTE_PATTERN = "$ADD_BILL_ROUTE?billId={billId}"
+fun editBillRoute(id: Long) = "$ADD_BILL_ROUTE?billId=$id"
 
 const val EXPORT_ROUTE = "export"
 const val IMPORT_ROUTE = "import"
@@ -99,11 +101,14 @@ const val BACKUP_ROUTE = "backup"
 
 const val RECURRING_ROUTE = "recurring"
 const val ADD_RECURRING_ROUTE = "add_recurring"
+const val ADD_RECURRING_ROUTE_PATTERN = "$ADD_RECURRING_ROUTE?recurringId={recurringId}"
+fun editRecurringRoute(id: Long) = "$ADD_RECURRING_ROUTE?recurringId=$id"
 
 const val SETTINGS_ROUTE = "settings"
 const val ABOUT_ROUTE = "about"
 const val PLUS_ROUTE = "plus"
 const val GUIDE_ROUTE = "guide"
+const val FEEDBACK_ROUTE = "feedback"
 
 /** First-run welcome/setup flow. */
 const val ONBOARDING_ROUTE = "onboarding"

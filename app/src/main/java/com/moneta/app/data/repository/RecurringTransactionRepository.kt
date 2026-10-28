@@ -44,7 +44,9 @@ class RecurringTransactionRepository @Inject constructor(
         reminderEnabled: Boolean,
         reminderOffsetDays: Int,
         notes: String?,
-        payee: String?
+        payee: String?,
+        firstDate: LocalDate = startDate,
+        anchorDay: Int = 0
     ): Long = recurringDao.insert(
         RecurringTransactionEntity(
             templateType = templateType,
@@ -57,13 +59,53 @@ class RecurringTransactionRepository @Inject constructor(
             intervalCount = intervalCount,
             startDate = startDate.toEpochDay(),
             endDate = endDate?.toEpochDay(),
-            nextOccurrenceDate = startDate.toEpochDay(),
+            nextOccurrenceDate = firstDate.toEpochDay(),
             reminderEnabled = reminderEnabled,
             reminderOffsetDays = reminderOffsetDays,
             notes = notes,
-            payee = payee
+            payee = payee,
+            anchorDay = anchorDay
         )
     )
+
+    /** Saves changes to a rule. [nextDate] replaces the next date only when the schedule itself was changed. */
+    suspend fun update(
+        id: Long,
+        templateType: TransactionType,
+        amount: Money,
+        accountId: Long,
+        toAccountId: Long?,
+        categoryId: Long?,
+        frequency: RecurrenceFrequency,
+        intervalCount: Int,
+        startDate: LocalDate,
+        endDate: LocalDate?,
+        nextDate: LocalDate,
+        anchorDay: Int,
+        notes: String?,
+        payee: String?
+    ) {
+        val existing = recurringDao.getById(id) ?: return
+        recurringDao.update(
+            existing.copy(
+                templateType = templateType,
+                amountMinor = amount.minorUnits,
+                currencyCode = amount.currencyCode,
+                accountId = accountId,
+                toAccountId = toAccountId,
+                categoryId = categoryId,
+                frequency = frequency,
+                intervalCount = intervalCount,
+                startDate = startDate.toEpochDay(),
+                endDate = endDate?.toEpochDay(),
+                nextOccurrenceDate = nextDate.toEpochDay(),
+                anchorDay = anchorDay,
+                notes = notes,
+                payee = payee,
+                isActive = true
+            )
+        )
+    }
 
     suspend fun setActive(id: Long, isActive: Boolean) = recurringDao.setActive(id, isActive)
 
@@ -111,7 +153,7 @@ class RecurringTransactionRepository @Inject constructor(
                         ),
                     ).also { generatedCount++ }
                 }
-                occurrenceDate = recurrenceCalculator.nextDate(occurrenceDate, rule.frequency, rule.intervalCount)
+                occurrenceDate = recurrenceCalculator.nextDate(occurrenceDate, rule.frequency, rule.intervalCount, rule.anchorDay)
                 recurringDao.advanceNextOccurrence(rule.id, occurrenceDate.toEpochDay())
                 iterations++
 
@@ -141,6 +183,7 @@ class RecurringTransactionRepository @Inject constructor(
         reminderOffsetDays = reminderOffsetDays,
         isActive = isActive,
         notes = notes,
-        payee = payee
+        payee = payee,
+        anchorDay = anchorDay
     )
 }

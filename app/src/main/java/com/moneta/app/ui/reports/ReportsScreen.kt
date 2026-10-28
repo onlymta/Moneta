@@ -126,6 +126,7 @@ fun ReportsScreen(
                         trend = state.trend,
                         isIncome = isIncome,
                         total = if (isIncome) state.income else state.expense,
+                        previousTotal = state.trend.getOrNull(state.trend.lastIndex - 1)?.let { if (isIncome) it.income else it.expense },
                         periodLabel = state.period.label(),
                         onSelect = { id -> viewModel.selectCategory(id) }
                     )
@@ -364,6 +365,13 @@ private fun SliceRow(slice: CategorySlice, showBar: Boolean) {
     }
 }
 
+/** How far [total] is above or below [previous] as a whole percentage, like "12%"; null when there is nothing to compare. */
+private fun changeVersusPrevious(total: Money, previous: Money?): String? {
+    if (previous == null || previous.minorUnits <= 0L) return null
+    val pct = kotlin.math.abs(total.minorUnits - previous.minorUnits) * 100.0 / previous.minorUnits
+    return if (pct < 10.0) String.format(java.util.Locale.US, "%.1f%%", pct) else String.format(java.util.Locale.US, "%.0f%%", pct)
+}
+
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun BreakdownTab(
@@ -372,6 +380,7 @@ private fun BreakdownTab(
     trend: List<PeriodStat>,
     isIncome: Boolean,
     total: Money,
+    previousTotal: Money?,
     periodLabel: String,
     onSelect: (Long) -> Unit
 ) {
@@ -403,7 +412,21 @@ private fun BreakdownTab(
                     androidx.compose.runtime.CompositionLocalProvider(
                         androidx.compose.material3.LocalTextStyle provides MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold)
                     ) {
-                        MoneyText(total, color = accent)
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            MoneyText(total, color = accent)
+                            val change = changeVersusPrevious(total, previousTotal)
+                            if (change != null) {
+                                // For expenses a rise is bad (red); for income a rise is good (green).
+                                val rising = total.minorUnits >= (previousTotal?.minorUnits ?: 0L)
+                                val good = if (isIncome) rising else !rising
+                                Text(
+                                    (if (rising) "\u25B2 " else "\u25BC ") + change,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (good) IncomeGreen else ExpenseRed,
+                                    modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }

@@ -46,8 +46,8 @@ data class OnboardingUiState(
     val decimals: Int = 2,
     val carryForward: Boolean = true,
     val budgetsOn: Boolean = true,
-    val goalsOn: Boolean = true,
-    val billsOn: Boolean = true,
+    val goalsOn: Boolean = false,
+    val billsOn: Boolean = false,
     val isWorking: Boolean = false,
     val restoreMessage: String? = null
 )

@@ -118,4 +118,17 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
-val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+/**
+ * v4 -> v5: bills get an optional note and a reminder ("remind me N days before", -1 = no reminder);
+ * recurring transactions remember which day of the month they follow (0 = use the first date's day).
+ * Only adds columns, so nothing existing is changed.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE bills ADD COLUMN reminder_days_before INTEGER NOT NULL DEFAULT -1")
+        db.execSQL("ALTER TABLE bills ADD COLUMN notes TEXT")
+        db.execSQL("ALTER TABLE recurring_transactions ADD COLUMN anchor_day INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)

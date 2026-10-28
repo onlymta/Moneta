@@ -39,6 +39,19 @@ interface CategoryDao {
     @Query("UPDATE transactions SET category_id = :newCategoryId WHERE category_id = :oldCategoryId")
     suspend fun reassignTransactions(oldCategoryId: Long, newCategoryId: Long)
 
+    @Query("SELECT COUNT(*) FROM recurring_transactions WHERE category_id = :categoryId")
+    suspend fun recurringCountForCategory(categoryId: Long): Int
+
+    @Query("SELECT COUNT(*) FROM categories WHERE parent_category_id = :categoryId")
+    suspend fun childCount(categoryId: Long): Int
+
+    @Query("UPDATE recurring_transactions SET category_id = :newCategoryId WHERE category_id = :oldCategoryId")
+    suspend fun reassignRecurring(oldCategoryId: Long, newCategoryId: Long)
+
+    /** Clears the category on leftovers (such as transactions already in the bin) so the delete is not blocked. */
+    @Query("UPDATE transactions SET category_id = NULL WHERE category_id = :categoryId")
+    suspend fun clearCategoryOnTransactions(categoryId: Long)
+
     @Query("DELETE FROM categories WHERE id = :categoryId")
     suspend fun deleteHard(categoryId: Long)
 

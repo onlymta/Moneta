@@ -147,6 +147,18 @@ class TransactionRepository @Inject constructor(
         transactionDao.softDelete(transactionId, System.currentTimeMillis())
     }
 
+    /** Changes the category of many transactions at once (all of the same [type]). */
+    suspend fun setCategory(ids: Collection<Long>, categoryId: Long, type: TransactionType) {
+        val now = System.currentTimeMillis()
+        ids.toList().chunked(500).forEach { chunk ->
+            transactionDao.setCategoryForIds(chunk, categoryId, type, now)
+        }
+    }
+
+    suspend fun deleteMany(ids: Collection<Long>) {
+        ids.forEach { delete(it) }
+    }
+
     suspend fun undoDelete(transactionId: Long) = database.withTransaction {
         val existing = transactionDao.getById(transactionId) ?: return@withTransaction
         if (!existing.isDeleted) return@withTransaction

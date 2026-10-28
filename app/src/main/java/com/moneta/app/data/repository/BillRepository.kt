@@ -20,12 +20,16 @@ class BillRepository @Inject constructor(
 
     suspend fun getById(id: Long): Bill? = billDao.getById(id)?.toDomain()
 
+    suspend fun getAll(): List<Bill> = billDao.getAll().map { it.toDomain() }
+
     suspend fun createBill(
         name: String,
         amount: Money,
         dueDate: LocalDate,
         accountId: Long?,
-        categoryId: Long?
+        categoryId: Long?,
+        reminderDaysBefore: Int = -1,
+        notes: String? = null
     ): Long = billDao.insert(
         BillEntity(
             name = name,
@@ -33,37 +37,75 @@ class BillRepository @Inject constructor(
             currencyCode = amount.currencyCode,
             dueDate = dueDate.toEpochDay(),
             accountId = accountId,
-            categoryId = categoryId
+            categoryId = categoryId,
+            reminderDaysBefore = reminderDaysBefore,
+            notes = notes
         )
     )
 
+    suspend fun updateBill(
+        id: Long,
+        name: String,
+        amount: Money,
+        dueDate: LocalDate,
+        accountId: Long?,
+        categoryId: Long?,
+        reminderDaysBefore: Int,
+        notes: String?
+    ) {
+        val existing = billDao.getById(id) ?: return
+        billDao.update(
+            existing.copy(
+                name = name,
+                amountMinor = amount.minorUnits,
+                currencyCode = amount.currencyCode,
+                dueDate = dueDate.toEpochDay(),
+                accountId = accountId,
+                categoryId = categoryId,
+                reminderDaysBefore = reminderDaysBefore,
+                notes = notes
+            )
+        )
+    }
+
+    /** Only flips the status to paid; no money moves. Use [recordPayment] to also record the expense. */
+    suspend fun markPaid(billId: Long) {
+        val bill = billDao.getById(billId) ?: return
+        if (bill.status == BillStatus.PAID) return
+        billDao.update(bill.copy(status = BillStatus.PAID))
+    }
+
+    /** Puts a bill back to unpaid. Refused when a payment transaction was recorded (delete that transaction instead). */
+    suspend fun markUnpaid(billId: Long): Boolean {
+        val bill = billDao.getById(billId) ?: return false
+        if (bill.paidTransactionId != null) return false
+        billDao.update(bill.copy(status = BillStatus.UNPAID))
+        return true
+    }
+
     /**
-     * Marks a bill paid (Section 16). When the bill has both an account and a
-     * category set, this also records the matching expense transaction
-     * through TransactionRepository's normal write path, so the account
-     * balance updates correctly - never a shortcut that flips a status flag
-     * without moving any money.
+     * Marks the bill paid AND records the matching expense through TransactionRepository's normal write path,
+     * so the account balance updates. Returns false (and changes nothing) when the bill has no account or category.
      */
-    suspend fun markPaid(billId: Long): Boolean {
+    suspend fun recordPayment(billId: Long): Boolean {
         val bill = billDao.getById(billId) ?: return false
         if (bill.status == BillStatus.PAID) return true
-
-        var paidTransactionId: Long? = null
-        if (bill.accountId != null && bill.categoryId != null) {
-            paidTransactionId = transactionRepository.record(
-                TransactionDraft(
-                    type = com.moneta.app.data.local.entity.TransactionType.EXPENSE,
-                    amount = Money(bill.amountMinor, bill.currencyCode),
-                    accountId = bill.accountId,
-                    categoryId = bill.categoryId,
-                    date = LocalDate.now(),
-                    timeMinutesSinceMidnight = LocalDate.now().let { 0 },
-                    notes = "Bill: ${bill.name}"
-                )
+        val accountId = bill.accountId ?: return false
+        val categoryId = bill.categoryId ?: return false
+        val now = java.time.LocalTime.now()
+        val txId = transactionRepository.record(
+            TransactionDraft(
+                type = com.moneta.app.data.local.entity.TransactionType.EXPENSE,
+                amount = Money(bill.amountMinor, bill.currencyCode),
+                accountId = accountId,
+                categoryId = categoryId,
+                date = LocalDate.now(),
+                timeMinutesSinceMidnight = now.hour * 60 + now.minute,
+                notes = "Bill: ${bill.name}"
             )
-        }
-        billDao.update(bill.copy(status = BillStatus.PAID, paidTransactionId = paidTransactionId))
-        return bill.accountId != null && bill.categoryId != null
+        )
+        billDao.update(bill.copy(status = BillStatus.PAID, paidTransactionId = txId))
+        return true
     }
 
     suspend fun delete(billId: Long) = billDao.delete(billId)
@@ -85,6 +127,8 @@ class BillRepository @Inject constructor(
         accountId = accountId,
         categoryId = categoryId,
         status = status,
-        paidTransactionId = paidTransactionId
+        paidTransactionId = paidTransactionId,
+        reminderDaysBefore = reminderDaysBefore,
+        notes = notes
     )
 }

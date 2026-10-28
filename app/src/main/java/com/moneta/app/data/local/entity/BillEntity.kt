@@ -58,5 +58,11 @@ data class BillEntity(
 
     /** Set once this bill is marked paid and a transaction is recorded for it (Section 16). */
     @ColumnInfo(name = "paid_transaction_id")
-    val paidTransactionId: Long? = null
+    val paidTransactionId: Long? = null,
+
+    /** Remind this many days before the due date (0 = on the day); -1 means no reminder. */
+    @ColumnInfo(name = "reminder_days_before", defaultValue = "-1")
+    val reminderDaysBefore: Int = -1,
+
+    val notes: String? = null
 )

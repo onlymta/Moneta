@@ -22,6 +22,11 @@ class MonetaApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        try {
+            com.moneta.app.reminder.BillReminderScheduler.ensureScheduled(this)
+        } catch (e: Exception) {
+            // Alarms being unavailable must never stop the app.
+        }
         // Both run on the process lifecycle scope rather than blocking app
         // startup (Section 42: startup performance matters for Play Store
         // quality).

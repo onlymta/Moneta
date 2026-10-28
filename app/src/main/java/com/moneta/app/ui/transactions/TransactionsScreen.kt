@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -81,11 +82,114 @@ fun TransactionsScreen(
     var filterOpen by remember { mutableStateOf(false) }
     var sortOpen by remember { mutableStateOf(false) }
 
+    // Long-press a record to start selecting; then tap others, and change their category or delete them together.
+    var selectedIds by remember { mutableStateOf(setOf<Long>()) }
+    var categoryPickerOpen by remember { mutableStateOf(false) }
+    var confirmDeleteMany by remember { mutableStateOf(false) }
+    val selecting = selectedIds.isNotEmpty()
+    val toggleSelected = { id: Long ->
+        selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
+    }
+    androidx.activity.compose.BackHandler(enabled = selecting) { selectedIds = emptySet() }
+    val selectedItems = state.groups.flatMap { it.items }.filter { it.transaction.id in selectedIds }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     if (filterOpen) {
         FilterDialog(state, viewModel) { filterOpen = false }
     }
+    if (categoryPickerOpen) {
+        val types = selectedItems.map { it.transaction.type }.toSet()
+        val single = types.singleOrNull()
+        if (single == null || single == com.moneta.app.data.local.entity.TransactionType.TRANSFER) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { categoryPickerOpen = false },
+                title = { Text("Change category") },
+                text = { Text("Select only expenses, or only income, to change their category together. Transfers have no category.") },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = { categoryPickerOpen = false }) { Text("OK") }
+                }
+            )
+        } else {
+            val wanted = if (single == com.moneta.app.data.local.entity.TransactionType.INCOME) {
+                com.moneta.app.data.local.entity.CategoryType.INCOME
+            } else {
+                com.moneta.app.data.local.entity.CategoryType.EXPENSE
+            }
+            val choices = categoryPaths(state.categories.filter { !it.isArchived && it.type == wanted })
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { categoryPickerOpen = false },
+                title = { Text("Move " + selectedItems.size + " to which category?") },
+                text = {
+                    LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
+                        items(choices, key = { it.first.id }) { (category, path) ->
+                            Text(
+                                path,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.changeCategory(selectedItems.map { it.transaction.id }, category.id, single)
+                                        android.widget.Toast
+                                            .makeText(context, "Moved " + selectedItems.size + " to " + category.name, android.widget.Toast.LENGTH_SHORT)
+                                            .show()
+                                        categoryPickerOpen = false
+                                        selectedIds = emptySet()
+                                    }
+                                    .padding(vertical = 12.dp)
+                            )
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { categoryPickerOpen = false }) { Text("Cancel") }
+                }
+            )
+        }
+    }
+    if (confirmDeleteMany) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmDeleteMany = false },
+            title = { Text("Delete " + selectedIds.size + " records?") },
+            text = { Text("They are removed from your balances and lists.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    viewModel.deleteMany(selectedIds)
+                    selectedIds = emptySet()
+                    confirmDeleteMany = false
+                }) { Text("Delete", color = ExpenseRed) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmDeleteMany = false }) { Text("Cancel") }
+            }
+        )
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        if (selecting) {
+            Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.padding(horizontal = MonetaSpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { selectedIds = emptySet() }) {
+                        Icon(Icons.Outlined.Close, contentDescription = "Stop selecting")
+                    }
+                    Text(
+                        selectedIds.size.toString() + " selected",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    androidx.compose.material3.TextButton(onClick = {
+                        selectedIds = state.groups.flatMap { it.items }.map { it.transaction.id }.toSet()
+                    }) { Text("All") }
+                    androidx.compose.material3.TextButton(onClick = { categoryPickerOpen = true }) { Text("Category") }
+                    androidx.compose.material3.TextButton(onClick = { confirmDeleteMany = true }) {
+                        Text("Delete", color = ExpenseRed)
+                    }
+                }
+            }
+        }
         Column(modifier = Modifier.padding(horizontal = MonetaSpacing.screenHorizontal)) {
             PeriodBar(
                 selection = state.period,
@@ -332,7 +436,11 @@ fun TransactionsScreen(
                     TransactionRowCard(
                         item = entry,
                         showDate = false,
-                        onClick = { onTransactionClick(entry.transaction.id) }
+                        selected = entry.transaction.id in selectedIds,
+                        onLongClick = { toggleSelected(entry.transaction.id) },
+                        onClick = {
+                            if (selecting) toggleSelected(entry.transaction.id) else onTransactionClick(entry.transaction.id)
+                        }
                     )
                 }
             }

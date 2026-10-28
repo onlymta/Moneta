@@ -237,3 +237,14 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Side menu: colours match the app, new tagline, and a Plus / Free badge. Home shows the same badge.
 - Trial: the trial end date is saved in backup files and restored with them, so restoring a backup does not start a new trial.
 - Home compact card 1: "Total Inflow this Month".
+
+## v1.2.8
+- Records: long-press a transaction to select several; change their category or delete them together (same type only).
+- Transaction popup: "Duplicate" is now "Record again".
+- Reports: the total on the Expenses/Income tabs shows ▲/▼ % against the previous period.
+- Goals and Bills pages are off by default (fresh installs; switch on in Settings).
+- Feedback: new Send feedback page (side menu and About). Set `CONTACT_EMAIL` in core/AppInfo.kt.
+- Deleting a category now asks where to move its transactions, recurring rules and sub-categories.
+- Recurring: form like Record transaction; Daily, Working days, Weekends, Weekly (pick weekday), Monthly (pick day or last day), Yearly; every N; start and end dates; tap a rule to edit it. Dates follow the calendar, not "N days from today".
+- Bills: form like Record transaction; due date or "due in" 1–31 days; note; reminder notification (about 9 am, N days before or on the due date); edit, delete, Mark paid, Record payment (also adds the expense), Mark unpaid.
+- Database version 5 (adds columns only; existing data is kept).

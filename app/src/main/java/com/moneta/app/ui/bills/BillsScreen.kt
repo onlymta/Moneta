@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Card
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -51,20 +52,18 @@ import java.time.format.DateTimeFormatter
 fun BillsScreen(
     onBack: (() -> Unit)?,
     onAddBill: () -> Unit,
+    onEditBill: (Long) -> Unit = {},
     viewModel: BillsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(state.lastMarkPaidCreatedTransaction) {
-        val result = state.lastMarkPaidCreatedTransaction ?: return@LaunchedEffect
-        val message = if (result) {
-            "Bill marked paid and recorded as an expense"
-        } else {
-            "Bill marked paid (no account/category set, so no transaction was recorded)"
-        }
+    var deleteCandidate by remember { androidx.compose.runtime.mutableStateOf<Long?>(null) }
+
+    LaunchedEffect(state.message) {
+        val message = state.message ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(message)
-        viewModel.consumeMarkPaidResult()
+        viewModel.consumeMessage()
     }
 
     Scaffold(
@@ -88,12 +87,30 @@ fun BillsScreen(
                 items(state.bills, key = { it.bill.id }) { row ->
                     BillRowCard(
                         row = row,
+                        onEdit = { onEditBill(row.bill.id) },
                         onMarkPaid = { viewModel.markPaid(row.bill.id) },
-                        onDelete = { viewModel.deleteBill(row.bill.id) }
+                        onRecordPayment = { viewModel.recordPayment(row.bill.id) },
+                        onMarkUnpaid = { viewModel.markUnpaid(row.bill.id) },
+                        onDelete = { deleteCandidate = row.bill.id }
                     )
                 }
             }
         }
+    }
+
+    deleteCandidate?.let { id ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { deleteCandidate = null },
+            title = { Text("Delete this bill?") },
+            text = { Text("The bill is removed from your list. Any payment you already recorded stays in your transactions.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteBill(id)
+                    deleteCandidate = null
+                }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { deleteCandidate = null }) { Text("Cancel") } }
+        )
     }
 }
 
@@ -117,7 +134,14 @@ private fun BillsEmptyState(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun BillRowCard(row: BillRow, onMarkPaid: () -> Unit, onDelete: () -> Unit) {
+private fun BillRowCard(
+    row: BillRow,
+    onEdit: () -> Unit,
+    onMarkPaid: () -> Unit,
+    onRecordPayment: () -> Unit,
+    onMarkUnpaid: () -> Unit,
+    onDelete: () -> Unit
+) {
     val (label, color) = when (row.urgency) {
         BillUrgency.OVERDUE -> "Overdue" to ExpenseRed
         BillUrgency.DUE_TODAY -> "Due today" to ExpenseRed
@@ -128,23 +152,43 @@ private fun BillRowCard(row: BillRow, onMarkPaid: () -> Unit, onDelete: () -> Un
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(row.bill.name, style = MaterialTheme.typography.bodyLarge)
                     Text(
                         "${row.bill.dueDate.format(DateTimeFormatter.ofPattern("MMM d, yyyy"))} · $label",
                         style = MaterialTheme.typography.labelMedium,
                         color = color
                     )
+                    if (row.bill.reminderDaysBefore >= 0 && row.urgency != BillUrgency.PAID) {
+                        Text(
+                            "Reminder on ${row.bill.dueDate.minusDays(row.bill.reminderDaysBefore.toLong()).format(DateTimeFormatter.ofPattern("MMM d"))}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    row.bill.notes?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 MoneyText(row.bill.amount)
             }
-            if (row.urgency != BillUrgency.PAID) {
-                Spacer(Modifier.height(MonetaSpacing.sm))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    IconButton(onClick = onDelete) {
-                        Icon(Icons.Outlined.Delete, contentDescription = "Delete bill")
+            Spacer(Modifier.height(MonetaSpacing.sm))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row {
+                    IconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, contentDescription = "Edit bill") }
+                    IconButton(onClick = onDelete) { Icon(Icons.Outlined.Delete, contentDescription = "Delete bill") }
+                }
+                if (row.urgency != BillUrgency.PAID) {
+                    Row {
+                        TextButton(onClick = onMarkPaid) { Text("Mark paid") }
+                        TextButton(onClick = onRecordPayment) { Text("Record payment") }
                     }
-                    TextButton(onClick = onMarkPaid) { Text("Mark paid") }
+                } else {
+                    TextButton(onClick = onMarkUnpaid) { Text("Mark unpaid") }
                 }
             }
         }

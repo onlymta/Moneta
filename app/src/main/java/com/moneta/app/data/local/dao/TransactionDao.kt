@@ -119,6 +119,10 @@ interface TransactionDao {
     @Update
     suspend fun update(transaction: TransactionEntity)
 
+    /** Moves the given transactions of one [type] to another category. Balances don't depend on the category. */
+    @Query("UPDATE transactions SET category_id = :categoryId, updated_at = :updatedAt WHERE id IN (:ids) AND type = :type AND is_deleted = 0")
+    suspend fun setCategoryForIds(ids: List<Long>, categoryId: Long, type: TransactionType, updatedAt: Long)
+
     @Query("UPDATE transactions SET is_deleted = 1, updated_at = :updatedAt WHERE id = :id")
     suspend fun softDelete(id: Long, updatedAt: Long)
 

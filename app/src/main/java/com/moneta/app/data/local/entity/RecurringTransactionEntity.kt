@@ -6,7 +6,8 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-enum class RecurrenceFrequency { DAILY, WEEKLY, MONTHLY, YEARLY }
+/** WEEKDAYS is Monday to Friday and WEEKENDS is Saturday and Sunday; they ignore the "every N" count. */
+enum class RecurrenceFrequency { DAILY, WEEKLY, MONTHLY, YEARLY, WEEKDAYS, WEEKENDS }
 
 /**
  * A recurring transaction template (Section 15). Deliberately supports only
@@ -75,5 +76,9 @@ data class RecurringTransactionEntity(
     val isActive: Boolean = true,
 
     val notes: String? = null,
-    val payee: String? = null
+    val payee: String? = null,
+
+    /** For monthly rules: the day of the month to use (31 means "last day"); 0 uses the first date's day. */
+    @ColumnInfo(name = "anchor_day", defaultValue = "0")
+    val anchorDay: Int = 0
 )

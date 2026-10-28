@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Card
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -48,6 +49,7 @@ import java.time.format.DateTimeFormatter
 fun RecurringScreen(
     onBack: (() -> Unit)?,
     onAdd: () -> Unit,
+    onEdit: (Long) -> Unit = {},
     viewModel: RecurringViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -72,6 +74,7 @@ fun RecurringScreen(
                 items(state.items, key = { it.id }) { item ->
                     RecurringRow(
                         item = item,
+                        onEdit = { onEdit(item.id) },
                         onToggleActive = { viewModel.setActive(item.id, !item.isActive) },
                         onDelete = { viewModel.delete(item.id) }
                     )
@@ -101,16 +104,16 @@ private fun RecurringEmptyState(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun RecurringRow(item: RecurringTransaction, onToggleActive: () -> Unit, onDelete: () -> Unit) {
+private fun RecurringRow(item: RecurringTransaction, onEdit: () -> Unit, onToggleActive: () -> Unit, onDelete: () -> Unit) {
     val amountColor = when (item.templateType) {
         TransactionType.INCOME -> IncomeGreen
         TransactionType.EXPENSE -> ExpenseRed
         TransactionType.TRANSFER -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth(), onClick = onEdit) {
         Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(item.payee ?: item.notes ?: item.templateType.name, style = MaterialTheme.typography.bodyLarge)
                     Text(
                         if (item.endDate != null && item.endDate == item.startDate) {
@@ -134,8 +137,13 @@ private fun RecurringRow(item: RecurringTransaction, onToggleActive: () -> Unit,
                     Text(if (item.isActive) "Active" else "Paused", style = MaterialTheme.typography.labelMedium)
                     Switch(checked = item.isActive, onCheckedChange = { onToggleActive() })
                 }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Outlined.Delete, contentDescription = "Delete recurring transaction")
+                Row {
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Outlined.Edit, contentDescription = "Edit recurring transaction")
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Outlined.Delete, contentDescription = "Delete recurring transaction")
+                    }
                 }
             }
         }
@@ -143,11 +151,14 @@ private fun RecurringRow(item: RecurringTransaction, onToggleActive: () -> Unit,
 }
 
 private fun frequencyLabel(frequency: RecurrenceFrequency, interval: Int): String {
+    if (frequency == RecurrenceFrequency.WEEKDAYS) return "Working days (Mon–Fri)"
+    if (frequency == RecurrenceFrequency.WEEKENDS) return "Weekends (Sat & Sun)"
     val unit = when (frequency) {
         RecurrenceFrequency.DAILY -> "day"
         RecurrenceFrequency.WEEKLY -> "week"
         RecurrenceFrequency.MONTHLY -> "month"
         RecurrenceFrequency.YEARLY -> "year"
+        RecurrenceFrequency.WEEKDAYS, RecurrenceFrequency.WEEKENDS -> "day"
     }
     return if (interval == 1) "Every $unit" else "Every $interval ${unit}s"
 }

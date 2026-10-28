@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -113,6 +114,14 @@ class TransactionsViewModel @Inject constructor(
     launchFilter: RecordsLaunchFilter,
     private val reportsLaunch: ReportsLaunch
 ) : ViewModel() {
+
+    fun changeCategory(ids: Collection<Long>, categoryId: Long, type: com.moneta.app.data.local.entity.TransactionType) {
+        viewModelScope.launch { transactionRepository.setCategory(ids, categoryId, type) }
+    }
+
+    fun deleteMany(ids: Collection<Long>) {
+        viewModelScope.launch { transactionRepository.deleteMany(ids) }
+    }
 
     private val period = MutableStateFlow(PeriodSelection(mode = PeriodMode.MONTH))
     private val queryFlow = MutableStateFlow("")

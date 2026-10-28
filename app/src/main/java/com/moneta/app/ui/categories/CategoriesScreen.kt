@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -151,11 +152,22 @@ fun CategoriesScreen(
 
     state.pendingReassignment?.let { pending ->
         val allCategories = state.allCategories
-        ReassignmentDialog(
-            categoryName = pending.categoryToDelete.name,
-            transactionCount = pending.transactionCount,
-            otherCategories = allCategories.filter { it.id != pending.categoryToDelete.id },
-            onConfirm = viewModel::confirmReassignmentAndDelete,
+        // Not itself, and not one of its own sub-categories (moving into those would lose them with it).
+        val childIds = HashSet<Long>()
+        var grew = true
+        while (grew) {
+            grew = false
+            allCategories.forEach { c ->
+                val parent = c.parentCategoryId
+                if ((parent == pending.categoryToDelete.id || (parent != null && parent in childIds)) && childIds.add(c.id)) {
+                    grew = true
+                }
+            }
+        }
+        DeleteCategoryDialog(
+            pending = pending,
+            targets = allCategories.filter { it.id != pending.categoryToDelete.id && it.id !in childIds },
+            onConfirm = viewModel::confirmDelete,
             onDismiss = viewModel::cancelReassignment
         )
     }
@@ -218,53 +230,80 @@ private fun Modifier.clickableCategory(onClick: () -> Unit): Modifier =
     this.clickable(onClick = onClick)
 
 @Composable
-private fun ReassignmentDialog(
-    categoryName: String,
-    transactionCount: Int,
-    otherCategories: List<Category>,
-    onConfirm: (Long) -> Unit,
+private fun DeleteCategoryDialog(
+    pending: PendingReassignment,
+    targets: List<Category>,
+    onConfirm: (Long?) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var selectedId by remember { mutableStateOf(otherCategories.firstOrNull()?.id) }
+    var selectedId by remember { mutableStateOf<Long?>(null) }
+    val name = pending.categoryToDelete.name
+    val uses = buildList {
+        if (pending.transactionCount > 0) add(pending.transactionCount.toString() + (if (pending.transactionCount == 1) " transaction" else " transactions"))
+        if (pending.recurringCount > 0) add(pending.recurringCount.toString() + (if (pending.recurringCount == 1) " repeating rule" else " repeating rules"))
+    }.joinToString(" and ")
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Move $transactionCount transactions?") },
+        title = { Text(if (pending.needsTarget) "Delete \"$name\"?" else "Delete \"$name\"?") },
         text = {
             Column {
-                Text(
-                    "\"$categoryName\" has $transactionCount transaction(s). Choose a category to move them to before deleting."
-                )
-                Spacer(Modifier.height(MonetaSpacing.sm))
-                if (otherCategories.isEmpty()) {
-                    Text(
-                        "Create another category of this type first.",
-                        color = MaterialTheme.colorScheme.error
-                    )
-                } else {
-                    otherCategories.forEach { category ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickableCategory { selectedId = category.id }
-                                .padding(vertical = MonetaSpacing.xs),
-                            verticalAlignment = Alignment.CenterVertically
+                if (pending.needsTarget) {
+                    Text("It has $uses. Pick the category they should move to.")
+                    Spacer(Modifier.height(MonetaSpacing.sm))
+                    if (targets.isEmpty()) {
+                        Text(
+                            "There is no other category to move them to. Add one first.",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        androidx.compose.foundation.lazy.LazyColumn(
+                            modifier = Modifier.heightIn(max = 280.dp)
                         ) {
-                            androidx.compose.material3.RadioButton(
-                                selected = selectedId == category.id,
-                                onClick = { selectedId = category.id }
-                            )
-                            Text(category.name)
+                            items(targets, key = { it.id }) { category ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickableCategory { selectedId = category.id }
+                                        .padding(vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    androidx.compose.material3.RadioButton(
+                                        selected = selectedId == category.id,
+                                        onClick = { selectedId = category.id }
+                                    )
+                                    Text(category.name, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                }
+                            }
                         }
                     }
+                } else {
+                    Text("Nothing is recorded in this category, so nothing else changes.")
                 }
+                if (pending.childCount > 0) {
+                    Spacer(Modifier.height(MonetaSpacing.sm))
+                    Text(
+                        "Its " + pending.childCount + (if (pending.childCount == 1) " sub-category stays" else " sub-categories stay") +
+                            " and becomes a normal category.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.height(MonetaSpacing.sm))
+                Text(
+                    "Any budget set for this category is deleted with it.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { selectedId?.let(onConfirm) },
-                enabled = selectedId != null
-            ) { Text("Move and delete") }
+                onClick = { onConfirm(selectedId) },
+                enabled = !pending.needsTarget || selectedId != null
+            ) {
+                Text(if (pending.needsTarget) "Move and delete" else "Delete", color = MaterialTheme.colorScheme.error)
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )

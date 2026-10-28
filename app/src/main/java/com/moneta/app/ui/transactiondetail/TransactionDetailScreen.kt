@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Icon
@@ -124,7 +124,7 @@ fun TransactionDetailPopup(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             ActionButton("Edit", Icons.Outlined.Edit) { onEdit(transactionId) }
-                            ActionButton("Duplicate", Icons.Outlined.ContentCopy) { onDuplicate(transactionId) }
+                            ActionButton("Record again", Icons.Outlined.Repeat) { onDuplicate(transactionId) }
                             ActionButton("Delete", Icons.Outlined.Delete, ExpenseRed) { confirmDelete = true }
                         }
                     }
@@ -141,14 +141,17 @@ private fun ActionButton(
     tint: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified,
     onClick: () -> Unit
 ) {
-    TextButton(onClick = onClick) {
+    TextButton(
+        onClick = onClick,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+    ) {
         Icon(
             icon,
             contentDescription = null,
             tint = if (tint == androidx.compose.ui.graphics.Color.Unspecified) MaterialTheme.colorScheme.primary else tint
         )
         Spacer(Modifier.width(4.dp))
-        Text(label, color = if (tint == androidx.compose.ui.graphics.Color.Unspecified) androidx.compose.ui.graphics.Color.Unspecified else tint)
+        Text(label, maxLines = 1, color = if (tint == androidx.compose.ui.graphics.Color.Unspecified) androidx.compose.ui.graphics.Color.Unspecified else tint)
     }
 }
 

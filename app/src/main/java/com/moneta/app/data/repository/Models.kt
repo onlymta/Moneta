@@ -136,7 +136,9 @@ data class Bill(
     val accountId: Long?,
     val categoryId: Long?,
     val status: com.moneta.app.data.local.entity.BillStatus,
-    val paidTransactionId: Long?
+    val paidTransactionId: Long?,
+    val reminderDaysBefore: Int = -1,
+    val notes: String? = null
 )
 
 // --- Recurring transactions ---
@@ -157,5 +159,6 @@ data class RecurringTransaction(
     val reminderOffsetDays: Int,
     val isActive: Boolean,
     val notes: String?,
-    val payee: String?
+    val payee: String?,
+    val anchorDay: Int = 0
 )

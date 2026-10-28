@@ -34,12 +34,10 @@ import androidx.compose.ui.unit.dp
 import com.moneta.app.ui.common.SubPageHeader
 import com.moneta.app.ui.theme.MonetaSpacing
 
-/** Where feedback emails go. Put your support address here; left blank, the mail app opens with an empty "To". */
-private const val CONTACT_EMAIL = ""
-private const val PACKAGE_NAME = "com.moneta.app"
+private const val PACKAGE_NAME = com.moneta.app.core.AppInfo.PACKAGE_NAME
 
 @Composable
-fun AboutScreen(onBack: () -> Unit) {
+fun AboutScreen(onBack: () -> Unit, onOpenFeedback: () -> Unit = {}) {
     val context = LocalContext.current
     Column(modifier = Modifier.fillMaxSize()) {
         SubPageHeader(title = "About", onBack = onBack)
@@ -86,13 +84,8 @@ fun AboutScreen(onBack: () -> Unit) {
                         }
                         launch(context, Intent.createChooser(send, "Share Moneta"))
                     }
-                    AboutAction(Icons.Outlined.MailOutline, "Contact and feedback", "Report a problem or suggest something") {
-                        val mail = Intent(Intent.ACTION_SENDTO).apply {
-                            data = Uri.parse("mailto:")
-                            if (CONTACT_EMAIL.isNotBlank()) putExtra(Intent.EXTRA_EMAIL, arrayOf(CONTACT_EMAIL))
-                            putExtra(Intent.EXTRA_SUBJECT, "Moneta feedback (v${com.moneta.app.BuildConfig.VERSION_NAME})")
-                        }
-                        launch(context, mail)
+                    AboutAction(Icons.Outlined.MailOutline, "Send feedback", "Report a problem or suggest something") {
+                        onOpenFeedback()
                     }
                 }
             }

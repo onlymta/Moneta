@@ -35,8 +35,13 @@ data class CategoriesUiState(
 
 data class PendingReassignment(
     val categoryToDelete: Category,
-    val transactionCount: Int
-)
+    val transactionCount: Int,
+    val recurringCount: Int = 0,
+    val childCount: Int = 0
+) {
+    /** True when something uses this category, so the user must choose where it moves. */
+    val needsTarget: Boolean get() = transactionCount + recurringCount > 0
+}
 
 @HiltViewModel
 class CategoriesViewModel @Inject constructor(
@@ -103,18 +108,25 @@ class CategoriesViewModel @Inject constructor(
     /** Section 12: safe deletion - if the category has transactions, this surfaces a reassignment prompt instead. */
     fun requestDelete(category: Category) {
         viewModelScope.launch {
-            when (val result = categoryRepository.tryDelete(category.id)) {
-                CategoryDeletionResult.Deleted -> Unit
-                is CategoryDeletionResult.RequiresReassignment ->
-                    pendingReassignmentFlow.value = PendingReassignment(category, result.transactionCount)
-            }
+            val usage = categoryRepository.usageOf(category.id)
+            pendingReassignmentFlow.value = PendingReassignment(
+                categoryToDelete = category,
+                transactionCount = usage.transactions,
+                recurringCount = usage.recurring,
+                childCount = usage.children
+            )
         }
     }
 
-    fun confirmReassignmentAndDelete(reassignToCategoryId: Long) {
+    /** Deletes the category on screen; [moveTo] is where its transactions go (null when nothing uses it). */
+    fun confirmDelete(moveTo: Long?) {
         val pending = pendingReassignmentFlow.value ?: return
         viewModelScope.launch {
-            categoryRepository.deleteWithReassignment(pending.categoryToDelete.id, reassignToCategoryId)
+            try {
+                categoryRepository.deleteCategory(pending.categoryToDelete.id, moveTo)
+            } catch (e: Exception) {
+                // A category that is still in use somewhere unexpected is left in place rather than crashing.
+            }
             pendingReassignmentFlow.value = null
         }
     }

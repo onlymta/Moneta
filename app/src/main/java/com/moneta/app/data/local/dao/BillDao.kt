@@ -13,6 +13,9 @@ interface BillDao {
     @Query("SELECT * FROM bills ORDER BY due_date ASC")
     fun observeAll(): Flow<List<BillEntity>>
 
+    @Query("SELECT * FROM bills")
+    suspend fun getAll(): List<BillEntity>
+
     @Query("SELECT * FROM bills WHERE id = :id")
     suspend fun getById(id: Long): BillEntity?
 

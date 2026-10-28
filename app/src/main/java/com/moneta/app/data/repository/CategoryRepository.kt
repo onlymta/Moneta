@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** How many transactions, repeating rules and sub-categories use a category. */
+data class CategoryUsage(val transactions: Int, val recurring: Int, val children: Int)
+
 sealed class CategoryDeletionResult {
     data object Deleted : CategoryDeletionResult()
     data class RequiresReassignment(val transactionCount: Int) : CategoryDeletionResult()
@@ -95,6 +98,26 @@ class CategoryRepository @Inject constructor(
         } else {
             CategoryDeletionResult.RequiresReassignment(count)
         }
+    }
+
+    /** What is attached to a category, so the delete screen can say exactly what will happen. */
+    suspend fun usageOf(categoryId: Long): CategoryUsage = CategoryUsage(
+        transactions = categoryDao.transactionCountForCategory(categoryId),
+        recurring = categoryDao.recurringCountForCategory(categoryId),
+        children = categoryDao.childCount(categoryId)
+    )
+
+    /**
+     * Deletes a category. When it is in use, [moveTo] says where its transactions and repeating rules go first.
+     * Sub-categories become ordinary categories (the database clears their parent).
+     */
+    suspend fun deleteCategory(categoryId: Long, moveTo: Long?) {
+        if (moveTo != null && moveTo != categoryId) {
+            categoryDao.reassignTransactions(categoryId, moveTo)
+            categoryDao.reassignRecurring(categoryId, moveTo)
+        }
+        categoryDao.clearCategoryOnTransactions(categoryId)
+        categoryDao.deleteHard(categoryId)
     }
 
     suspend fun deleteWithReassignment(categoryId: Long, reassignToCategoryId: Long) {

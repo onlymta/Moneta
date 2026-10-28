@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Repeat
@@ -437,9 +438,19 @@ private fun MonetaAppContent(
 
             // --- Bills ---
             composable(BILLS_ROUTE) {
-                BillsScreen(onBack = { navController.popBackStack() }, onAddBill = { navController.navigate(ADD_BILL_ROUTE) })
+                BillsScreen(
+                    onBack = { navController.popBackStack() },
+                    onAddBill = { navController.navigate(ADD_BILL_ROUTE) },
+                    onEditBill = { id -> navController.navigate(editBillRoute(id)) }
+                )
             }
-            composable(ADD_BILL_ROUTE) {
+            composable(
+                ADD_BILL_ROUTE_PATTERN,
+                arguments = listOf(navArgument("billId") {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                })
+            ) {
                 AddBillScreen(onDone = { navController.popBackStack() })
             }
 
@@ -460,9 +471,19 @@ private fun MonetaAppContent(
 
             // --- Recurring ---
             composable(RECURRING_ROUTE) {
-                RecurringScreen(onBack = { navController.popBackStack() }, onAdd = { navController.navigate(ADD_RECURRING_ROUTE) })
+                RecurringScreen(
+                    onBack = { navController.popBackStack() },
+                    onAdd = { navController.navigate(ADD_RECURRING_ROUTE) },
+                    onEdit = { id -> navController.navigate(editRecurringRoute(id)) }
+                )
             }
-            composable(ADD_RECURRING_ROUTE) {
+            composable(
+                ADD_RECURRING_ROUTE_PATTERN,
+                arguments = listOf(navArgument("recurringId") {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                })
+            ) {
                 AddRecurringScreen(onDone = { navController.popBackStack() })
             }
 
@@ -475,7 +496,13 @@ private fun MonetaAppContent(
             }
 
             composable(ABOUT_ROUTE) {
-                com.moneta.app.ui.settings.AboutScreen(onBack = goBack)
+                com.moneta.app.ui.settings.AboutScreen(
+                    onBack = goBack,
+                    onOpenFeedback = { navController.navigate(FEEDBACK_ROUTE) }
+                )
+            }
+            composable(FEEDBACK_ROUTE) {
+                com.moneta.app.ui.feedback.FeedbackScreen(onBack = goBack)
             }
 
             // --- Settings ---
@@ -660,6 +687,7 @@ private fun MonetaDrawerContent(
         DrawerEntry("Help and FAQs", androidx.compose.material.icons.Icons.Outlined.Lightbulb, GUIDE_ROUTE),
         DrawerEntry("About", Icons.Outlined.Info, ABOUT_ROUTE)
     )
+    val feedbackEntry = DrawerEntry("Send feedback", Icons.Outlined.MailOutline, FEEDBACK_ROUTE)
     ModalDrawerSheet {
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
             // Plus users get a solid header with a Plus badge; free users get the lighter header with an Upgrade badge.
@@ -743,6 +771,7 @@ private fun MonetaDrawerContent(
             }
 
             androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
+            DrawerItem(feedbackEntry, onItem)
             app.forEach { entry -> DrawerItem(entry, onItem) }
             Spacer(Modifier.height(24.dp))
         }
