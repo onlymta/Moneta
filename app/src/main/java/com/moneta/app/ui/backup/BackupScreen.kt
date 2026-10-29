@@ -135,7 +135,7 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
                         }
                     }
                     Text(
-                        "Saved inside Moneta when you open the app and a backup is due (latest 7 kept). " +
+                        "Saved inside Paisabook when you open the app and a backup is due (latest 7 kept). " +
                             "Those copies are deleted if the app is uninstalled, so choose a folder below to keep copies outside the app.",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -198,7 +198,7 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
             title = { Text("Replace all current data?") },
             text = {
                 Text(
-                    "Restoring replaces every account, category, transaction, budget, goal and bill in Moneta with what is in this backup. This can't be undone, so download a backup of your current data first if unsure."
+                    "Restoring replaces every account, category, transaction, budget, goal and bill in Paisabook with what is in this backup. This can't be undone, so download a backup of your current data first if unsure."
                 )
             },
             confirmButton = {

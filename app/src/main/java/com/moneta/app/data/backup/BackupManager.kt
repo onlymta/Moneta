@@ -111,12 +111,12 @@ class BackupManager @Inject constructor(
         val root = try {
             JSONObject(text)
         } catch (e: Exception) {
-            return RestoreResult.Failed("This file isn't a valid Moneta backup.")
+            return RestoreResult.Failed("This file isn't a valid Paisabook backup.")
         }
 
         val schemaVersion = root.optInt("schemaVersion", -1)
         if (schemaVersion !in 1..BACKUP_SCHEMA_VERSION) {
-            return RestoreResult.Failed("This backup was made by an incompatible version of Moneta.")
+            return RestoreResult.Failed("This backup was made by an incompatible version of Paisabook.")
         }
 
         return try {

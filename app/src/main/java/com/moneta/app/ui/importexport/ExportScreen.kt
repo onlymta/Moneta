@@ -72,27 +72,27 @@ fun ExportScreen(onBack: () -> Unit, viewModel: ExportViewModel = hiltViewModel(
                 }
             }
 
+            val plusVm: com.moneta.app.ui.plus.PlusViewModel = hiltViewModel()
+            val plusState by plusVm.state.collectAsState()
+            if (!plusState.hasPlus) {
+                com.moneta.app.ui.plus.PlusOnlyCard(what = "Excel and PDF exports")
+            }
             FormatRow(
                 badge = "XLSX",
                 badgeColor = Color(0xFF1B8A4B),
                 title = "Excel workbook",
                 subtitle = "Summary, transactions and a by-category sheet",
                 fileName = viewModel.fileName("xlsx"),
-                enabled = !state.isExporting,
+                enabled = !state.isExporting && plusState.hasPlus,
                 onExport = { xlsxLauncher.launch(viewModel.fileName("xlsx")) }
             )
-            val plusVm: com.moneta.app.ui.plus.PlusViewModel = hiltViewModel()
-            val plusState by plusVm.state.collectAsState()
-            if (!plusState.insightsUnlocked) {
-                com.moneta.app.ui.plus.LockedInsightsCard(what = "PDF report", viewModel = plusVm)
-            }
             FormatRow(
                 badge = "PDF",
                 badgeColor = Color(0xFFC62828),
                 title = "PDF report",
                 subtitle = "A neat printable statement",
                 fileName = viewModel.fileName("pdf"),
-                enabled = !state.isExporting && plusState.insightsUnlocked,
+                enabled = !state.isExporting && plusState.hasPlus,
                 onExport = { pdfLauncher.launch(viewModel.fileName("pdf")) }
             )
             FormatRow(

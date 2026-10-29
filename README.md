@@ -248,3 +248,10 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Recurring: form like Record transaction; Daily, Working days, Weekends, Weekly (pick weekday), Monthly (pick day or last day), Yearly; every N; start and end dates; tap a rule to edit it. Dates follow the calendar, not "N days from today".
 - Bills: form like Record transaction; due date or "due in" 1–31 days; note; reminder notification (about 9 am, N days before or on the due date); edit, delete, Mark paid, Record payment (also adds the expense), Mark unpaid.
 - Database version 5 (adds columns only; existing data is kept).
+
+## v1.2.9
+- App name is now Paisabook (display name only; package, database and Plus product id are unchanged).
+- Settings moved into the Manage group of the side menu.
+- Recurring form now matches the Record form (amount, account and category pop-up pickers, one notes field).
+- Free vs Plus: Plus = no ads, sub-categories, home customisation, auto backup, Excel/PDF export, reorder, bulk category change, bill reminders, working-day/weekend and "every N" repeats. Free + watch an ad (24 h): charts and trends.
+- TEST toggle at the bottom of the side menu (search for TEST-TOGGLE to remove it before release).

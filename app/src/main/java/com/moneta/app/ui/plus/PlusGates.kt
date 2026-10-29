@@ -67,7 +67,7 @@ fun LockedInsightsCard(what: String, modifier: Modifier = Modifier, viewModel: P
         ) {
             Text(what, style = MaterialTheme.typography.titleMedium)
             Text(
-                "Watch one short ad to unlock this for $AD_UNLOCK_HOURS hours, or get Moneta Plus once and never see ads.",
+                "Watch one short ad to unlock this for $AD_UNLOCK_HOURS hours, or get Paisabook Plus once and never see ads.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -82,6 +82,33 @@ fun LockedInsightsCard(what: String, modifier: Modifier = Modifier, viewModel: P
             message?.let {
                 Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             }
+        }
+    }
+}
+
+/** True for a Plus purchase, the free trial, or the test toggle's Plus mode. */
+@Composable
+fun rememberHasPlus(viewModel: PlusViewModel = hiltViewModel()): Boolean {
+    val state by viewModel.state.collectAsState()
+    return state.hasPlus
+}
+
+/** A short card for features that are only for Plus (nothing to "view for a while", so no ad option). */
+@Composable
+fun PlusOnlyCard(what: String, modifier: Modifier = Modifier) {
+    val openPlus = LocalOpenPlus.current
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(MonetaSpacing.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)
+        ) {
+            Text(what, style = MaterialTheme.typography.titleMedium)
+            Text(
+                "This is a Paisabook Plus feature. Plus is a one-time purchase, with no subscription.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(onClick = openPlus) { Text("See Paisabook Plus") }
         }
     }
 }

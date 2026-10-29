@@ -36,7 +36,7 @@ data class BillingUi(
 )
 
 /**
- * Talks to Google Play Billing for the single one-time "Moneta Plus" purchase. The result is
+ * Talks to Google Play Billing for the single one-time "Paisabook Plus" purchase. The result is
  * remembered on the phone, so Plus keeps working offline. When the app starts and Play answers,
  * the remembered result is corrected (for example after a refund). If Play can't be reached,
  * nothing is changed, so being offline never takes Plus away.
@@ -94,7 +94,7 @@ class BillingManager @Inject constructor(
                 }
             },
             onFailed = {
-                _ui.update { it.copy(message = "Google Play isn't available. Install Moneta from Google Play to buy Plus.") }
+                _ui.update { it.copy(message = "Google Play isn't available. Install Paisabook from Google Play to buy Plus.") }
             }
         )
     }
@@ -165,7 +165,7 @@ class BillingManager @Inject constructor(
                     val ack = AcknowledgePurchaseParams.newBuilder().setPurchaseToken(owned.purchaseToken).build()
                     client.acknowledgePurchase(ack) { }
                 }
-                _ui.update { it.copy(busy = false, message = "Moneta Plus is unlocked. Thank you!") }
+                _ui.update { it.copy(busy = false, message = "Paisabook Plus is unlocked. Thank you!") }
             }
             mine.any { it.purchaseState == Purchase.PurchaseState.PENDING } -> {
                 _ui.update { it.copy(busy = false, message = "Your payment is pending. Plus unlocks as soon as it completes.") }

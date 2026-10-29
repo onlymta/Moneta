@@ -123,8 +123,8 @@ class AddRecurringViewModel @Inject constructor(
                     yearDay = rule.startDate.dayOfMonth,
                     startFrom = rule.startDate,
                     endDate = rule.endDate,
-                    payee = rule.payee.orEmpty(),
-                    notes = rule.notes.orEmpty()
+                    payee = "",
+                    notes = rule.notes ?: rule.payee.orEmpty()
                 )
                 originalSignature = scheduleSignature(loaded)
                 form.value = loaded
@@ -243,7 +243,7 @@ class AddRecurringViewModel @Inject constructor(
                     nextDate = nextDate,
                     anchorDay = anchor,
                     notes = f.notes.takeIf { it.isNotBlank() },
-                    payee = f.payee.takeIf { it.isNotBlank() }
+                    payee = null
                 )
             } else {
                 recurringRepository.create(
@@ -259,7 +259,7 @@ class AddRecurringViewModel @Inject constructor(
                     reminderEnabled = false,
                     reminderOffsetDays = 1,
                     notes = f.notes.takeIf { it.isNotBlank() },
-                    payee = f.payee.takeIf { it.isNotBlank() },
+                    payee = null,
                     firstDate = nextDate,
                     anchorDay = anchor
                 )

@@ -85,6 +85,8 @@ fun TransactionsScreen(
     // Long-press a record to start selecting; then tap others, and change their category or delete them together.
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     var categoryPickerOpen by remember { mutableStateOf(false) }
+    val hasPlus = com.moneta.app.ui.plus.rememberHasPlus()
+    val openPlus = com.moneta.app.ui.plus.LocalOpenPlus.current
     var confirmDeleteMany by remember { mutableStateOf(false) }
     val selecting = selectedIds.isNotEmpty()
     val toggleSelected = { id: Long ->
@@ -183,7 +185,7 @@ fun TransactionsScreen(
                     androidx.compose.material3.TextButton(onClick = {
                         selectedIds = state.groups.flatMap { it.items }.map { it.transaction.id }.toSet()
                     }) { Text("All") }
-                    androidx.compose.material3.TextButton(onClick = { categoryPickerOpen = true }) { Text("Category") }
+                    androidx.compose.material3.TextButton(onClick = { if (hasPlus) categoryPickerOpen = true else openPlus() }) { Text("Category") }
                     androidx.compose.material3.TextButton(onClick = { confirmDeleteMany = true }) {
                         Text("Delete", color = ExpenseRed)
                     }

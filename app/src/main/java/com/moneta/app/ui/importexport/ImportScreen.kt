@@ -77,7 +77,7 @@ fun ImportScreen(onBack: () -> Unit, viewModel: ImportViewModel = hiltViewModel(
             if (stageStart) {
                 Text(
                     "Bring in transactions from an Excel (.xlsx) or CSV file. Only Date and Amount are required. " +
-                        "Your own column names are fine, you'll match them next. Transactions already in Moneta are skipped.",
+                        "Your own column names are fine, you'll match them next. Transactions already in Paisabook are skipped.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -341,7 +341,7 @@ private fun ReviewCard(
                 }
             }
             if (duplicateCount > 0) {
-                FoldSection("Already in Moneta ($duplicateCount)", amber) {
+                FoldSection("Already in Paisabook ($duplicateCount)", amber) {
                     Text(
                         "Same date, amount, type and account as an existing transaction, so they are left out.",
                         style = MaterialTheme.typography.labelSmall,

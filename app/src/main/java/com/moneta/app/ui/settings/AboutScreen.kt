@@ -50,7 +50,7 @@ fun AboutScreen(onBack: () -> Unit, onOpenFeedback: () -> Unit = {}) {
         ) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
-                    Text("Moneta", style = MaterialTheme.typography.headlineSmall)
+                    Text("Paisabook", style = MaterialTheme.typography.headlineSmall)
                     Text(
                         "Version ${com.moneta.app.BuildConfig.VERSION_NAME} (build ${com.moneta.app.BuildConfig.VERSION_CODE})",
                         style = MaterialTheme.typography.bodyMedium,
@@ -69,20 +69,20 @@ fun AboutScreen(onBack: () -> Unit, onOpenFeedback: () -> Unit = {}) {
                     AboutAction(
                         Icons.Outlined.SystemUpdate,
                         "Check for updates",
-                        "Opens Moneta on Google Play. If an Update button shows, tap it."
+                        "Opens Paisabook on Google Play. If an Update button shows, tap it."
                     ) { openPlayListing(context) }
-                    AboutAction(Icons.Outlined.StarOutline, "Rate Moneta", "A rating helps other people find it") {
+                    AboutAction(Icons.Outlined.StarOutline, "Rate Paisabook", "A rating helps other people find it") {
                         openPlayListing(context)
                     }
-                    AboutAction(Icons.Outlined.Share, "Share Moneta", "Send the app link to a friend") {
+                    AboutAction(Icons.Outlined.Share, "Share Paisabook", "Send the app link to a friend") {
                         val send = Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
                             putExtra(
                                 Intent.EXTRA_TEXT,
-                                "Try Moneta, a private money tracker: https://play.google.com/store/apps/details?id=$PACKAGE_NAME"
+                                "Try Paisabook, a private money tracker: https://play.google.com/store/apps/details?id=$PACKAGE_NAME"
                             )
                         }
-                        launch(context, Intent.createChooser(send, "Share Moneta"))
+                        launch(context, Intent.createChooser(send, "Share Paisabook"))
                     }
                     AboutAction(Icons.Outlined.MailOutline, "Send feedback", "Report a problem or suggest something") {
                         onOpenFeedback()
@@ -94,7 +94,7 @@ fun AboutScreen(onBack: () -> Unit, onOpenFeedback: () -> Unit = {}) {
                 Column(modifier = Modifier.padding(MonetaSpacing.cardPadding)) {
                     Text("The developer", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "Moneta is built and looked after by an independent developer. There are no accounts and no tracking of your transactions. Ads (when shown) and the one-time Moneta Plus purchase are handled by Google.",
+                        "Paisabook is built and looked after by an independent developer. There are no accounts and no tracking of your transactions. Ads (when shown) and the one-time Paisabook Plus purchase are handled by Google.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp)

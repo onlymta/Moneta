@@ -50,6 +50,8 @@ fun AddBillScreen(
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     var pickingDate by remember { mutableStateOf(false) }
+    val hasPlus = com.moneta.app.ui.plus.rememberHasPlus()
+    val openPlus = com.moneta.app.ui.plus.LocalOpenPlus.current
 
     // Reminders are notifications, so Android 13+ asks for permission the first time they are switched on.
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -135,7 +137,7 @@ fun AddBillScreen(
             Column(modifier = Modifier.weight(1f)) {
                 Text("Remind me", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "A notification on the day you choose, around 9 am.",
+                    if (hasPlus) "A notification on the day you choose, around 9 am." else "Plus feature: a notification on the day you choose.",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -143,11 +145,15 @@ fun AddBillScreen(
             Switch(
                 checked = state.reminderOn,
                 onCheckedChange = { on ->
-                    viewModel.onReminderOnChange(on)
-                    if (on && Build.VERSION.SDK_INT >= 33 &&
-                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    if (on && !hasPlus) {
+                        openPlus()
+                    } else {
+                        viewModel.onReminderOnChange(on)
+                        if (on && Build.VERSION.SDK_INT >= 33 &&
+                            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
                     }
                 }
             )

@@ -44,7 +44,7 @@ private val faqs = listOf(
     Faq(
         "How do categories and sub-categories work?",
         "Side menu > Categories. Add your own, change icons and colours, and use Reorder so the common ones come first. " +
-            "The Sub-categories switch on that page (a Moneta Plus feature) lets a category hold smaller ones, such as Food > Groceries."
+            "The Sub-categories switch on that page (a Paisabook Plus feature) lets a category hold smaller ones, such as Food > Groceries."
     ),
     Faq(
         "How do I set a budget?",
@@ -59,7 +59,7 @@ private val faqs = listOf(
     Faq(
         "How do goals work?",
         "Side menu > Goals. Add a goal with or without a target date, order your goals, and choose which accounts pay for them. " +
-            "Moneta hands your free savings to the goals from the top of the list down and shows which are covered and how much the others still need."
+            "Paisabook hands your free savings to the goals from the top of the list down and shows which are covered and how much the others still need."
     ),
     Faq(
         "What are bills and recurring payments?",
@@ -68,7 +68,7 @@ private val faqs = listOf(
     Faq(
         "How do I see where my money went?",
         "Open Reports. Choose a period, then open Expenses or Income and tap a category for its own analysis. " +
-            "The charts need a short ad, or Moneta Plus."
+            "The charts need a short ad, or Paisabook Plus."
     ),
     Faq(
         "Can I import my old records?",
@@ -77,15 +77,15 @@ private val faqs = listOf(
     Faq(
         "How do I back up and restore?",
         "Side menu > Backup & restore. Save a backup file anywhere, including Google Drive, and choose it again to restore on any phone. " +
-            "Moneta Plus adds automatic backups and an extra copy in a folder you choose."
+            "Paisabook Plus adds automatic backups and an extra copy in a folder you choose."
     ),
     Faq(
         "How do I change the currency, decimals or Home cards?",
         "Side menu > Settings. Currency, symbol, decimals, carry-forward balance, reminders, theme and the Home cards are all there."
     ),
     Faq(
-        "What is Moneta Plus?",
-        "Moneta is free for tracking your money. Plus is one payment, no subscription: no ads, always-on charts and PDF reports, sub-categories, " +
+        "What is Paisabook Plus?",
+        "Paisabook is free for tracking your money. Plus is one payment, no subscription: no ads, always-on charts and PDF reports, sub-categories, " +
             "compact Home and automatic backups. You can try everything free for 14 days from the Plus page. Your data is never locked."
     )
 )

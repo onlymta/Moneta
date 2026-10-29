@@ -204,6 +204,7 @@ private fun MonetaAppContent(
         drawerContent = {
             MonetaDrawerContent(
                 plan = plusViewModel.state.collectAsState().value,
+                onTestPlus = plusViewModel::setTestPlus,
                 goalsEnabled = prefs.goalsEnabled,
                 billsEnabled = prefs.billsEnabled,
                 alertCount = alertCount,
@@ -543,7 +544,7 @@ private fun SetupReminderBanner(onFinish: () -> Unit, onDismiss: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "Finish setting up Moneta",
+                "Finish setting up Paisabook",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f)
             )
@@ -661,6 +662,7 @@ private class DrawerEntry(val label: String, val icon: ImageVector, val route: S
 @Composable
 private fun MonetaDrawerContent(
     plan: com.moneta.app.data.plus.PlusState,
+    onTestPlus: (Boolean) -> Unit,
     goalsEnabled: Boolean,
     billsEnabled: Boolean,
     alertCount: Int,
@@ -676,6 +678,7 @@ private fun MonetaDrawerContent(
         if (billsEnabled) add(DrawerEntry("Bills", Icons.Outlined.Receipt, BILLS_ROUTE))
         add(DrawerEntry("Scheduled & recurring", Icons.Outlined.Repeat, RECURRING_ROUTE))
         if (goalsEnabled) add(DrawerEntry("Goals", Icons.Outlined.Flag, GOALS_ROUTE))
+        add(DrawerEntry("Settings", Icons.Outlined.Settings, SETTINGS_ROUTE))
     }
     val data = listOf(
         DrawerEntry("Import", Icons.Outlined.FileUpload, IMPORT_ROUTE),
@@ -683,7 +686,6 @@ private fun MonetaDrawerContent(
         DrawerEntry("Backup & restore", Icons.Outlined.Backup, BACKUP_ROUTE)
     )
     val app = listOf(
-        DrawerEntry("Settings", Icons.Outlined.Settings, SETTINGS_ROUTE),
         DrawerEntry("Help and FAQs", androidx.compose.material.icons.Icons.Outlined.Lightbulb, GUIDE_ROUTE),
         DrawerEntry("About", Icons.Outlined.Info, ABOUT_ROUTE)
     )
@@ -756,7 +758,7 @@ private fun MonetaDrawerContent(
                         Spacer(Modifier.width(16.dp))
                         Column {
                             Text(
-                                "Get Moneta Plus",
+                                "Get Paisabook Plus",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -773,6 +775,23 @@ private fun MonetaDrawerContent(
             androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
             DrawerItem(feedbackEntry, onItem)
             app.forEach { entry -> DrawerItem(entry, onItem) }
+
+            // TEST-TOGGLE: temporary switch to try the Free and Plus experiences. Delete this block before release.
+            androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
+            Row(
+                modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("TEST: act as Plus user", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        if (plan.hasPlus) "Plus features on" else "Free plan",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                androidx.compose.material3.Switch(checked = plan.hasPlus, onCheckedChange = onTestPlus)
+            }
             Spacer(Modifier.height(24.dp))
         }
     }

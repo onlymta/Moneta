@@ -61,7 +61,7 @@ object PdfExporter {
         var y = 0f
 
         fun footer() {
-            canvas.drawText("Moneta  ·  Page $pageNumber", MARGIN, PAGE_HEIGHT - 18f, labelPaint)
+            canvas.drawText("Paisabook  ·  Page $pageNumber", MARGIN, PAGE_HEIGHT - 18f, labelPaint)
         }
 
         fun tableHeader() {
@@ -87,7 +87,7 @@ object PdfExporter {
 
         // Title band
         canvas.drawRect(0f, 0f, PAGE_WIDTH.toFloat(), 92f, bandPaint)
-        canvas.drawText("Moneta", MARGIN, 38f, whiteTitle)
+        canvas.drawText("Paisabook", MARGIN, 38f, whiteTitle)
         canvas.drawText("Transaction report", MARGIN, 56f, whiteSmall)
         val who = if (userName.isBlank()) "Prepared for: -" else "Prepared for: $userName"
         canvas.drawText(who, MARGIN, 74f, whiteSmall)

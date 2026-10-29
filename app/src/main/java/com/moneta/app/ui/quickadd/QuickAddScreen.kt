@@ -541,7 +541,7 @@ private fun CompactChip(
 
 /** A tappable card showing the current choice; it opens a centred pop-up card to pick from (like the date picker). */
 @Composable
-private fun <T> DropdownPicker(
+internal fun <T> DropdownPicker(
     label: String,
     selectedText: String,
     selectedIcon: String?,

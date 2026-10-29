@@ -99,7 +99,7 @@ fun CategoriesScreen(
                     Text("Sub-categories", style = MaterialTheme.typography.bodyMedium)
                     if (!plusState.hasPlus) {
                         Text(
-                            "A Moneta Plus feature",
+                            "A Paisabook Plus feature",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -111,7 +111,7 @@ fun CategoriesScreen(
                         if (plusState.hasPlus) viewModel.setSubcategoriesEnabled(on) else openPlus()
                     }
                 )
-                TextButton(onClick = { reordering = true }) { Text("Reorder") }
+                TextButton(onClick = { if (plusState.hasPlus) reordering = true else openPlus() }) { Text("Reorder") }
             }
 
             if (!state.isLoading && state.topLevelCategories.isEmpty()) {

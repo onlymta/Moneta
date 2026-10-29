@@ -142,7 +142,7 @@ private fun PlusStatusCard(plusViewModel: com.moneta.app.ui.plus.PlusViewModel =
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Moneta Plus", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Paisabook Plus", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
                     when {
                         plus.purchased -> "Unlocked. Thank you!"
@@ -561,7 +561,7 @@ private fun RemindersSection(enabled: Boolean, hour: Int, minute: Int, viewModel
         }
         if (blocked) {
             Text(
-                "Notifications are blocked for Moneta. Allow them in your phone's app settings to get reminders.",
+                "Notifications are blocked for Paisabook. Allow them in your phone's app settings to get reminders.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(bottom = 6.dp)
@@ -599,7 +599,7 @@ private fun DataSection(viewModel: SettingsViewModel) {
     }
     SectionCard("Your data") {
         Text(
-            "Make a backup first (side menu, Backup & restore). Deleted data cannot be brought back without one. Your Moneta Plus and free trial are never affected.",
+            "Make a backup first (side menu, Backup & restore). Deleted data cannot be brought back without one. Your Paisabook Plus and free trial are never affected.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(vertical = 8.dp)
@@ -660,7 +660,7 @@ private fun DataSection(viewModel: SettingsViewModel) {
             title = { Text("Delete everything?") },
             text = {
                 Column {
-                    Text("All transactions, accounts, budgets, goals, bills and settings are deleted, and Moneta starts over with the welcome screens. This cannot be undone.")
+                    Text("All transactions, accounts, budgets, goals, bills and settings are deleted, and Paisabook starts over with the welcome screens. This cannot be undone.")
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
                         value = typed,

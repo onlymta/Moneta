@@ -28,10 +28,14 @@ import com.moneta.app.ui.theme.MonetaSpacing
 
 private val plusFeatures = listOf(
     "No ads, ever",
-    "Charts and the 6-period trends, always on",
-    "PDF reports, no ad needed",
+    "Charts and the 6-period trends, always on (Free: watch a short ad to see them for 24 hours)",
+    "Excel and PDF exports (CSV export stays free)",
     "Sub-categories with their own budgets and analysis",
     "Compact Home cards and rearranging the cards",
+    "Reordering accounts, categories and budgets",
+    "Change the category of many transactions at once",
+    "Bill reminder notifications",
+    "Working-day and weekend repeats, and \"every 2, 3...\" repeats",
     "Automatic backups, including a copy in a folder you choose (Google Drive, if your phone offers it)",
     "Every future Plus feature, with no extra payment"
 )
@@ -45,7 +49,7 @@ fun PlusScreen(onBack: () -> Unit, viewModel: PlusViewModel = hiltViewModel()) {
     LaunchedEffect(Unit) { viewModel.loadPrice() }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        SubPageHeader(title = "Moneta Plus", onBack = onBack)
+        SubPageHeader(title = "Paisabook Plus", onBack = onBack)
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -63,16 +67,16 @@ fun PlusScreen(onBack: () -> Unit, viewModel: PlusViewModel = hiltViewModel()) {
                 ) {
                     Text(
                         when {
-                            state.purchased -> "You have Moneta Plus"
+                            state.purchased -> "You have Paisabook Plus"
                             state.trialActive -> "Free trial: ${state.trialDaysLeft} day(s) left"
-                            else -> "Moneta Plus"
+                            else -> "Paisabook Plus"
                         },
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         when {
-                            state.purchased -> "Thank you for supporting Moneta. Everything below is unlocked for good."
+                            state.purchased -> "Thank you for supporting Paisabook. Everything below is unlocked for good."
                             state.trialActive -> "Everything below is unlocked during your $TRIAL_DAYS-day trial. No card needed."
                             state.trialAvailable -> "Try every Plus feature free for $TRIAL_DAYS days. Starts only when you tap the button, no card needed."
                             else -> "One payment, yours for good. No subscription."

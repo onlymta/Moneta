@@ -1,4 +1,4 @@
-# Publishing Moneta on Google Play - step by step
+# Publishing Paisabook on Google Play - step by step
 
 I could not compile or sign anything in my environment, so the signed bundle (.aab) is built by
 GitHub Actions from this project. Total effort: about one hour of clicking, plus Google's review time.
@@ -27,10 +27,10 @@ Actions > **Build APKs** > Run workflow. When done, download artifact **moneta-p
 That `.aab` is what you upload. Each run raises the version code automatically.
 
 ## 4. Play Console (play.google.com/console)
-1. Create the app: name "Moneta", default language, App, **Free**.
+1. Create the app: name "Paisabook", default language, App, **Free**.
 2. **Play App Signing**: accept it. You upload with your upload key; Google signs for users.
 3. **Monetize > Products > In-app products > Create product**
-   - Product ID exactly `moneta_plus`, name "Moneta Plus", one-time, set your price
+   - Product ID exactly `moneta_plus`, name "Paisabook Plus", one-time, set your price
      (suggested: about $4.99 / local equivalents; Play lets you set each country), Activate.
 4. **Testing**: upload the .aab to **Internal testing** first, add your own Gmail as tester, install from the Play link and test the purchase with a **License tester** account (Settings > License testing - purchases are free for them).
 5. **Production readiness** (Dashboard checklist):

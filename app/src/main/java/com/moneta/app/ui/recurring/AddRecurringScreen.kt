@@ -52,6 +52,8 @@ fun AddRecurringScreen(
     viewModel: AddRecurringViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val hasPlus = com.moneta.app.ui.plus.rememberHasPlus()
+    val openPlus = com.moneta.app.ui.plus.LocalOpenPlus.current
     var pickingStart by remember { mutableStateOf(false) }
     var pickingEnd by remember { mutableStateOf(false) }
 
@@ -77,60 +79,82 @@ fun AddRecurringScreen(
         OutlinedTextField(
             value = state.amountInput,
             onValueChange = viewModel::onAmountChange,
-            label = { Text("Amount") },
+            placeholder = { Text("0", style = MaterialTheme.typography.displayMedium) },
+            prefix = { Text(com.moneta.app.core.money.DisplayCurrency.entryPrefix(), style = MaterialTheme.typography.titleLarge) },
+            singleLine = true,
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            textStyle = MaterialTheme.typography.displayMedium.copy(
+                color = when (state.type) {
+                    TransactionType.INCOME -> com.moneta.app.ui.theme.IncomeGreen
+                    TransactionType.EXPENSE -> com.moneta.app.ui.theme.ExpenseRed
+                    TransactionType.TRANSFER -> MaterialTheme.colorScheme.primary
+                },
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+            ),
             isError = state.amountError != null,
             supportingText = state.amountError?.let { { Text(it) } },
             modifier = Modifier.fillMaxWidth()
         )
 
-        Text("Account", style = MaterialTheme.typography.labelMedium)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
-            items(state.accounts, key = { it.id }) { account ->
-                FilterChip(
-                    selected = state.selectedAccountId == account.id,
-                    onClick = { viewModel.onAccountSelected(account.id) },
-                    label = { Text(account.name) }
-                )
-            }
-        }
-
         if (state.type == TransactionType.TRANSFER) {
-            Text("Transfer to", style = MaterialTheme.typography.labelMedium)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
-                items(state.accounts.filter { it.id != state.selectedAccountId }, key = { it.id }) { account ->
-                    FilterChip(
-                        selected = state.selectedToAccountId == account.id,
-                        onClick = { viewModel.onToAccountSelected(account.id) },
-                        label = { Text(account.name) }
-                    )
-                }
-            }
+            val from = state.accounts.firstOrNull { it.id == state.selectedAccountId }
+            val toOptions = state.accounts.filter { it.id != state.selectedAccountId }
+            val to = toOptions.firstOrNull { it.id == state.selectedToAccountId }
+            com.moneta.app.ui.quickadd.DropdownPicker(
+                label = "From account",
+                selectedText = from?.name ?: "Select",
+                selectedIcon = from?.icon,
+                selectedId = state.selectedAccountId,
+                items = state.accounts,
+                itemId = { it.id },
+                itemText = { it.name },
+                itemIcon = { it.icon },
+                onSelect = { viewModel.onAccountSelected(it.id) }
+            )
+            com.moneta.app.ui.quickadd.DropdownPicker(
+                label = "To account",
+                selectedText = to?.name ?: "Select",
+                selectedIcon = to?.icon,
+                selectedId = state.selectedToAccountId,
+                items = toOptions,
+                itemId = { it.id },
+                itemText = { it.name },
+                itemIcon = { it.icon },
+                onSelect = { viewModel.onToAccountSelected(it.id) }
+            )
         } else {
-            Text("Category", style = MaterialTheme.typography.labelMedium)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(MonetaSpacing.sm)) {
-                items(state.categories, key = { it.id }) { category ->
-                    FilterChip(
-                        selected = state.selectedCategoryId == category.id,
-                        onClick = { viewModel.onCategorySelected(category.id) },
-                        label = { Text(category.name) }
-                    )
-                }
-            }
+            val account = state.accounts.firstOrNull { it.id == state.selectedAccountId }
+            val category = state.categories.firstOrNull { it.id == state.selectedCategoryId }
+            com.moneta.app.ui.quickadd.DropdownPicker(
+                label = "Account",
+                selectedText = account?.name ?: "Select",
+                selectedIcon = account?.icon,
+                selectedId = state.selectedAccountId,
+                items = state.accounts,
+                itemId = { it.id },
+                itemText = { it.name },
+                itemIcon = { it.icon },
+                onSelect = { viewModel.onAccountSelected(it.id) }
+            )
+            com.moneta.app.ui.quickadd.DropdownPicker(
+                label = "Category",
+                selectedText = category?.name ?: "Select",
+                selectedIcon = category?.icon,
+                selectedId = state.selectedCategoryId,
+                items = state.categories,
+                itemId = { it.id },
+                itemText = { it.name },
+                itemIcon = { it.icon },
+                onSelect = { viewModel.onCategorySelected(it.id) }
+            )
         }
-
-        OutlinedTextField(
-            value = state.payee,
-            onValueChange = viewModel::onPayeeChange,
-            label = { Text("Name (e.g. \"Netflix\", \"Salary\")") },
-            modifier = Modifier.fillMaxWidth()
-        )
 
         OutlinedTextField(
             value = state.notes,
             onValueChange = viewModel::onNotesChange,
-            label = { Text("Note (optional)") },
-            modifier = Modifier.fillMaxWidth()
+            placeholder = { Text("Notes or description (optional)") },
+            minLines = 2,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 76.dp)
         )
 
         Text("Repeats", style = MaterialTheme.typography.labelMedium)
@@ -138,8 +162,14 @@ fun AddRecurringScreen(
             items(FREQUENCY_CHOICES) { (frequency, label) ->
                 FilterChip(
                     selected = state.frequency == frequency,
-                    onClick = { viewModel.onFrequencyChange(frequency) },
-                    label = { Text(label) }
+                    onClick = {
+                        val plusOnly = frequency == RecurrenceFrequency.WEEKDAYS || frequency == RecurrenceFrequency.WEEKENDS
+                        if (plusOnly && !hasPlus) openPlus() else viewModel.onFrequencyChange(frequency)
+                    },
+                    label = {
+                        val plusOnly = frequency == RecurrenceFrequency.WEEKDAYS || frequency == RecurrenceFrequency.WEEKENDS
+                        Text(if (plusOnly && !hasPlus) "$label (Plus)" else label)
+                    }
                 )
             }
         }
@@ -190,7 +220,9 @@ fun AddRecurringScreen(
         ) {
             OutlinedTextField(
                 value = state.intervalCount.toString(),
-                onValueChange = { it.toIntOrNull()?.let(viewModel::onIntervalChange) },
+                onValueChange = { if (hasPlus) it.toIntOrNull()?.let(viewModel::onIntervalChange) },
+                readOnly = !hasPlus,
+                supportingText = if (hasPlus) null else ({ Text("Repeating every 2, 3... is a Plus feature") }),
                 label = { Text("Every how many ${intervalUnit(state.frequency)}?") },
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth()

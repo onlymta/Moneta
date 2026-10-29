@@ -39,6 +39,11 @@ class PlusViewModel @Inject constructor(
         viewModelScope.launch { plusRepository.startTrial() }
     }
 
+    /** TEST-TOGGLE */
+    fun setTestPlus(plus: Boolean) {
+        viewModelScope.launch { plusRepository.setTestPlus(plus) }
+    }
+
     fun loadPrice() = billing.refresh(userInitiated = false)
 
     fun restorePurchase() = billing.refresh(userInitiated = true)

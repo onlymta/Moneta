@@ -76,6 +76,8 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, vie
     val showSetup = state.hasAnyBudget || setupStarted
     var expandedIds by remember { mutableStateOf(setOf<Long>()) }
     var reorderingBudgets by remember { mutableStateOf(false) }
+    val hasPlus = com.moneta.app.ui.plus.rememberHasPlus()
+    val openPlus = com.moneta.app.ui.plus.LocalOpenPlus.current
     // A line is visible when every ancestor above it is expanded (lines arrive in tree order).
     val visibleLines = remember(state.lines, expandedIds) {
         val out = ArrayList<BudgetLine>()
@@ -216,7 +218,7 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, vie
                             text = { Text("Reorder...") },
                             onClick = {
                                 sortMenuOpen = false
-                                reorderingBudgets = true
+                                if (hasPlus) reorderingBudgets = true else openPlus()
                             }
                         )
                     }

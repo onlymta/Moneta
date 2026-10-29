@@ -3,6 +3,7 @@ package com.moneta.app.data.plus
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -52,6 +53,8 @@ class PlusRepository @Inject constructor(
         val PURCHASED = booleanPreferencesKey("purchased")
         val TRIAL_ENDS_AT = longPreferencesKey("trial_ends_at")
         val AD_UNLOCK_UNTIL = longPreferencesKey("ad_unlock_until")
+        // TEST-TOGGLE: 0 = real state, 1 = pretend Free, 2 = pretend Plus. Remove with the toggle before release.
+        val TEST_MODE = intPreferencesKey("test_mode")
     }
 
     private val clock: Flow<Long> = flow {
@@ -71,15 +74,18 @@ class PlusRepository @Inject constructor(
             now >= trialEnds -> 0
             else -> (((trialEnds - now) + DAY_MILLIS - 1) / DAY_MILLIS).toInt()
         }
-        val hasPlus = purchased || trialActive
+        val testMode = prefs[Keys.TEST_MODE] ?: 0 // TEST-TOGGLE
+        val purchasedEffective = when (testMode) { 1 -> false; 2 -> true; else -> purchased }
+        val trialActiveEffective = if (testMode != 0) false else trialActive
+        val hasPlus = purchasedEffective || trialActiveEffective
         val adUntil = prefs[Keys.AD_UNLOCK_UNTIL] ?: 0L
         PlusState(
-            purchased = purchased,
-            trialDaysLeft = daysLeft,
+            purchased = purchasedEffective,
+            trialDaysLeft = if (testMode != 0) 0 else daysLeft,
             hasPlus = hasPlus,
             insightsUnlocked = hasPlus || now < adUntil,
             adUnlockUntil = adUntil,
-            trialAvailable = !purchased && trialEnds == null
+            trialAvailable = !purchasedEffective && trialEnds == null
         )
     }.distinctUntilChanged()
 
@@ -103,6 +109,14 @@ class PlusRepository @Inject constructor(
     suspend fun adoptTrialEnd(endsAt: Long) {
         if (context.plusStore.data.first()[Keys.TRIAL_ENDS_AT] == null) {
             context.plusStore.edit { it[Keys.TRIAL_ENDS_AT] = endsAt }
+        }
+    }
+
+    /** TEST-TOGGLE: pretend to be a Plus or a Free user. Going to Free also clears any ad unlock so locks can be tested. */
+    suspend fun setTestPlus(plus: Boolean) {
+        context.plusStore.edit {
+            it[Keys.TEST_MODE] = if (plus) 2 else 1
+            if (!plus) it[Keys.AD_UNLOCK_UNTIL] = 0L
         }
     }
 

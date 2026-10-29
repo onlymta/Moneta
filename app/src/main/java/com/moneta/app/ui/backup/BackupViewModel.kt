@@ -128,7 +128,7 @@ class BackupViewModel @Inject constructor(
 
     fun defaultBackupFileName(): String {
         val label = DateTimeFormatter.ofPattern("yyyy-MM-dd").format(DateRange.todayDate())
-        return "moneta-backup-$label.monetabackup"
+        return "paisabook-backup-$label.monetabackup"
     }
 
     fun createBackup(uriString: String) {

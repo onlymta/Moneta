@@ -1,11 +1,11 @@
 # Store listing text
 
-**App name (30):** Moneta - Budget & Expenses
+**App name (30):** Paisabook - Budget & Expenses
 
 **Short description (80):** Private offline expense tracker with budgets, goals and bills. No account.
 
 **Full description:**
-Moneta is a private money tracker that works fully offline. Your data stays on your phone - no sign-up, no cloud account needed.
+Paisabook is a private money tracker that works fully offline. Your data stays on your phone - no sign-up, no cloud account needed.
 
 - Fast record form for expenses, income and transfers
 - Accounts, categories and sub-categories

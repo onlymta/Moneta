@@ -66,6 +66,8 @@ fun AccountsScreen(
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var reordering by remember { mutableStateOf(false) }
+    val hasPlus = com.moneta.app.ui.plus.rememberHasPlus()
+    val openPlus = com.moneta.app.ui.plus.LocalOpenPlus.current
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -116,7 +118,7 @@ fun AccountsScreen(
                                     viewModel.saveOrder(viewModel.mostUsedFirst(active.map { it.id }))
                                 }
                             }) else null,
-                            onReorder = if (active.size > 1) ({ reordering = true }) else null
+                            onReorder = if (active.size > 1) ({ if (hasPlus) reordering = true else openPlus() }) else null
                         )
                     }
                 }

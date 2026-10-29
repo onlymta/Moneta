@@ -23,6 +23,7 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -34,6 +35,7 @@ class BillReminderReceiver : BroadcastReceiver() {
     @InstallIn(SingletonComponent::class)
     interface BillEntryPoint {
         fun billRepository(): BillRepository
+        fun plusRepository(): com.moneta.app.data.plus.PlusRepository
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -43,7 +45,10 @@ class BillReminderReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val repository = EntryPointAccessors.fromApplication(app, BillEntryPoint::class.java).billRepository()
+                val entry = EntryPointAccessors.fromApplication(app, BillEntryPoint::class.java)
+                // Bill reminders are a Plus feature, so a Free plan stays quiet.
+                if (!entry.plusRepository().state.first().hasPlus) return@launch
+                val repository = entry.billRepository()
                 val today = LocalDate.now()
                 repository.getAll()
                     .filter { it.status == BillStatus.UNPAID && it.reminderDaysBefore >= 0 }
