@@ -23,6 +23,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import com.moneta.app.ui.plus.findActivity
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -74,8 +78,43 @@ fun ExportScreen(onBack: () -> Unit, viewModel: ExportViewModel = hiltViewModel(
 
             val plusVm: com.moneta.app.ui.plus.PlusViewModel = hiltViewModel()
             val plusState by plusVm.state.collectAsState()
+            val adBusy by plusVm.adBusy.collectAsState()
+            val adFailed by plusVm.adFailed.collectAsState()
+            val adMessage by plusVm.adMessage.collectAsState()
+            val activity = androidx.compose.ui.platform.LocalContext.current.findActivity()
+            var pendingKind by remember { mutableStateOf<String?>(null) }
+            val launchKind: (String) -> Unit = { kind ->
+                if (kind == "xlsx") xlsxLauncher.launch(viewModel.fileName("xlsx")) else pdfLauncher.launch(viewModel.fileName("pdf"))
+            }
+            // Free plan: one short ad per Excel or PDF file. Plus exports straight away.
+            val requestExport: (String) -> Unit = { kind ->
+                if (plusState.hasPlus) {
+                    launchKind(kind)
+                } else {
+                    pendingKind = kind
+                    activity?.let { plusVm.watchAd(it, grantInsights = false) { launchKind(kind) } }
+                }
+            }
             if (!plusState.hasPlus) {
-                com.moneta.app.ui.plus.PlusOnlyCard(what = "Excel and PDF exports")
+                androidx.compose.material3.Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(MonetaSpacing.cardPadding), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Excel and PDF", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (adBusy) "Loading the ad..." else "Watch one short ad to export each Excel or PDF file. CSV is always free, and Plus exports without ads.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        adMessage?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
+                        if (adFailed) {
+                            pendingKind?.let { kind ->
+                                androidx.compose.material3.TextButton(onClick = {
+                                    pendingKind = null
+                                    launchKind(kind)
+                                }) { Text("Export anyway this time") }
+                            }
+                        }
+                    }
+                }
             }
             FormatRow(
                 badge = "XLSX",
@@ -83,8 +122,8 @@ fun ExportScreen(onBack: () -> Unit, viewModel: ExportViewModel = hiltViewModel(
                 title = "Excel workbook",
                 subtitle = "Summary, transactions and a by-category sheet",
                 fileName = viewModel.fileName("xlsx"),
-                enabled = !state.isExporting && plusState.hasPlus,
-                onExport = { xlsxLauncher.launch(viewModel.fileName("xlsx")) }
+                enabled = !state.isExporting && !adBusy,
+                onExport = { requestExport("xlsx") }
             )
             FormatRow(
                 badge = "PDF",
@@ -92,8 +131,8 @@ fun ExportScreen(onBack: () -> Unit, viewModel: ExportViewModel = hiltViewModel(
                 title = "PDF report",
                 subtitle = "A neat printable statement",
                 fileName = viewModel.fileName("pdf"),
-                enabled = !state.isExporting && plusState.hasPlus,
-                onExport = { pdfLauncher.launch(viewModel.fileName("pdf")) }
+                enabled = !state.isExporting && !adBusy,
+                onExport = { requestExport("pdf") }
             )
             FormatRow(
                 badge = "CSV",

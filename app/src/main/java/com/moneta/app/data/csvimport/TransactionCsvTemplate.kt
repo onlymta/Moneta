@@ -75,7 +75,7 @@ object TransactionCsvTemplate {
                 listOf("Payee, Notes, Payment Method, Tags", "Optional. Separate several tags with ;"),
                 listOf("Time", "Optional, like 14:30."),
                 listOf("", ""),
-                listOf("Tip", "Delete the example rows, then add yours. Your own column names also work: Paisabook lets you match them.")
+                listOf("Tip", "Delete the example rows, then add yours. Your own column names also work: Expendora lets you match them.")
             ),
             columnWidths = listOf(34, 80)
         )

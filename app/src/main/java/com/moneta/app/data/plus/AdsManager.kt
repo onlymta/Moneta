@@ -33,15 +33,28 @@ class AdsManager @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var initialized = false
 
-    fun watchToUnlock(activity: Activity, onBusy: (Boolean) -> Unit, onMessage: (String) -> Unit) {
+    /**
+     * Plays one rewarded ad. [grantInsights] unlocks the charts for 24 hours on reward; [onRewarded] runs after the
+     * ad has been closed (so it is safe to open a file picker from it). [onFailed] runs when no ad could be loaded or
+     * shown, so the screen can offer "try again" or a fallback.
+     */
+    fun watchToUnlock(
+        activity: Activity,
+        onBusy: (Boolean) -> Unit,
+        onMessage: (String) -> Unit,
+        grantInsights: Boolean = true,
+        onFailed: () -> Unit = {},
+        onRewarded: () -> Unit = {}
+    ) {
         onBusy(true)
         onMessage("")
         val consent = UserMessagingPlatform.getConsentInformation(activity)
         val proceed = {
             if (consent.canRequestAds()) {
-                loadAndShow(activity, onBusy, onMessage)
+                loadAndShow(activity, onBusy, onMessage, grantInsights, onFailed, onRewarded)
             } else {
                 onBusy(false)
+                onFailed()
                 onMessage("Ads need your privacy choice first. Try again, or get Plus (no ads).")
             }
         }
@@ -55,7 +68,14 @@ class AdsManager @Inject constructor(
         )
     }
 
-    private fun loadAndShow(activity: Activity, onBusy: (Boolean) -> Unit, onMessage: (String) -> Unit) {
+    private fun loadAndShow(
+        activity: Activity,
+        onBusy: (Boolean) -> Unit,
+        onMessage: (String) -> Unit,
+        grantInsights: Boolean,
+        onFailed: () -> Unit,
+        onRewarded: () -> Unit
+    ) {
         if (!initialized) {
             MobileAds.initialize(context) { }
             initialized = true
@@ -70,11 +90,12 @@ class AdsManager @Inject constructor(
                     ad.fullScreenContentCallback = object : FullScreenContentCallback() {
                         override fun onAdDismissedFullScreenContent() {
                             onBusy(false)
-                            if (!rewarded) onMessage("Watch the ad to the end to unlock.")
+                            if (rewarded) onRewarded() else onMessage("Watch the ad to the end to unlock.")
                         }
 
                         override fun onAdFailedToShowFullScreenContent(error: AdError) {
                             onBusy(false)
+                            onFailed()
                             onMessage("The ad couldn't be shown. Try again in a moment.")
                         }
                     }
@@ -82,13 +103,18 @@ class AdsManager @Inject constructor(
                     ad.setImmersiveMode(true)
                     ad.show(activity) { _ ->
                         rewarded = true
-                        scope.launch { plusRepository.unlockInsights() }
-                        onMessage("Unlocked for $AD_UNLOCK_HOURS hours.")
+                        if (grantInsights) {
+                            scope.launch { plusRepository.unlockInsights() }
+                            onMessage("Unlocked for $AD_UNLOCK_HOURS hours.")
+                        } else {
+                            onMessage("")
+                        }
                     }
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     onBusy(false)
+                    onFailed()
                     val reason = when (error.code) {
                         0 -> "internal error"
                         1 -> "the ad IDs are not valid"
@@ -96,7 +122,7 @@ class AdsManager @Inject constructor(
                         3 -> "no ad to show yet"
                         else -> "error " + error.code
                     }
-                    onMessage("No ad could be loaded ($reason). Try again in a moment, or get Plus.")
+                    onMessage("No ad could be loaded ($reason). You can try again, or continue without an ad this time.")
                 }
             }
         )

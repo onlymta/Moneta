@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -48,7 +49,9 @@ data class BudgetLine(
     val depth: Int = 0,
     val hasChildren: Boolean = false,
     /** True for a parent category: its budget is the total of its sub-categories, not set directly. */
-    val derived: Boolean = false
+    val derived: Boolean = false,
+    /** The user marked this budget complete: what is left of it is not counted as "yet to spend". */
+    val isComplete: Boolean = false
 ) {
     val effectiveBudget: Money? get() = baseBudget?.let { it + carriedOver }
     val remaining: Money? get() = effectiveBudget?.let { it - spent }
@@ -217,7 +220,8 @@ class BudgetsViewModel @Inject constructor(
                         label = category.name,
                         depth = depth,
                         hasChildren = hasKids,
-                        derived = hasKids
+                        derived = hasKids,
+                        isComplete = budget?.isComplete == true
                     )
                 }
                 val lineOrder = compareByDescending<BudgetLine> { it.baseBudget != null }
@@ -249,7 +253,8 @@ class BudgetsViewModel @Inject constructor(
                         if (!t.isBefore(range.start) && t.isBefore(range.endExclusive)) t.dayOfMonth else range.start.lengthOfMonth()
                     },
                     totalDays = range.start.lengthOfMonth(),
-                    isCurrentMonth = LocalDate.now().let { !it.isBefore(range.start) && it.isBefore(range.endExclusive) }
+                    isCurrentMonth = LocalDate.now().let { !it.isBefore(range.start) && it.isBefore(range.endExclusive) },
+                    completed = categoryBudgets.filter { it.value.isComplete }.keys.filterNotNull().toSet()
                 )
                 val totalBudget = Money(summary.totalBudget, currency)
                 val spentOnBudgeted = Money(summary.spent, currency)
@@ -280,6 +285,7 @@ class BudgetsViewModel @Inject constructor(
                 )
             }
         }
+        .flowOn(kotlinx.coroutines.Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BudgetsUiState())
 
     fun onPeriodChange(selection: PeriodSelection) {
@@ -320,6 +326,11 @@ class BudgetsViewModel @Inject constructor(
     }
 
     suspend fun mostUsedFirst(ids: List<Long>): List<Long> = categoryRepository.mostUsedFirst(ids)
+
+    fun setComplete(line: BudgetLine, complete: Boolean) {
+        val id = line.budgetId ?: return
+        viewModelScope.launch { budgetRepository.setComplete(id, complete) }
+    }
 
     fun deleteBudget(budgetId: Long) {
         viewModelScope.launch { budgetRepository.delete(budgetId) }

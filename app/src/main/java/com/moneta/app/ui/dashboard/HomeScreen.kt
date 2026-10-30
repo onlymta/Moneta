@@ -137,7 +137,7 @@ private fun HomeEmptyState(navController: NavHostController) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("Welcome to Paisabook", style = MaterialTheme.typography.titleLarge)
+        Text("Welcome to Expendora", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(MonetaSpacing.sm))
         Text(
             "Add your first account to start tracking your money.",

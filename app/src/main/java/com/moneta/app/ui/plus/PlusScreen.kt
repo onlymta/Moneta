@@ -29,7 +29,7 @@ import com.moneta.app.ui.theme.MonetaSpacing
 private val plusFeatures = listOf(
     "No ads, ever",
     "Charts and the 6-period trends, always on (Free: watch a short ad to see them for 24 hours)",
-    "Excel and PDF exports (CSV export stays free)",
+    "Excel and PDF exports with no ad (Free: one short ad per file; CSV is always free)",
     "Sub-categories with their own budgets and analysis",
     "Compact Home cards and rearranging the cards",
     "Reordering accounts, categories and budgets",
@@ -49,7 +49,7 @@ fun PlusScreen(onBack: () -> Unit, viewModel: PlusViewModel = hiltViewModel()) {
     LaunchedEffect(Unit) { viewModel.loadPrice() }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        SubPageHeader(title = "Paisabook Plus", onBack = onBack)
+        SubPageHeader(title = "Expendora Plus", onBack = onBack)
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -67,16 +67,16 @@ fun PlusScreen(onBack: () -> Unit, viewModel: PlusViewModel = hiltViewModel()) {
                 ) {
                     Text(
                         when {
-                            state.purchased -> "You have Paisabook Plus"
+                            state.purchased -> "You have Expendora Plus"
                             state.trialActive -> "Free trial: ${state.trialDaysLeft} day(s) left"
-                            else -> "Paisabook Plus"
+                            else -> "Expendora Plus"
                         },
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         when {
-                            state.purchased -> "Thank you for supporting Paisabook. Everything below is unlocked for good."
+                            state.purchased -> "Thank you for supporting Expendora. Everything below is unlocked for good."
                             state.trialActive -> "Everything below is unlocked during your $TRIAL_DAYS-day trial. No card needed."
                             state.trialAvailable -> "Try every Plus feature free for $TRIAL_DAYS days. Starts only when you tap the button, no card needed."
                             else -> "One payment, yours for good. No subscription."

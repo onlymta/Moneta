@@ -50,6 +50,15 @@ fun monthCategoryBudgets(all: List<Budget>, monthStart: LocalDate): Map<Long, Lo
     }
     .associate { it.categoryId!! to it.amount.minorUnits }
 
+/** Categories whose budget for the month starting [monthStart] was marked complete. */
+fun monthCompletedCategories(all: List<Budget>, monthStart: LocalDate): Set<Long> = all
+    .filter {
+        it.isEnabled && it.isComplete && it.scope == BudgetScope.CATEGORY && it.categoryId != null &&
+            it.period == BudgetPeriod.CUSTOM && it.customPeriodStart == monthStart
+    }
+    .map { it.categoryId!! }
+    .toSet()
+
 /** Budgets plus, when roll-over is on, what was left unspent of last month's budget, and minus last month's overspending when that is on. */
 fun effectiveBudgets(
     thisMonth: Map<Long, Long>,
@@ -90,7 +99,8 @@ fun summarizeBudgets(
     spent: Map<Long, Long>,
     daysElapsed: Int,
     totalDays: Int,
-    isCurrentMonth: Boolean
+    isCurrentMonth: Boolean,
+    completed: Set<Long> = emptySet()
 ): BudgetSummary {
     var total = 0L
     var spentSum = 0L
@@ -100,8 +110,10 @@ fun summarizeBudgets(
         val s = spent[id] ?: 0L
         total += budget
         spentSum += s
-        yet += maxOf(0L, budget - s)
-        val pace = if (isCurrentMonth && daysElapsed > 0) s * totalDays / daysElapsed else s
+        // A completed budget has nothing more to spend and no further pace to project.
+        val done = id in completed
+        if (!done) yet += maxOf(0L, budget - s)
+        val pace = if (!done && isCurrentMonth && daysElapsed > 0) s * totalDays / daysElapsed else s
         projected += maxOf(s, pace)
     }
     return BudgetSummary(total, spentSum, yet, projected, projected - total)

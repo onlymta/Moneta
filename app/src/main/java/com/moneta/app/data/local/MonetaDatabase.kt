@@ -41,7 +41,7 @@ import com.moneta.app.data.local.entity.TransactionTagCrossRef
         BillEntity::class,
         RecurringTransactionEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

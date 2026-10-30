@@ -94,7 +94,8 @@ data class Budget(
     val customPeriodStart: LocalDate?,
     val customPeriodEnd: LocalDate?,
     val alertThresholdPercent: Int,
-    val isEnabled: Boolean
+    val isEnabled: Boolean,
+    val isComplete: Boolean = false
 )
 
 /** A budget combined with how much has actually been spent against it for the current period. */

@@ -57,7 +57,7 @@ class ExportRepository @Inject constructor(
         val sheetRows = ArrayList<List<String>>()
         val titleRows = HashSet<Int>()
         val boldRows = HashSet<Int>()
-        sheetRows += listOf("Paisabook  ·  Transaction report")
+        sheetRows += listOf("Expendora  ·  Transaction report")
         titleRows += 0
         sheetRows += listOf("Prepared for", info.userName.ifBlank { "-" })
         sheetRows += listOf("Period", info.periodLabel)

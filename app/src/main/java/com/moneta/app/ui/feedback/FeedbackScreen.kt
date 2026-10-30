@@ -87,7 +87,7 @@ fun FeedbackScreen(onBack: () -> Unit) {
                     val body = buildString {
                         append(message.trim())
                         if (includeDetails) {
-                            append("\n\n---\nPaisabook ").append(BuildConfig.VERSION_NAME)
+                            append("\n\n---\nExpendora ").append(BuildConfig.VERSION_NAME)
                             append(" (build ").append(BuildConfig.VERSION_CODE).append(")")
                             append("\nAndroid ").append(Build.VERSION.RELEASE)
                             append(" · ").append(Build.MANUFACTURER).append(" ").append(Build.MODEL)
@@ -96,7 +96,7 @@ fun FeedbackScreen(onBack: () -> Unit) {
                     val mail = Intent(Intent.ACTION_SENDTO).apply {
                         data = Uri.parse("mailto:")
                         if (AppInfo.CONTACT_EMAIL.isNotBlank()) putExtra(Intent.EXTRA_EMAIL, arrayOf(AppInfo.CONTACT_EMAIL))
-                        putExtra(Intent.EXTRA_SUBJECT, "Paisabook feedback: $kind")
+                        putExtra(Intent.EXTRA_SUBJECT, "Expendora feedback: $kind")
                         putExtra(Intent.EXTRA_TEXT, body)
                     }
                     try {
@@ -121,7 +121,7 @@ fun FeedbackScreen(onBack: () -> Unit) {
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
-            ) { Text("Rate Paisabook on Google Play") }
+            ) { Text("Rate Expendora on Google Play") }
         }
     }
 }

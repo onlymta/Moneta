@@ -6,7 +6,9 @@ object AppInfo {
      * The address feedback emails go to. Put your support address here before publishing.
      * Left blank, the email app still opens with the message filled in and an empty "To" line.
      */
-    const val CONTACT_EMAIL = ""
+    const val CONTACT_EMAIL = "onlymta18@gmail.com"
+    const val DEVELOPER_NAME = "AKTECH"
+    const val APP_FULL_NAME = "Expendora: Budget and Manage Expenses"
 
     const val PACKAGE_NAME = "com.moneta.app"
     const val PLAY_URL = "https://play.google.com/store/apps/details?id=com.moneta.app"

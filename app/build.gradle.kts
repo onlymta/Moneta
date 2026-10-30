@@ -11,9 +11,9 @@ plugins {
 fun secretOf(name: String): String? =
     (project.findProperty(name) as String?)?.takeIf { it.isNotBlank() }
         ?: System.getenv(name)?.takeIf { it.isNotBlank() }
-// TEMPORARY: always use Google's test ads until the AdMob account is reviewed.
-// Set to false later to use the ADMOB_APP_ID / ADMOB_REWARDED_ID secrets again.
-val forceTestAds = true
+// false: real ads from the ADMOB_APP_ID / ADMOB_REWARDED_ID secrets (Google's test ads when those are not set).
+// Set to true to force Google's test ads, e.g. while testing on your own phone.
+val forceTestAds = false
 val testAppId = "ca-app-pub-3940256099942544~3347511713"
 val testRewardedId = "ca-app-pub-3940256099942544/5224354917"
 val admobAppId: String = if (forceTestAds) testAppId else (secretOf("ADMOB_APP_ID") ?: testAppId)
@@ -28,7 +28,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = secretOf("VERSION_CODE")?.toIntOrNull() ?: 34
-        versionName = "1.2.9"
+        versionName = "1.3.0"
         manifestPlaceholders["admobAppId"] = admobAppId
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobRewardedId\"")
 

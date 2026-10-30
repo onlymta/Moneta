@@ -20,6 +20,8 @@ import javax.inject.Singleton
 private const val DAY_MILLIS = 24L * 60L * 60L * 1000L
 const val TRIAL_DAYS = 14
 const val AD_UNLOCK_HOURS = 24
+/** When no ad can be loaded, the feature is unlocked for this long anyway. */
+const val AD_FALLBACK_HOURS = 3
 
 /**
  * What the user currently has. [hasPlus] is true for a purchase or while the free trial runs.
@@ -125,9 +127,9 @@ class PlusRepository @Inject constructor(
     }
 
     /** Called after a rewarded ad is watched to the end. */
-    suspend fun unlockInsights() {
+    suspend fun unlockInsights(hours: Int = AD_UNLOCK_HOURS) {
         context.plusStore.edit {
-            it[Keys.AD_UNLOCK_UNTIL] = System.currentTimeMillis() + AD_UNLOCK_HOURS * 60L * 60L * 1000L
+            it[Keys.AD_UNLOCK_UNTIL] = System.currentTimeMillis() + hours * 60L * 60L * 1000L
         }
     }
 }

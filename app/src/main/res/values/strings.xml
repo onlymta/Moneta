@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Paisabook</string>
+    <string name="app_name">Expendora</string>
+    <string name="app_full_name">Expendora: Budget and Manage Expenses</string>
 
     <!-- Bottom navigation -->
     <string name="nav_home">Home</string>

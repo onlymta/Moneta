@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ExpandLess
@@ -252,6 +253,7 @@ fun BudgetsScreen(onOpenRecords: () -> Unit, onOpenReports: () -> Unit = {}, vie
                     },
                     onOpen = { editing = line },
                     onDelete = { deleting = line },
+                    onToggleComplete = { viewModel.setComplete(line, !line.isComplete) },
                     onSeeTransactions = {
                         viewModel.prepareRecords(line)
                         onOpenRecords()
@@ -452,6 +454,7 @@ private fun CategoryBudgetCard(
     onToggle: () -> Unit,
     onOpen: () -> Unit,
     onDelete: () -> Unit,
+    onToggleComplete: () -> Unit,
     onSeeTransactions: () -> Unit,
     onOpenReport: () -> Unit
 ) {
@@ -476,6 +479,13 @@ private fun CategoryBudgetCard(
                 Spacer(Modifier.width(MonetaSpacing.md))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(line.label, style = MaterialTheme.typography.titleMedium)
+                    if (budget != null && line.isComplete) {
+                        Text(
+                            "Complete: not counted in yet to spend",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     if (budget == null) {
                         Text(
                             if (line.hasChildren) {
@@ -519,6 +529,14 @@ private fun CategoryBudgetCard(
                                 }
                             )
                             DropdownMenuItem(
+                                text = { Text(if (line.isComplete) "Reopen budget" else "Mark complete") },
+                                leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
+                                onClick = {
+                                    menuOpen = false
+                                    onToggleComplete()
+                                }
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Delete budget") },
                                 leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
                                 onClick = {
@@ -553,7 +571,7 @@ private fun CategoryBudgetCard(
                     )
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            if (remaining.isNegative) "Exceeded by" else "Remaining",
+                            if (remaining.isNegative) "Exceeded by" else if (line.isComplete) "Left unspent" else "Remaining",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

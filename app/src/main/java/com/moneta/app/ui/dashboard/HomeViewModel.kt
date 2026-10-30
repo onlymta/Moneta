@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
@@ -137,7 +138,9 @@ class HomeViewModel @Inject constructor(
                 allBudgets = values[9] as List<com.moneta.app.data.repository.Budget>
             )
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
+    }
+        .flowOn(kotlinx.coroutines.Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
     fun onPeriodChange(selection: PeriodSelection) {
         period.value = selection.copy(mode = PeriodMode.MONTH)
@@ -218,7 +221,8 @@ class HomeViewModel @Inject constructor(
             spent = unitSpent,
             daysElapsed = java.time.LocalDate.now().dayOfMonth,
             totalDays = range.start.lengthOfMonth(),
-            isCurrentMonth = p.containsToday()
+            isCurrentMonth = p.containsToday(),
+            completed = com.moneta.app.domain.usecase.monthCompletedCategories(allBudgets, range.start)
         )
         val byIdAll = categories.associateBy { it.id }
         fun pathName(c: Category): String {
@@ -233,7 +237,9 @@ class HomeViewModel @Inject constructor(
             }
             return parts.joinToString(" > ")
         }
+        val completedIds = com.moneta.app.domain.usecase.monthCompletedCategories(allBudgets, range.start)
         val yetLines = unitBudgets.mapNotNull { (id, budget) ->
+            if (id in completedIds) return@mapNotNull null
             val left = budget - (unitSpent[id] ?: 0L)
             val cat = byIdAll[id]
             if (cat == null || budget <= 0L || left <= 0L) null

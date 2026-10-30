@@ -65,7 +65,7 @@ class ExportViewModel @Inject constructor(
     fun fileName(extension: String): String {
         val state = uiState.value
         val name = state.userName.trim().replace(Regex("[^A-Za-z0-9]+"), "-").trim('-')
-        val parts = mutableListOf("Paisabook", "Transactions")
+        val parts = mutableListOf("Expendora", "Transactions")
         if (name.isNotEmpty()) parts.add(name)
         parts.add(periodForFileName(state.period))
         return parts.joinToString("_") + "." + extension

@@ -140,7 +140,7 @@ private fun WelcomeStep(state: OnboardingUiState, viewModel: OnboardingViewModel
         uri?.let { viewModel.restoreFromBackup(it.toString(), onExit) }
     }
     Spacer(Modifier.height(MonetaSpacing.xl))
-    Text("Welcome to Paisabook", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+    Text("Welcome to Expendora", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
     Text(
         "Your private money tracker. Everything stays on your phone.",
         style = MaterialTheme.typography.bodyLarge,
@@ -154,19 +154,19 @@ private fun WelcomeStep(state: OnboardingUiState, viewModel: OnboardingViewModel
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp)
-    ) { Text("I'm new to Paisabook") }
+    ) { Text("I'm new to Expendora") }
     OutlinedButton(
         onClick = { restoreLauncher.launch(arrayOf("*/*")) },
         enabled = !state.isWorking,
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp)
-    ) { Text(if (state.isWorking) "Restoring..." else "I have a Paisabook backup file") }
+    ) { Text(if (state.isWorking) "Restoring..." else "I have a Expendora backup file") }
     state.restoreMessage?.let {
         Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
     }
     Text(
-        "A backup file is what Paisabook's Backup page saves. Choosing it brings back all your accounts, records and settings.",
+        "A backup file is what Expendora's Backup page saves. Choosing it brings back all your accounts, records and settings.",
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
@@ -335,7 +335,7 @@ private fun GuideStep(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
-    ) { Text(if (state.isWorking) "Setting up..." else "Start using Paisabook") }
+    ) { Text(if (state.isWorking) "Setting up..." else "Start using Expendora") }
     OutlinedButton(
         onClick = { viewModel.finish(OnboardingExit.ADD_TRANSACTION, onExit) },
         enabled = !state.isWorking,

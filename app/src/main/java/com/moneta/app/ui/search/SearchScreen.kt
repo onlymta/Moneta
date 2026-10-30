@@ -74,7 +74,7 @@ fun SearchScreen(
             TextField(
                 value = results.query,
                 onValueChange = viewModel::onQueryChange,
-                placeholder = { Text("Search Paisabook") },
+                placeholder = { Text("Search Expendora") },
                 singleLine = true,
                 shape = RoundedCornerShape(28.dp),
                 colors = TextFieldDefaults.colors(

@@ -197,6 +197,11 @@ private fun MonetaAppContent(
 
     // The header slides away while scrolling down and returns when scrolling back up.
     val topBarScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    // A new page always starts with the header fully showing, even if the last page left it scrolled away.
+    LaunchedEffect(currentRoute) {
+        topBarScroll.state.heightOffset = 0f
+        topBarScroll.state.contentOffset = 0f
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -544,7 +549,7 @@ private fun SetupReminderBanner(onFinish: () -> Unit, onDismiss: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "Finish setting up Paisabook",
+                "Finish setting up Expendora",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f)
             )
@@ -758,7 +763,7 @@ private fun MonetaDrawerContent(
                         Spacer(Modifier.width(16.dp))
                         Column {
                             Text(
-                                "Get Paisabook Plus",
+                                "Get Expendora Plus",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

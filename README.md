@@ -255,3 +255,11 @@ CSV/Excel import (Section 23), a real `.xlsx` binary writer (CSV is offered as t
 - Recurring form now matches the Record form (amount, account and category pop-up pickers, one notes field).
 - Free vs Plus: Plus = no ads, sub-categories, home customisation, auto backup, Excel/PDF export, reorder, bulk category change, bill reminders, working-day/weekend and "every N" repeats. Free + watch an ad (24 h): charts and trends.
 - TEST toggle at the bottom of the side menu (search for TEST-TOGGLE to remove it before release).
+
+## v1.3.0
+- Name: Expendora (full name "Expendora: Budget and Manage Expenses" in About; launcher shows "Expendora"). New logo.
+- Feedback goes to the address in core/AppInfo.kt; About shows the developer name (AKTECH).
+- Reports, Budgets and Home do their number-crunching off the main thread.
+- The top bar is shown again whenever you move to another page.
+- Ads: real ads (forceTestAds = false). Ad places: charts in Reports (24 h unlock) and each Excel/PDF export. If no ad loads: Try again, or unlock for 3 hours / export anyway.
+- Budgets: "Mark complete" in a category budget's menu; its leftover no longer counts in "yet to spend". Recording expenses is never blocked. Database version 6.

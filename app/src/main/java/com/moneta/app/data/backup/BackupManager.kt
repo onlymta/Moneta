@@ -111,12 +111,12 @@ class BackupManager @Inject constructor(
         val root = try {
             JSONObject(text)
         } catch (e: Exception) {
-            return RestoreResult.Failed("This file isn't a valid Paisabook backup.")
+            return RestoreResult.Failed("This file isn't a valid Expendora backup.")
         }
 
         val schemaVersion = root.optInt("schemaVersion", -1)
         if (schemaVersion !in 1..BACKUP_SCHEMA_VERSION) {
-            return RestoreResult.Failed("This backup was made by an incompatible version of Paisabook.")
+            return RestoreResult.Failed("This backup was made by an incompatible version of Expendora.")
         }
 
         return try {
@@ -263,7 +263,7 @@ private fun BudgetEntity.toJson() = JSONObject().apply {
     put("amountMinor", amountMinor); put("currencyCode", currencyCode); put("period", period.name)
     put("customPeriodStart", customPeriodStart ?: JSONObject.NULL)
     put("customPeriodEnd", customPeriodEnd ?: JSONObject.NULL)
-    put("alertThresholdPercent", alertThresholdPercent); put("isEnabled", isEnabled)
+    put("alertThresholdPercent", alertThresholdPercent); put("isEnabled", isEnabled); put("isComplete", isComplete)
 }
 private fun JSONObject.toBudgetEntity() = BudgetEntity(
     id = getLong("id"), scope = BudgetScope.valueOf(getString("scope")),
@@ -272,7 +272,8 @@ private fun JSONObject.toBudgetEntity() = BudgetEntity(
     period = BudgetPeriod.valueOf(getString("period")),
     customPeriodStart = if (isNull("customPeriodStart")) null else getLong("customPeriodStart"),
     customPeriodEnd = if (isNull("customPeriodEnd")) null else getLong("customPeriodEnd"),
-    alertThresholdPercent = getInt("alertThresholdPercent"), isEnabled = getBoolean("isEnabled")
+    alertThresholdPercent = getInt("alertThresholdPercent"), isEnabled = getBoolean("isEnabled"),
+    isComplete = optBoolean("isComplete", false)
 )
 
 private fun GoalEntity.toJson() = JSONObject().apply {

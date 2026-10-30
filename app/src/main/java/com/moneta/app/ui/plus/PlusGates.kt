@@ -58,6 +58,7 @@ fun InsightsGate(
 fun LockedInsightsCard(what: String, modifier: Modifier = Modifier, viewModel: PlusViewModel = hiltViewModel()) {
     val busy by viewModel.adBusy.collectAsState()
     val message by viewModel.adMessage.collectAsState()
+    val failed by viewModel.adFailed.collectAsState()
     val context = LocalContext.current
     val openPlus = LocalOpenPlus.current
     Card(modifier = modifier.fillMaxWidth()) {
@@ -67,7 +68,7 @@ fun LockedInsightsCard(what: String, modifier: Modifier = Modifier, viewModel: P
         ) {
             Text(what, style = MaterialTheme.typography.titleMedium)
             Text(
-                "Watch one short ad to unlock this for $AD_UNLOCK_HOURS hours, or get Paisabook Plus once and never see ads.",
+                "Watch one short ad to unlock this for $AD_UNLOCK_HOURS hours, or get Expendora Plus once and never see ads.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -76,11 +77,16 @@ fun LockedInsightsCard(what: String, modifier: Modifier = Modifier, viewModel: P
                     onClick = { context.findActivity()?.let { viewModel.watchAd(it) } },
                     enabled = !busy,
                     modifier = Modifier.weight(1f)
-                ) { Text(if (busy) "Loading ad..." else "Watch an ad") }
+                ) { Text(if (busy) "Loading ad..." else if (failed) "Try again" else "Watch an ad") }
                 OutlinedButton(onClick = openPlus, modifier = Modifier.weight(1f)) { Text("Get Plus") }
             }
             message?.let {
                 Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            }
+            if (failed) {
+                androidx.compose.material3.TextButton(onClick = { viewModel.unlockWithoutAd() }) {
+                    Text("Unlock for ${com.moneta.app.data.plus.AD_FALLBACK_HOURS} hours without an ad")
+                }
             }
         }
     }
@@ -104,11 +110,11 @@ fun PlusOnlyCard(what: String, modifier: Modifier = Modifier) {
         ) {
             Text(what, style = MaterialTheme.typography.titleMedium)
             Text(
-                "This is a Paisabook Plus feature. Plus is a one-time purchase, with no subscription.",
+                "This is a Expendora Plus feature. Plus is a one-time purchase, with no subscription.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Button(onClick = openPlus) { Text("See Paisabook Plus") }
+            Button(onClick = openPlus) { Text("See Expendora Plus") }
         }
     }
 }

@@ -67,7 +67,7 @@ class ImportViewModel @Inject constructor(
     private var table: List<List<String>> = emptyList()
     private var headerRowOffset = 0
 
-    fun defaultTemplateFileName(): String = "Paisabook_Import_Template.xlsx"
+    fun defaultTemplateFileName(): String = "Expendora_Import_Template.xlsx"
 
     fun downloadTemplate(uriString: String) {
         viewModelScope.launch {

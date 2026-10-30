@@ -202,6 +202,12 @@ class BudgetRepository @Inject constructor(
         budgetDao.update(existing.copy(isEnabled = isEnabled))
     }
 
+    /** Marks a month's category budget complete (or open again). Recording expenses is never blocked by this. */
+    suspend fun setComplete(budgetId: Long, complete: Boolean) {
+        val existing = budgetDao.getById(budgetId) ?: return
+        budgetDao.update(existing.copy(isComplete = complete))
+    }
+
     suspend fun delete(budgetId: Long) = budgetDao.delete(budgetId)
 
     private fun BudgetEntity.toDomain() = Budget(
@@ -213,6 +219,7 @@ class BudgetRepository @Inject constructor(
         customPeriodStart = customPeriodStart?.let { LocalDate.ofEpochDay(it) },
         customPeriodEnd = customPeriodEnd?.let { LocalDate.ofEpochDay(it) },
         alertThresholdPercent = alertThresholdPercent,
-        isEnabled = isEnabled
+        isEnabled = isEnabled,
+        isComplete = isComplete
     )
 }

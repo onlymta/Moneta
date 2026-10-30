@@ -56,5 +56,9 @@ data class BudgetEntity(
     val alertThresholdPercent: Int = 90,
 
     @ColumnInfo(name = "is_enabled")
-    val isEnabled: Boolean = true
+    val isEnabled: Boolean = true,
+
+    /** The user marked this month's budget as finished: what is left of it no longer counts as "yet to spend". */
+    @ColumnInfo(name = "is_complete", defaultValue = "0")
+    val isComplete: Boolean = false
 )

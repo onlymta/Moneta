@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -192,7 +193,10 @@ class ReportsViewModel @Inject constructor(
         ) { transactions, categories, budgets, prefs, wide ->
             build(c, Sources(transactions, categories, budgets, wide, trendRanges), prefs.currencyCode, prefs.subcategoriesEnabled)
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReportsUiState())
+    }
+        // The heavy sums and grouping run off the main thread so the page opens smoothly.
+        .flowOn(kotlinx.coroutines.Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReportsUiState())
 
     /** Id of the category open in the detail view, or null when the category list is showing. */
     val selectedCategoryId: StateFlow<Long?> = selected
@@ -202,6 +206,7 @@ class ReportsViewModel @Inject constructor(
         .flatMapLatest { (p, t, id) ->
             if (id == null || t == ReportTab.OVERVIEW) flowOf(null) else analysisFlow(p, t == ReportTab.INCOME, id)
         }
+        .flowOn(kotlinx.coroutines.Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun onPeriodChange(selection: PeriodSelection) {

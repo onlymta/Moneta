@@ -99,7 +99,7 @@ fun CategoriesScreen(
                     Text("Sub-categories", style = MaterialTheme.typography.bodyMedium)
                     if (!plusState.hasPlus) {
                         Text(
-                            "A Paisabook Plus feature",
+                            "A Expendora Plus feature",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
